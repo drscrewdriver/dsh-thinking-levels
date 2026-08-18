@@ -12,7 +12,8 @@
  *   the user toggles.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { decideEffort, type EffortId, type ToolCallSample } from './thinking-level.ts'
+import { decideEffort, type EffortId } from './thinking-level.ts'
+import { recentToolCalls } from './session-events.ts'
 
 /** Plugin settings: off by default until the user opts in. */
 export interface ToolTurboConfig {
@@ -28,24 +29,6 @@ export const DEFAULT_CONFIG: ToolTurboConfig = {
   allowDowngrade: true,
   allowUpgrade: false,
   baseline: 'high',
-}
-
-const TOOL_SAMPLE_WINDOW = 8
-
-/** Recent tool calls of a session's current step, oldest first. */
-function recentToolCalls(agent: unknown): ToolCallSample[] {
-  const session = (agent as { session?: { events?: readonly unknown[] } }).session
-  const events = session?.events ?? []
-  const samples: ToolCallSample[] = []
-  for (let index = events.length - 1; index >= 0 && samples.length < TOOL_SAMPLE_WINDOW; index -= 1) {
-    const event = events[index] as { type?: string; data?: unknown } | undefined
-    if (event?.type !== 'tool/call') continue
-    const data = event.data as { name?: string; arguments?: unknown } | undefined
-    const name = data?.name ?? 'tool'
-    const argsSize = typeof data?.arguments === 'string' ? data.arguments.length : 0
-    samples.push({ name, argsSize })
-  }
-  return samples.reverse()
 }
 
 /**
