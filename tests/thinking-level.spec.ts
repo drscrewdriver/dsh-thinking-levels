@@ -1,5 +1,5 @@
-﻿import { describe, expect, it } from 'vitest'
-import { decideEffort, toolDurationMs, type EffortDecisionInput } from '../src/thinking-level.ts'
+import { describe, expect, it } from 'vitest'
+import { assertEffortId, decideEffort, isEffortId, toolDurationMs, type EffortDecisionInput } from '../src/thinking-level.ts'
 
 const base = (over: Partial<EffortDecisionInput>): EffortDecisionInput => ({
   recentCalls: [],
@@ -27,7 +27,7 @@ describe('manual levels pass through unchanged', () => {
 })
 
 describe('auto scheduler', () => {
-  it('sends a fresh prompt (pure chat) to low', () => {
+  it('sends a fresh prompt (pure chat) to low — cheap rounds stay cheap', () => {
     expect(decideEffort(base({ selected: 'auto' }))).toBe('low')
   })
 
@@ -69,6 +69,35 @@ describe('auto scheduler', () => {
       const out = decideEffort(input)
       expect(['low', 'high', 'max']).toContain(out)
     }
+  })
+})
+
+describe('effort-level validation', () => {
+  it('accepts exactly the five levels', () => {
+    for (const level of ['off', 'low', 'high', 'max', 'auto']) {
+      expect(isEffortId(level)).toBe(true)
+      expect(() => assertEffortId(level, 'test')).not.toThrow()
+    }
+  })
+
+  it('rejects out-of-band values that dsh would reject per request', () => {
+    for (const bad of ['medium', 'xhigh', 3, null, undefined, {}]) {
+      expect(isEffortId(bad)).toBe(false)
+      expect(() => assertEffortId(bad, 'test')).toThrow(TypeError)
+    }
+  })
+})
+
+describe('simple-tool classification boundary', () => {
+  it('anchors on word boundaries so look-alike heavy tools are not misread as simple', () => {
+    // fs_* and bash match; heavy look-alikes do not.
+    const simpleCalls = [{ name: 'fs_write', argsSize: 100 }, { name: 'bash', argsSize: 40 }]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: simpleCalls }))).toBe('low')
+    const lookAlike = [
+      { name: 'codebase_search', argsSize: 40 }, // starts with code but is a search-heavy tool
+      { name: 'job_status_check', argsSize: 30 },
+    ]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: lookAlike }))).toBe('high')
   })
 })
 
