@@ -1,7 +1,7 @@
 /**
- * dsh-tool-turbo host plugin: lowers tool-call latency by injecting a
- * task-appropriate `reasoning_effort` into every `agent/request` waterfall,
- * and records per-tool wall-clock durations for telemetry.
+ * dsh-thinking-levels host plugin: injects a user-selected or auto-scheduled
+ * `reasoning_effort` into every `agent/request` waterfall (levels: off / low /
+ * high / max / auto), and records per-tool wall-clock durations for telemetry.
  *
  * Extension points used (verified in deepseek-ai/deepseek-harness):
  * - `agent/request` waterfall (packages/core/agent-loop/src/agent.ts
@@ -12,24 +12,45 @@
  *   the user toggles.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { assertEffortId, decideEffort, type EffortId } from './thinking-level.ts'
 import { recentToolCalls } from './session-events.ts'
 
-/** Plugin settings: off by default until the user opts in. */
-export interface ToolTurboConfig {
+/** Plugin settings. */
+export interface ThinkingLevelsConfig {
   enabled: boolean
+  /** User-selected level: off / low / high / max fix the wire level; `auto` schedules per step. */
+  level: EffortId
+  /** Scheduler preference: allow dropping below the `high` hub. */
   allowDowngrade: boolean
+  /** Scheduler preference: allow lifting above the `high` hub to `max`. */
   allowUpgrade: boolean
-  /** The user's baseline effort the policy starts from. */
-  baseline: EffortId
 }
 
-export const DEFAULT_CONFIG: ToolTurboConfig = {
+/**
+ * Composition-entry schema: what a dsh profile may configure at assembly
+ * time (cordis.yml `config:` of the plugin row). The settings namespace
+ * reuses the same schema, so a value admitted at one surface is admitted
+ * at the other.
+ */
+export const Config: z<ThinkingLevelsConfig> = z.object({
+  enabled: z.boolean().default(true),
+  level: z.union(['off', 'low', 'high', 'max', 'auto']).default('auto'),
+  allowDowngrade: z.boolean().default(true),
+  allowUpgrade: z.boolean().default(false),
+})
+
+/** Settings defaults, kept in lockstep with the schema defaults above. */
+export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   enabled: true,
+  level: 'auto',
   allowDowngrade: true,
   allowUpgrade: false,
-  baseline: 'high',
 }
+
+/** Runtime-adjustable settings namespace: level + scheduler toggles. */
+export const THINKING_LEVELS_SETTINGS_NAMESPACE = settingsNamespace('thinking-levels')
 
 const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
 
@@ -38,14 +59,27 @@ const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
  * @param ctx - host context carrying the agent-event dispatch.
  * @param config - resolved plugin configuration.
  */
-export function apply(ctx: Context, config: ToolTurboConfig = DEFAULT_CONFIG): void {
+export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFIG): void {
   if (!config.enabled) return
   // Fail-loud: a stray config value (e.g. `medium` from an old profile) must
   // not ride through into the model request, where dsh throws
   // UNSUPPORTED_REASONING_EFFORT per request.
-  assertEffortId(config.baseline, 'dsh-thinking-levels config.baseline')
+  assertEffortId(config.level, 'dsh-thinking-levels config.level')
 
-  // Inject the effort decision into every model request of a step.
+  // Runtime-adjustable configuration source: the composition entry is the
+  // base; the settings namespace layers on top and `current()` always reads
+  // the active section (official dsh settings integration pattern).
+  let current: () => ThinkingLevelsConfig = () => config
+  installSettingsSection(ctx, THINKING_LEVELS_SETTINGS_NAMESPACE, Config, config, {
+    setSource: (source) => {
+      current = source
+    },
+    // The decision is read per request, so a committed change needs no
+    // re-registration.
+    onChange: () => {},
+  })
+
+  // Inject the level decision into every model request of a step.
   // The 'agent/request' event key is augmented onto cordis Events by the
   // dsh-agent runtime's generated scope types; the npm package does not
   // re-export that augmentation, so the emitter is widened at the boundary.
@@ -55,17 +89,20 @@ export function apply(ctx: Context, config: ToolTurboConfig = DEFAULT_CONFIG): v
   ) => void
   on('agent/request', async (payload, next) => {
     const seed = await next() as { reasoningEffort?: unknown }
+    const cfg = current()
+    // `enabled` may flip at runtime through the settings namespace.
+    if (!cfg.enabled) return seed
     const calls = recentToolCalls(payload.agent)
-    const effort = decideEffort({
+    const level = decideEffort({
       recentCalls: calls,
-      selected: config.baseline,
-      allowDowngrade: config.allowDowngrade,
-      allowUpgrade: config.allowUpgrade,
+      selected: cfg.level,
+      allowDowngrade: cfg.allowDowngrade,
+      allowUpgrade: cfg.allowUpgrade,
     })
     // Summary-only log: individual tool names/arg sizes are workflow metadata
     // that need not land in the host log; count and decision suffice.
-    ctx.logger?.info?.('[thinking-levels] agent/request: selected=%s calls=%d => level=%s', config.baseline, calls.length, effort)
-    return { ...seed, reasoningEffort: effort }
+    ctx.logger?.info?.('[thinking-levels] agent/request: selected=%s calls=%d => level=%s', cfg.level, calls.length, level)
+    return { ...seed, reasoningEffort: level }
   })
 
   // Per-tool wall-clock telemetry: log tool/call -> tool/result durations.
@@ -78,7 +115,7 @@ export function apply(ctx: Context, config: ToolTurboConfig = DEFAULT_CONFIG): v
       if (now - at > TOOL_AGE_LIMIT_MS) started.delete(callId)
     }
   }
-  on('agent/tool', async (payload, _next) => {
+  on('agent/tool', async (payload) => {
     const callId = payload.callId
     if (typeof callId !== 'string') return
     if (payload.phase === 'start') {
