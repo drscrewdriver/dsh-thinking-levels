@@ -12,7 +12,7 @@
  *   the user toggles.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { decideEffort, type EffortId } from './thinking-level.ts'
+import { assertEffortId, decideEffort, type EffortId } from './thinking-level.ts'
 import { recentToolCalls } from './session-events.ts'
 
 /** Plugin settings: off by default until the user opts in. */
@@ -40,6 +40,10 @@ const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
  */
 export function apply(ctx: Context, config: ToolTurboConfig = DEFAULT_CONFIG): void {
   if (!config.enabled) return
+  // Fail-loud: a stray config value (e.g. `medium` from an old profile) must
+  // not ride through into the model request, where dsh throws
+  // UNSUPPORTED_REASONING_EFFORT per request.
+  assertEffortId(config.baseline, 'dsh-thinking-levels config.baseline')
 
   // Inject the effort decision into every model request of a step.
   // The 'agent/request' event key is augmented onto cordis Events by the
