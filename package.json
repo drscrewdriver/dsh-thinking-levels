@@ -31,12 +31,16 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
+    "eslint": "^10.8.1",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^3.0.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
     "test": "vitest run"
   },
   "license": "MIT",
