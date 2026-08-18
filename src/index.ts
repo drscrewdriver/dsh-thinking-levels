@@ -31,6 +31,8 @@ export const DEFAULT_CONFIG: ToolTurboConfig = {
   baseline: 'high',
 }
 
+const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
+
 /**
  * Plugin body.
  * @param ctx - host context carrying the agent-event dispatch.
@@ -56,24 +58,35 @@ export function apply(ctx: Context, config: ToolTurboConfig = DEFAULT_CONFIG): v
       allowDowngrade: config.allowDowngrade,
       allowUpgrade: config.allowUpgrade,
     })
-    console.log(`[tool-turbo] agent/request: baseline=${config.baseline} calls=${JSON.stringify(calls)} => reasoningEffort=${effort}`)
+    // Summary-only log: individual tool names/arg sizes are workflow metadata
+    // that need not land in the host log; count and decision suffice.
+    ctx.logger?.info?.('[thinking-levels] agent/request: selected=%s calls=%d => level=%s', config.baseline, calls.length, effort)
     return { ...seed, reasoningEffort: effort }
   })
 
   // Per-tool wall-clock telemetry: log tool/call -> tool/result durations.
   // Same boundary widening as above (agent/tool is a generated scope event).
   const started = new Map<string, number>()
+  // A tool that never emits `end` (crash, interruption) must not leak its
+  // entry forever; sweep stale ones lazily on every new `start`.
+  const pruneStale = (now: number): void => {
+    for (const [callId, at] of started) {
+      if (now - at > TOOL_AGE_LIMIT_MS) started.delete(callId)
+    }
+  }
   on('agent/tool', async (payload, _next) => {
     const callId = payload.callId
     if (typeof callId !== 'string') return
     if (payload.phase === 'start') {
-      started.set(callId, Date.now())
+      const now = Date.now()
+      pruneStale(now)
+      started.set(callId, now)
     } else if (payload.phase === 'end') {
       const from = started.get(callId)
       started.delete(callId)
       if (from !== undefined) {
         const ms = Date.now() - from
-        ctx.logger?.info?.('[tool-turbo] tool %s took %dms', callId, ms)
+        ctx.logger?.info?.('[thinking-levels] tool %s took %dms', callId, ms)
       }
     }
   })
