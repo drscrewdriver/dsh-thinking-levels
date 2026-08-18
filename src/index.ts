@@ -208,8 +208,15 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   }, { prepend: true })
 
   // Advertise the `auto` mask in the model directory so the session model
-  // selector offers it alongside Off/Low/High/Max.
-  advertiseAutoEffort(ctx.get('llm') as { adapters?: Map<string, LlmRegistration> } | undefined)
+  // selector offers it alongside Off/Low/High/Max. Adapters may register after
+  // this plugin's apply (the load order differs between the CLI and DSH
+  // Desktop), so the wrapper also re-runs on every `llm/adapters-updated`.
+  const llm = ctx.get('llm') as { adapters?: Map<string, LlmRegistration> } | undefined
+  advertiseAutoEffort(llm)
+  const onAny = ctx.on as unknown as (event: string, listener: (...args: never[]) => unknown) => void
+  onAny('llm/adapters-updated', () => {
+    advertiseAutoEffort(ctx.get('llm') as { adapters?: Map<string, LlmRegistration> } | undefined)
+  })
 
   // Per-tool wall-clock telemetry: log tool/call -> tool/result durations.
   // Same boundary widening as above (agent/tool is a generated scope event).
