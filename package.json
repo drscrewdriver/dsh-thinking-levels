@@ -2,8 +2,15 @@
   "name": "dsh-thinking-levels",
   "version": "0.1.0",
   "description": "DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drscrewdriver/dsh-thinking-levels.git"
+  },
   "type": "module",
+  "files": [
+    "src",
+    "cordis.patch.yml"
+  ],
   "main": "src/index.ts",
   "exports": {
     ".": {
