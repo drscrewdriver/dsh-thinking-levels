@@ -13,7 +13,6 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { assertEffortId, decideEffort, isEffortId, type EffortId } from './thinking-level.ts'
 import { recentToolCalls } from './session-events.ts'
 
@@ -50,7 +49,59 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
 }
 
 /** Runtime-adjustable settings namespace: level + scheduler toggles. */
-export const THINKING_LEVELS_SETTINGS_NAMESPACE = settingsNamespace('thinking-levels')
+export const THINKING_LEVELS_SETTINGS_NAMESPACE = 'thinking-levels'
+
+/**
+ * Minimal faces of the dsh `settings` service (typed locally — the plugin must
+ * NOT value-import the official `@deepseek-ai/dsh-settings` package: it is not
+ * part of a profile's resolvable tree by design, and the service is provided
+ * by the dsh runtime instead).
+ */
+interface SettingsScopeLike {
+  get(): unknown
+  watch(callback: () => void): () => void
+}
+interface SettingsServiceLike {
+  register(ns: string, schema: unknown, options?: { base?: unknown }): SettingsScopeLike
+}
+interface SettingsAwareCtx {
+  inject(deps: readonly string[], fn: (sctx: {
+    settings: SettingsServiceLike
+    effect(cleanup: () => (() => void) | void, label?: string): void
+  }) => void): void
+}
+
+/**
+ * Inline equivalent of the official `installSettingsSection` helper: register
+ * the namespace through the `settings` service (cordis injection), layer the
+ * composition entry as `base`, and keep the runtime source live. Kept local so
+ * the host half has no value dependency on `@deepseek-ai/dsh-settings`.
+ * @param ctx - host context carrying the settings service.
+ * @param ns - settings namespace to register.
+ * @param schema - schemastery schema resolving the namespace value.
+ * @param entry - composition-entry config used as the `base` layer.
+ * @param hooks - source sink and change notification.
+ */
+function installSettingsSection<T>(
+  ctx: Context,
+  ns: string,
+  schema: unknown,
+  entry: T,
+  hooks: { setSource: (source: () => T) => void; onChange: () => void },
+): void {
+  ;(ctx as unknown as SettingsAwareCtx).inject(['settings'], (sctx) => {
+    const scope = sctx.settings.register(ns, schema, { base: entry })
+    hooks.setSource(() => scope.get() as T)
+    hooks.onChange()
+    // Detach: on plugin unload fall back to the composition entry, mirroring
+    // the official helper's disposer.
+    sctx.effect(() => () => {
+      hooks.setSource(() => entry)
+      hooks.onChange()
+    })
+    scope.watch(() => hooks.onChange())
+  })
+}
 
 const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
 

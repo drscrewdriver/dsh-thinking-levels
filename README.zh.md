@@ -91,11 +91,7 @@ cd ~/.dsh/profiles/web && pnpm install && dsh web
 
 ## 依赖说明
 
-插件 host 侧值依赖 `@deepseek-ai/dsh-settings`（官方包默认不在 profile 的 hoisted node_modules 中，会从 dsh 全局嵌套解析）。如插件在插件列表中显示“已停用/未挂载”，请将官方依赖装入 profile：
-
-```bash
-dsh plugin --profile web add @deepseek-ai/dsh-settings@^0.1.0-rc.6 -w
-```
+插件 host 侧**不**值依赖 `@deepseek-ai/dsh-settings`（设置注册通过 cordis 的 `settings` 服务，由 dsh 运行时提供）——无需在 profile 中手动安装官方包。`dependencies` 仅 `@deepseek-ai/schemastery`（随包自动安装）。
 
 ## 开发
 

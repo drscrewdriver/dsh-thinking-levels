@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "repository": {
     "type": "git",
@@ -33,17 +33,13 @@
     "node": ">=20"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6"
+    "@deepseek-ai/cordis": "^4.0.1"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.7",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.7",
     "@deepseek-ai/dsh-client-ui-settings": "^0.1.0-rc.7",

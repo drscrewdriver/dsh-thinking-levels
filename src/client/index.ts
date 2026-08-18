@@ -33,6 +33,11 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.plugin.item', function* () {
     yield ctx.slots.register({
       name: 'settings.plugin.item',
+      // Both keys are supplied: CLI dsh declares this slot `keyed` (needs
+      // `key`) while DSH Desktop's bundled version declares it `list` (needs
+      // `id`) — the slots service validates only its kind's field, so the
+      // pair keeps the card working in both environments.
+      id: THINKING_LEVELS_NS,
       key: THINKING_LEVELS_NS,
       locale: NS,
       inject: (): ThinkingLevelsCardInjected => {

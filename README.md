@@ -91,11 +91,7 @@ Defaults: `{ enabled: true, level: 'auto', allowDowngrade: true, allowUpgrade: f
 
 ## Dependency note
 
-The host half value-imports `@deepseek-ai/dsh-settings` (an official package absent from the profile's hoisted node_modules by design — it resolves from the dsh global install). If the plugin shows as disabled/unmounted in the plugin list, install the official dependency into the profile:
-
-```bash
-dsh plugin --profile web add @deepseek-ai/dsh-settings@^0.1.0-rc.6 -w
-```
+The host half does **not** value-depend on `@deepseek-ai/dsh-settings` (settings registration goes through the cordis `settings` service provided by the dsh runtime) — no need to install official packages into the profile manually. `dependencies` is just `@deepseek-ai/schemastery` (installed automatically with the package).
 
 ## Development
 
