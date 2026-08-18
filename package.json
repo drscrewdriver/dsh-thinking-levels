@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "repository": {
     "type": "git",
@@ -8,18 +8,21 @@
   },
   "type": "module",
   "files": [
-    "src",
-    "cordis.patch.yml"
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md"
   ],
-  "main": "src/index.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
     },
     "./thinking-level": {
-      "types": "./src/thinking-level.ts",
-      "default": "./src/thinking-level.ts"
+      "types": "./lib/thinking-level.d.ts",
+      "default": "./lib/thinking-level.js"
     },
     "./package.json": "./package.json"
   },
@@ -46,6 +49,8 @@
     "vitest": "^3.0.0"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "vitest run"
