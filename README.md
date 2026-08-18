@@ -1,72 +1,78 @@
-# dsh-tool-turbo
+# dsh-thinking-levels
 
-**Cut tool-call latency in [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness) by auto-adjusting `reasoning_effort` per tool round.**
+**Per-round thinking-level (`reasoning_effort`) control for [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness): five levels — `off` / `low` / `high` / `max` for manual control, plus an `auto` scheduler that keeps cheap tool rounds cheap and never starves heavy work.**
 
 [中文文档](./README.zh.md) · English
 
-In a multi-step tool chain, the model re-thinks before **every** tool call — and that thinking dominates the wall-clock time (a 50-step agent task can spend minutes in reasoning between tools). `dsh-tool-turbo` watches the recent tool calls of a step and injects the *lowest sensible* reasoning effort into the next model request, then lifts it again the moment the work gets heavy.
+In a multi-step tool chain, the model re-thinks before **every** tool call — and that thinking dominates the wall-clock time (a 50-step agent task can spend minutes reasoning between tools). `dsh-thinking-levels` plugs into the `agent/request` waterfall that dsh re-resolves for every step, and injects a thinking level into the next model request.
 
-## How it works
+## Levels
 
-DeepSeek's API exposes `reasoning_effort` in three steps (`low` / `high` / `max`, shipped 2026-08-13). dsh re-resolves the request config for **every step** through an `agent/request` waterfall (see `packages/core/agent-loop/src/agent.ts` — "plugins propose the next request config"). `dsh-tool-turbo` plugs into that waterfall:
+| Level | Meaning |
+|---|---|
+| `off` | thinking disabled (manual only — never auto-picked) |
+| `low` | manual pick for simple chat tasks (cheap rounds stay cheap) |
+| `high` | the official default effort |
+| `max` | heavy work |
+| `auto` | schedule per step from the recent tool-call history |
 
-1. **Watch** the step's recent `tool/call` records from the session.
-2. **Decide**: simple, deterministic tools (`write`, `read`, `grep`, `glob`, `bash`, `fs_*`, …) with small payloads → `low`; mixed/heavy work → `high`; very heavy payloads → `max` (opt-in).
-3. **Inject** the decision into the `agent/request` config for the next model call of that step.
+Wire-level facts (verified against the official DeepSeek docs and dsh's `llm-deepseek` adapter): `low` maps 1:1 on deepseek-v4-flash / v4-pro, while `medium` / `xhigh` collapse onto `high`. The adapter accepts `off | low | high | max` and rejects anything else with `UNSUPPORTED_REASONING_EFFORT` — this plugin validates the configured level before injecting, fail-loud.
 
-Long tool chains keep the cheap rounds cheap, and never starve the hard rounds of reasoning.
+## Auto scheduler
+
+The hub is `high` (the official default). `auto` schedules between `low` / `high` / `max`; it never picks `off`, and it always resolves to a wire level before injecting.
+
+| Recent tool calls | Level |
+|---|---|
+| none (fresh prompt, pure chat) | `low` |
+| ≥75% simple tools, small args, downgrades allowed | `low` |
+| mixed / heavy tools | `high` |
+| very heavy payloads, upgrades allowed | `max` |
 
 ## Install
 
 ```bash
-# 1. clone + build the plugin
-git clone https://github.com/Electricitysheep/dsh-tool-turbo.git
-cd dsh-tool-turbo && npm install
+# 1. clone + install
+git clone <repo-url>/dsh-thinking-levels.git
+cd dsh-thinking-levels && npm install
 
 # 2. register into your dsh profile (web shown; any profile works)
 #    ~/.dsh/profiles/web/package.json dependencies:
-#      "dsh-tool-turbo": "link:<absolute path to dsh-tool-turbo>"
+#      "dsh-thinking-levels": "link:<absolute path to dsh-thinking-levels>"
 #    ~/.dsh/profiles/web/cordis.patch.yml:
 #      - insert:
-#          - id: tool-turbo
-#            name: dsh-tool-turbo
+#          - id: thinking-levels
+#            name: dsh-thinking-levels
 cd ~/.dsh/profiles/web && pnpm install
 
 # 3. restart dsh web
 dsh web
 ```
 
-## Verified
+## Configuration
 
-- **Injector works in a live dsh instance** (log lines from a real run):
+Two surfaces share one schema:
 
+- **Assembly** — the plugin row's `config:` in the profile composition (e.g. `cordis.yml`):
+  ```yaml
+  config:
+    level: high            # off | low | high | max | auto
+    allowDowngrade: false  # forbid the scheduler dropping below `high`
+    allowUpgrade: false    # forbid the scheduler lifting to `max`
+  ```
+- **Runtime** — the dsh-settings namespace `thinking-levels` (`level`, `allowDowngrade`, `allowUpgrade`, `enabled`): changes apply to the next model request, no restart needed.
+
+Defaults: `{ enabled: true, level: 'auto', allowDowngrade: true, allowUpgrade: false }`.
+
+## Development
+
+```bash
+npm run lint        # eslint (typescript-eslint flat config)
+npm run typecheck   # tsc --noEmit
+npm test            # vitest — 21 tests
 ```
-[tool-turbo] agent/request: baseline=high calls=[]                    => reasoningEffort=high
-[tool-turbo] agent/request: baseline=high calls=[{"name":"write",…}] => reasoningEffort=low
-```
 
-- **6/6 unit tests** on the effort policy (`decideEffort`): fresh prompt keeps the baseline, simple-tool chains downgrade to `low`, downgrades respect the user toggle, heavy payloads upgrade to `max` (opt-in), mixed tools lift to `high`.
-- `tsc --noEmit` clean.
-
-## Policy (pure, testable)
-
-| Recent tool calls | Decision |
-|---|---|
-| none (fresh prompt) | keep user's selected effort |
-| ≥75% simple tools, small args, downgrade allowed | `low` |
-| mixed / heavy tools | `high` (when upgrades allowed) |
-| very heavy payloads, upgrade allowed | `max` |
-| otherwise | keep user's selected effort |
-
-Toggles (settings namespace planned): `allowDowngrade` (default on), `allowUpgrade` (default off — keep `max` conservative), `baseline` (default `high`).
-
-## Roadmap
-
-- [x] effort-decision core + waterfall injection
-- [x] per-tool duration telemetry (host log)
-- [ ] settings namespace (dsh-settings) for the toggles
-- [ ] tool timing surfaced in the UI / agent context
-- [ ] profile-agnostic install docs (`headless`/`tui`)
+Test coverage: level policy (manual pass-through, auto scheduler, validation, simple-tool boundary), session-event parsing (guards, window cap, malformed records), and the config schema (defaults lockstep, out-of-band rejection).
 
 ## License
 
