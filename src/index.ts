@@ -12,7 +12,7 @@
  *   the user toggles.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { decideEffort, type EffortId, type ToolCallSample } from './effort-decision.ts'
+import { decideEffort, type EffortId, type ToolCallSample } from './thinking-level.ts'
 
 /** Plugin settings: off by default until the user opts in. */
 export interface ToolTurboConfig {

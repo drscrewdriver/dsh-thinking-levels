@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideEffort, toolDurationMs, type EffortDecisionInput } from '../src/effort-decision.ts'
+import { decideEffort, toolDurationMs, type EffortDecisionInput } from '../src/thinking-level.ts'
 
 const base = (over: Partial<EffortDecisionInput>): EffortDecisionInput => ({
   recentCalls: [],
