@@ -33,8 +33,9 @@
 
 ```bash
 # 1. 从 GitHub 把插件装进某个 profile（以 web 为例，任意 profile 均可）
-dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git
-#    本地路径备选（无需网络）：
+#    （web profile 是 pnpm workspace root，必须带 -w）
+dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git -w
+#    本地路径备选（无需网络；非 workspace root 目录无需 -w）：
 #    dsh plugin --profile web add /dsh-thinking-levels 的绝对路径/
 
 # 2. 重启 dsh web

@@ -33,8 +33,9 @@ The hub is `high` (the official default). `auto` schedules between `low` / `high
 
 ```bash
 # 1. install the plugin into a profile from GitHub (web shown; any profile works)
-dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git
-#    local-path alternative (no network needed):
+#    (the web profile is a pnpm workspace root, so -w is required)
+dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git -w
+#    local-path alternative (no network needed, no -w outside workspace roots):
 #    dsh plugin --profile web add /absolute/path/to/dsh-thinking-levels
 
 # 2. restart dsh web
