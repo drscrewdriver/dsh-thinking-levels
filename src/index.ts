@@ -14,7 +14,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { assertEffortId, decideEffort, type EffortId } from './thinking-level.ts'
+import { assertEffortId, decideEffort, isEffortId, type EffortId } from './thinking-level.ts'
 import { recentToolCalls } from './session-events.ts'
 
 /** Plugin settings. */
@@ -55,6 +55,45 @@ export const THINKING_LEVELS_SETTINGS_NAMESPACE = settingsNamespace('thinking-le
 const TOOL_AGE_LIMIT_MS = 10 * 60 * 1000
 
 /**
+ * The `auto` mask shown in the model directory: a user-facing level that is
+ * never sent to the API — the plugin resolves it to a wire level per request.
+ * It is injected into the adapter's `reasoning.efforts` so the model selector
+ * offers it, and `resolveCallFor` accepts it until this plugin's request
+ * interceptor substitutes the resolved wire level.
+ */
+const AUTO_EFFORT: { id: 'auto'; name: 'Auto' } = { id: 'auto', name: 'Auto' }
+
+/** Minimal face of the llm service's adapter registrations (typed locally to avoid a host-package value import). */
+interface LlmRegistration {
+  adapter: {
+    resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
+      reasoning?: { efforts?: { id: string; name: string }[] }
+    }>
+  }
+}
+
+/**
+ * Advertise `auto` in the model directory (and the call-config validation it
+ * feeds): wrap every registered adapter's `resolveModel` so the returned
+ * `reasoning.efforts` include the mask level. Idempotent per adapter.
+ * @param llm - the resolved `llm` service, when present.
+ */
+function advertiseAutoEffort(llm: { adapters?: Map<string, LlmRegistration> } | undefined): void {
+  for (const registration of llm?.adapters?.values() ?? []) {
+    const adapter = registration.adapter
+    const original = adapter.resolveModel.bind(adapter)
+    adapter.resolveModel = async (provider, model, signal) => {
+      const info = await original(provider, model, signal)
+      const reasoning = info.reasoning
+      if (reasoning !== undefined && !reasoning.efforts?.some((effort) => effort.id === 'auto')) {
+        info.reasoning = { ...reasoning, efforts: [...(reasoning.efforts ?? []), AUTO_EFFORT] }
+      }
+      return info
+    }
+  }
+}
+
+/**
  * Plugin body.
  * @param ctx - host context carrying the agent-event dispatch.
  * @param config - resolved plugin configuration.
@@ -83,27 +122,43 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // The 'agent/request' event key is augmented onto cordis Events by the
   // dsh-agent runtime's generated scope types; the npm package does not
   // re-export that augmentation, so the emitter is widened at the boundary.
+  //
+  // prepend: the host's model-selection assembly also listens on this event and
+  // overwrites `reasoningEffort` with the session's selection after `next()`;
+  // registering first keeps this plugin's decision OUTERMOST so it runs last.
   const on = ctx.on as unknown as (
     event: string,
     handler: (payload: Record<string, unknown>, next: () => unknown) => unknown | Promise<unknown>,
+    options?: { prepend?: boolean },
   ) => void
   on('agent/request', async (payload, next) => {
     const seed = await next() as { reasoningEffort?: unknown }
     const cfg = current()
     // `enabled` may flip at runtime through the settings namespace.
     if (!cfg.enabled) return seed
+    const selected = seed.reasoningEffort
+    // A wire level picked in the model selector (off/low/high/max) wins — the
+    // plugin only intervenes for the `auto` mask or when nothing was selected.
+    if (isEffortId(selected) && selected !== 'auto') return seed
+    // `auto` mask (or an unset/unknown value): resolve through the plugin's
+    // scheduler, falling back to the configured default level.
+    const base: EffortId = selected === 'auto' ? 'auto' : cfg.level
     const calls = recentToolCalls(payload.agent)
     const level = decideEffort({
       recentCalls: calls,
-      selected: cfg.level,
+      selected: base,
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
     })
     // Summary-only log: individual tool names/arg sizes are workflow metadata
     // that need not land in the host log; count and decision suffice.
-    ctx.logger?.info?.('[thinking-levels] agent/request: selected=%s calls=%d => level=%s', cfg.level, calls.length, level)
+    ctx.logger?.info?.('[thinking-levels] agent/request: selected=%s calls=%d => level=%s', String(selected), calls.length, level)
     return { ...seed, reasoningEffort: level }
-  })
+  }, { prepend: true })
+
+  // Advertise the `auto` mask in the model directory so the session model
+  // selector offers it alongside Off/Low/High/Max.
+  advertiseAutoEffort(ctx.get('llm') as { adapters?: Map<string, LlmRegistration> } | undefined)
 
   // Per-tool wall-clock telemetry: log tool/call -> tool/result durations.
   // Same boundary widening as above (agent/tool is a generated scope event).
