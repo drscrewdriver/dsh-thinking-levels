@@ -32,21 +32,26 @@
 ## 安装
 
 ```bash
-# 1. 克隆并安装
-git clone <repo-url>/dsh-thinking-levels.git
-cd dsh-thinking-levels && npm install
+# 1. 从 GitHub 把插件装进某个 profile（以 web 为例，任意 profile 均可）
+dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git
+#    本地路径备选（无需网络）：
+#    dsh plugin --profile web add /dsh-thinking-levels 的绝对路径/
 
-# 2. 注册进你的 dsh profile（以 web 为例，任意 profile 均可）
+# 2. 重启 dsh web
+#    （运行中的实例不会热加载新的 bundle 层）
+dsh web
+```
+
+手动 `link:` 注册（`dsh plugin add` 的备选方式）：
+
+```bash
 #    ~/.dsh/profiles/web/package.json dependencies 增加：
 #      "dsh-thinking-levels": "link:<dsh-thinking-levels 的绝对路径>"
 #    ~/.dsh/profiles/web/cordis.patch.yml：
 #      - insert:
 #          - id: thinking-levels
 #            name: dsh-thinking-levels
-cd ~/.dsh/profiles/web && pnpm install
-
-# 3. 重启 dsh web
-dsh web
+cd ~/.dsh/profiles/web && pnpm install && dsh web
 ```
 
 ## 配置

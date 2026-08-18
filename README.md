@@ -32,21 +32,26 @@ The hub is `high` (the official default). `auto` schedules between `low` / `high
 ## Install
 
 ```bash
-# 1. clone + install
-git clone <repo-url>/dsh-thinking-levels.git
-cd dsh-thinking-levels && npm install
+# 1. install the plugin into a profile from GitHub (web shown; any profile works)
+dsh plugin --profile web add https://github.com/drscrewdriver/dsh-thinking-levels.git
+#    local-path alternative (no network needed):
+#    dsh plugin --profile web add /absolute/path/to/dsh-thinking-levels
 
-# 2. register into your dsh profile (web shown; any profile works)
+# 2. restart dsh web
+#    (a running instance does not hot-load new bundle layers)
+dsh web
+```
+
+Manual `link:` registration (alternative to `dsh plugin add`):
+
+```bash
 #    ~/.dsh/profiles/web/package.json dependencies:
 #      "dsh-thinking-levels": "link:<absolute path to dsh-thinking-levels>"
 #    ~/.dsh/profiles/web/cordis.patch.yml:
 #      - insert:
 #          - id: thinking-levels
 #            name: dsh-thinking-levels
-cd ~/.dsh/profiles/web && pnpm install
-
-# 3. restart dsh web
-dsh web
+cd ~/.dsh/profiles/web && pnpm install && dsh web
 ```
 
 ## Configuration
