@@ -103,6 +103,18 @@ npm test            # vitest — 21 个测试
 
 测试覆盖：档位策略（手动透传、auto 调度、档位校验、简单工具边界）、会话事件解析（守卫、窗口截断、畸形记录）、配置 schema（默认值同步、越界拒绝）。
 
+## drscrewdriver DSH Plugin Family
+
+本项目是 [drscrewdriver](https://github.com/drscrewdriver) 维护的 DSH 插件系列之一。如果这个对你有用，其他插件多半也有用：
+
+| 插件 | 一句话描述 |
+|---|---|
+| [dsh-input-traffic](https://github.com/drscrewdriver/dsh-input-traffic) | DSH Web GUI 忙时输入队列：三档交通管制，拖拽重排，会话冻结 |
+| **[dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels)** | 逐轮 reasoning_effort 控制：Auto 智能调度或手动固定档位 |
+| [dsh-seatbelt-sandbox](https://github.com/drscrewdriver/dsh-seatbelt-sandbox) | macOS Seatbelt 沙箱适配器：libsandbox 原生 loader，接替弃用的 sandbox-exec |
+| [dsh-switch-search](https://github.com/drscrewdriver/dsh-switch-search) | 侧边栏会话搜索增强：标题/内容切换，按用户/回复/工具筛选 |
+
 ## 许可
 
 MIT
+
