@@ -103,6 +103,18 @@ npm test            # vitest — 21 tests
 
 Test coverage: level policy (manual pass-through, auto scheduler, validation, simple-tool boundary), session-event parsing (guards, window cap, malformed records), and the config schema (defaults lockstep, out-of-band rejection).
 
+## drscrewdriver DSH Plugin Family
+
+This project is one of the DSH plugins maintained by [drscrewdriver](https://github.com/drscrewdriver). If this one helps you, the others likely will too:
+
+| Plugin | One-liner |
+|---|---|
+| [dsh-input-traffic](https://github.com/drscrewdriver/dsh-input-traffic) | Busy-time input queue: three-tier traffic control, drag-to-reorder, session freeze |
+| **[dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels)** | Per-round reasoning_effort control: Auto scheduling or manual wire level |
+| [dsh-seatbelt-sandbox](https://github.com/drscrewdriver/dsh-seatbelt-sandbox) | macOS Seatbelt sandbox adapter: native libsandbox loader replacing deprecated sandbox-exec |
+| [dsh-switch-search](https://github.com/drscrewdriver/dsh-switch-search) | Session content search sidebar: title/content toggle, type-filter by user/reply/tool |
+
 ## License
 
 MIT
+
