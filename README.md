@@ -113,14 +113,48 @@ The session model selector (next to the model) now offers **Auto** after the wir
 
 The hub is `high` (the official default). `auto` schedules between `low` / `high` / `max`; it never picks `off`.
 
+The scheduler is **fail-safe, not fail-cheap**: thin evidence stays at the hub. Guessing `low` on heavy
+work costs quality and extra steps; guessing `high` on simple work costs part of one round.
+
 | Recent tool calls | Level |
 |---|---|
-| none (fresh prompt, pure chat) | `low` |
+| the session log cannot be read (unreadable accessor) | `high` |
+| a *recent* payload ≥ 4× the simple-call ceiling (3200 chars), upgrades allowed | `max` |
+| any other window containing a failed tool round | `high` |
+| fewer than 3 calls yet (fresh prompt, or too little to judge) | `high` |
 | ≥75% simple tools, small args, downgrades allowed | `low` |
 | mixed / heavy tools | `high` |
-| very heavy payloads, upgrades allowed | `max` |
 
-The scheduling policy is the same source as [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (same simple-tool whitelist / payload thresholds / 75% ratio rule).
+Two bounds are deliberate and measured:
+
+- **Escalation looks at the most recent calls only** (`ESCALATION_RECENCY = 2`), not the whole 8-call
+  window. Over a full window a single large payload keeps escalating for the next eight requests: on a
+  real coding workload one 48 KB `write` put **43 %** of all steps at `max`. Over the recent two calls
+  the same traffic lands at ~**13 %**.
+- **A failed tool round is a floor, not an escalation.** It says the round was not routine, so it must
+  not be downgraded to `low`; it is not evidence that maximal reasoning is required, so it does not
+  raise to `max` by itself (on the same workload that would have been another ~14 % of steps).
+
+`max` is only reachable when `allowUpgrade` is on — and that option **defaults to `false`**, so out of
+the box this is a two-level scheduler (`low` / `high`). Set `allowUpgrade: true` (assembly config or the
+settings card) to put the third level in play.
+
+The scheduling policy is the same source as [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (same simple-tool whitelist / payload thresholds / 75% ratio rule), with the hub as the default answer.
+
+### Which session-log accessor is read
+
+The plugin pulls the recent tool calls from the session log, whose accessor moved inside this plugin's
+declared `engines.dsh` range (`>=0.1.2-alpha.1 <0.2.0-0`):
+
+| Harness segment | Session log access |
+|---|---|
+| `0.1.2-alpha.*` | `session.events` (a plain array member) |
+| `0.1.2-rc.1` … `0.1.5-*` | `session.eventAt(seq)` + `session.snapshotEvents()` / `session.ownEvents()`; no `events` member |
+
+Reading only `events` samples nothing on the newer half of that range — the window comes back empty on
+every step, and an empty window is indistinguishable from a session that never called a tool. The
+sampler therefore reads whichever accessor is present, newest first, and reports an unreadable log as
+unreadable (the scheduler then stays at the hub) instead of as an empty one.
 
 ## Install
 

@@ -19,7 +19,10 @@
  *   table (customizable per model — e.g. `high` → `ultra`); levels the model
  *   does not advertise are clamped to its highest thinking level or stripped.
  * - `auto`    : schedule per step from the recent tool-call history, between
- *               `low` / `high` / `max` (never `off`, never `auto` itself).
+ *               `low` / `high` / `max` (never `off`, never `auto` itself). The
+ *               scheduler is fail-safe, not fail-cheap: thin evidence (no tool
+ *               calls yet, a window too small to judge, or a session log the
+ *               harness will not hand over) stays at the `high` hub.
  *
  * A request-level guard decides whether an effort may be injected at all:
  * models that do not advertise reasoning metadata (custom openai-completions
@@ -52,11 +55,29 @@ export interface ToolCallSample {
     argsSize: number;
 }
 /**
+ * One sampled window of the session log: the unit of evidence the scheduler
+ * reasons about.
+ *
+ * The window is `undefined`-able at the call site on purpose. A session log the
+ * harness will not hand over is NOT the same observation as a log with no tool
+ * calls in it, and the policy answers those two differently — see
+ * {@link scheduleEffort}.
+ */
+export interface ToolHistory {
+    /** Recent tool calls of the step, oldest first (at most TOOL_SAMPLE_WINDOW). */
+    calls: readonly ToolCallSample[];
+    /** Whether a tool result in the same window reported a failure. */
+    failed: boolean;
+}
+/**
  * Everything the policy needs to decide one request's level.
  */
 export interface EffortDecisionInput {
-    /** Recent tool calls of the step (oldest first); empty for a fresh prompt. */
-    recentCalls: readonly ToolCallSample[];
+    /**
+     * Sampled window of the step's tool calls, or `undefined` when the session
+     * log could not be read at all. Not the same as an empty window.
+     */
+    history: ToolHistory | undefined;
     /** The user-selected level: a fixed wire level, or `auto` for scheduling. */
     selected: EffortId;
     /** Scheduler preference: allow the scheduler to drop below the hub (`high`). */
@@ -65,12 +86,19 @@ export interface EffortDecisionInput {
     allowUpgrade: boolean;
 }
 /**
+ * Fewer sampled calls than this is not evidence of routine work. A single
+ * `read` must not pin the whole following step to the cheapest level: one call
+ * is an event, three are a pattern. This gates DOWNGRADES only — positive
+ * evidence of heaviness (a huge payload) still escalates on one call.
+ */
+export declare const MIN_SAMPLE_FOR_DOWNGRADE = 3;
+/**
  * Map the user's selected level to the level injected into the next
  * `agent/request`. Manual levels (off / low / high / max) pass through
  * unchanged — `low` is the manual pick for simple chat tasks. `auto`
  * delegates to the tool-history scheduler.
  *
- * @param input - recent calls, the selected level and the user's toggles.
+ * @param input - sampled history, the selected level and the user's toggles.
  * @returns The level to inject; `auto` is resolved before returning.
  */
 export declare function decideEffort(input: EffortDecisionInput): EffortId;
@@ -92,8 +120,8 @@ export interface EffortInjectionInput {
     seedEffort: unknown;
     /** Plugin-configured default level when the seed carries none. */
     selected: EffortId;
-    /** Recent tool calls of the step, for the auto scheduler. */
-    recentCalls: readonly ToolCallSample[];
+    /** Sampled tool window of the step, for the auto scheduler (`undefined` = unreadable). */
+    history: ToolHistory | undefined;
     /** Scheduler preference: allow the scheduler to drop below `high`. */
     allowDowngrade: boolean;
     /** Scheduler preference: allow lifting above `high` to `max`. */

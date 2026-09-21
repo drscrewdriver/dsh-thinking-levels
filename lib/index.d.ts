@@ -23,12 +23,15 @@
  * - `agent/request` waterfall (packages/core/agent-loop/src/agent.ts
  *   buildRequest): each listener may return a modified GenerateOptions for
  *   the next listener — the sanctioned way to adjust request config.
- * - `session.events` (agent.session) carries the step's tool/call records; the
+ * - the session log (agent.session) carries the step's tool/call records; the
  *   auto scheduler PULLS the recent calls from there at request time
  *   (`recentToolCalls`). There is no `agent/tool` push event in DSH — the
  *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
  *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
- *   stay a pull from `session.events`.
+ *   stay a pull from the session log. The accessor itself moved at the
+ *   0.1.2-rc.1 boundary (`session.events` -> `eventAt` / `snapshotEvents` /
+ *   `ownEvents`) while `engines.dsh` spans both sides; `session-events.ts`
+ *   reads whichever one the installed harness exposes.
  * - settings service namespace (like DSH-better-sidebar's PrefsSchema) for
  *   the user toggles.
  */

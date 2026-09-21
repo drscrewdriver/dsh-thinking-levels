@@ -8,6 +8,44 @@ All notable changes to `dsh-thinking-levels` are documented here.
 
 ## [Unreleased]
 
+### Fixed — the auto scheduler never saw a tool call, so every request ran at `low`
+
+`engines.dsh` (`>=0.1.2-alpha.1 <0.2.0-0`) spans a rename of the session-log accessor that this plugin
+never followed, so the sampler read nothing and the scheduler answered its "no tool calls yet" rule on
+**every** step:
+
+| Harness segment | Session log access |
+|---|---|
+| `0.1.2-alpha.*` | `session.events` — a plain array member |
+| `0.1.2-rc.1` … `0.1.5-*` | `session.eventAt(seq)` + `session.snapshotEvents()` / `session.ownEvents()`; no `events` member |
+
+Verified against the published packages: `Session.prototype` carries `events` in `0.1.2-alpha.2` and
+does not in `0.1.2-rc.1` or `0.1.5-rc.2`. On the newer half of the supported range the window came back
+empty on every request, and an empty window was indistinguishable from a session that never called a
+tool — so a 206-step session of shell commands and multi-agent orchestration ran at the cheapest level
+end to end, with no `high` and no `max` anywhere in its request headers.
+
+- **The sampler reads whichever accessor the installed harness exposes** — `eventAt` + `seq` first
+  (random access, no array materialization), then `snapshotEvents()` / `ownEvents()`, then the legacy
+  `events` array.
+- **An unreadable log is reported as unreadable**, not as an empty window, and the scheduler answers
+  the hub (`high`) instead of the cheapest level. "Cannot observe" is not "nothing heavy happened".
+- **The scheduler is fail-safe, not fail-cheap.** A log that will not open, a window with fewer than
+  three calls, and a fresh prompt (nothing to schedule from yet) all stay at the hub; a failed tool
+  round floors the window at the hub instead of downgrading it. Positive evidence of heaviness — a
+  large recent payload — still escalates to `max` when upgrades are allowed.
+- **Escalation is bounded to the most recent calls** (`ESCALATION_RECENCY = 2`) and a failure no longer
+  escalates on its own. Measured on a real coding workload: over the full 8-call window one 48 KB
+  `write` put 43 % of all steps at `max`, and a failure-to-`max` rule added another ~14 %. Bounded to
+  the recent two calls the same traffic lands at ~13 % `max` / ~80 % `high` / ~7 % `low`.
+- **The regression test builds a real `@deepseek-ai/dsh-session` object** instead of a hand-rolled
+  double. The old double *was* `{ events: [...] }`, the accessor the harness had already removed, which
+  is why the suite stayed green while production sampled nothing. `@deepseek-ai/dsh-session` joins
+  `devDependencies`, pinned to the same `0.1.2-rc.1` segment as the client pins.
+
+> The README, CHANGELOG and locale mirrors for `ja` / `ko` (and the `zh` README) are not translated
+> here; only the English sources carry this change.
+
 ### Added — `publishConfig` pins the registry and the dist-tag
 
 Publishing this line went wrong twice by hand: a bare `npm publish` resolved against the

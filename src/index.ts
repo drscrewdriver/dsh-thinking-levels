@@ -23,12 +23,15 @@
  * - `agent/request` waterfall (packages/core/agent-loop/src/agent.ts
  *   buildRequest): each listener may return a modified GenerateOptions for
  *   the next listener — the sanctioned way to adjust request config.
- * - `session.events` (agent.session) carries the step's tool/call records; the
+ * - the session log (agent.session) carries the step's tool/call records; the
  *   auto scheduler PULLS the recent calls from there at request time
  *   (`recentToolCalls`). There is no `agent/tool` push event in DSH — the
  *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
  *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
- *   stay a pull from `session.events`.
+ *   stay a pull from the session log. The accessor itself moved at the
+ *   0.1.2-rc.1 boundary (`session.events` -> `eventAt` / `snapshotEvents` /
+ *   `ownEvents`) while `engines.dsh` spans both sides; `session-events.ts`
+ *   reads whichever one the installed harness exposes.
  * - settings service namespace (like DSH-better-sidebar's PrefsSchema) for
  *   the user toggles.
  */
@@ -477,12 +480,14 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     // Unsupported fields are stripped, not sent; a resolved low/auto schedule
     // only ever reaches models whose metadata admits the level.
     const capabilityFor = await capability.resolve(seed.provider, seed.model)
-    const calls = recentToolCalls(payload.agent)
+    // `undefined` when the session log cannot be read at all; the scheduler
+    // then stays at the hub instead of reading it as an empty window.
+    const history = recentToolCalls(payload.agent)
     const decision = resolveEffortInjection({
       supportsReasoning: capabilityFor.supportsReasoning,
       seedEffort: seed.reasoningEffort,
       selected: cfg.level,
-      recentCalls: calls,
+      history,
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
       efforts: capabilityFor.efforts,
@@ -500,10 +505,16 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       return stripped
     }
     // Summary-only log: individual tool names/arg sizes are workflow metadata
-    // that need not land in the host log; count and decision suffice.
+    // that need not land in the host log; count and decision suffice. An
+    // unreadable log is named as such rather than reported as an empty window,
+    // so a broken accessor is visible in the field instead of looking like a
+    // session that simply never called a tool.
     ctx.logger?.info?.(
-      '[thinking-levels] agent/request: model=%s/%s selected=%s calls=%d => level=%s',
-      String(seed.provider), String(seed.model), String(seed.reasoningEffort), calls.length, decision.level,
+      '[thinking-levels] agent/request: model=%s/%s selected=%s calls=%s failed=%s => level=%s',
+      String(seed.provider), String(seed.model), String(seed.reasoningEffort),
+      history === undefined ? 'unreadable' : String(history.calls.length),
+      history === undefined ? 'n/a' : String(history.failed),
+      decision.level,
     )
     return { ...seed, reasoningEffort: decision.level }
   }, { prepend: true })
