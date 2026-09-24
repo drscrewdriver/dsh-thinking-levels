@@ -29,10 +29,12 @@
  *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
  *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
  *   stay a pull from `session.events`.
- * - settings service namespace (like DSH-better-sidebar's PrefsSchema) for
- *   the user toggles.
+ * - declarative settings (DSH 0.1.7+): the runtime-adjustable `Config` fields
+ *   are marked `.volatile()`, the host generates the settings form from the
+ *   schema alone, and the plugin reads the live values per request.
  */
 import type { Context } from '@deepseek-ai/cordis';
+import type { Volatile } from '@deepseek-ai/cosmokit';
 import z from '@deepseek-ai/schemastery';
 import { type EffortId } from './thinking-level.ts';
 /** One configurer-confirmed capability override for a `provider/model` key. */
@@ -57,27 +59,76 @@ export interface ModelCapabilityOverride {
 }
 /** Plugin settings. */
 export interface ThinkingLevelsConfig {
-    enabled: boolean;
+    /** On a DSH 0.1.7+ host the schema's `.volatile()` fields arrive as live refs — read them through `readVolatile`. */
+    enabled: boolean | Volatile<boolean>;
     /** User-selected level: off / on / minimal / low / medium / high / xhigh / max fix the wire level; `auto` schedules per step. */
-    level: EffortId;
+    level: EffortId | Volatile<EffortId>;
     /** Scheduler preference: allow dropping below the `high` hub. */
-    allowDowngrade: boolean;
+    allowDowngrade: boolean | Volatile<boolean>;
     /** Scheduler preference: allow lifting above the `high` hub to `max`. */
-    allowUpgrade: boolean;
+    allowUpgrade: boolean | Volatile<boolean>;
     /** Configurer-confirmed capability overrides, keyed `provider/model`. */
     models: Record<string, ModelCapabilityOverride>;
 }
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
- * time (cordis.yml `config:` of the plugin row). The settings namespace
- * reuses the same schema, so a value admitted at one surface is admitted
- * at the other.
+ * time (cordis.yml `config:` of the plugin row). The same schema doubles as
+ * the settings surface: DSH 0.1.7 renders the plugin's settings form from the
+ * `.volatile()` fields alone (no registration call), and hands `apply` the
+ * validated entry with those fields as live `Volatile` refs.
  */
-export declare const Config: z<ThinkingLevelsConfig>;
+export declare const Config: z<Schemastery.ObjectS<NoInfer<{
+    enabled: z<boolean, boolean, "volatile-defined">;
+    level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
+    allowDowngrade: z<boolean, boolean, "volatile-defined">;
+    allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    models: z<import("@deepseek-ai/cosmokit").Dict<{
+        vision?: boolean | null | undefined;
+        thinking?: boolean | null | undefined;
+        efforts?: false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[] | null | undefined;
+        contextWindow?: number | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        vision: z<boolean, boolean, "plain">;
+        thinking: z<boolean, boolean, "plain">;
+        efforts: z<false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], "plain">;
+        contextWindow: z<number, number, "plain">;
+    }>>, string>, "defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    enabled: z<boolean, boolean, "volatile-defined">;
+    level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
+    allowDowngrade: z<boolean, boolean, "volatile-defined">;
+    allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    models: z<import("@deepseek-ai/cosmokit").Dict<{
+        vision?: boolean | null | undefined;
+        thinking?: boolean | null | undefined;
+        efforts?: false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[] | null | undefined;
+        contextWindow?: number | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        vision: z<boolean, boolean, "plain">;
+        thinking: z<boolean, boolean, "plain">;
+        efforts: z<false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], "plain">;
+        contextWindow: z<number, number, "plain">;
+    }>>, string>, "defined">;
+}>>, "plain">;
 /** Settings defaults, kept in lockstep with the schema defaults above. */
 export declare const DEFAULT_CONFIG: ThinkingLevelsConfig;
-/** Runtime-adjustable settings namespace: level + scheduler toggles. */
-export declare const THINKING_LEVELS_SETTINGS_NAMESPACE = "thinking-levels";
+/**
+ * The `loader/volatile-update` event is emitted by the DSH 0.1.7+ loader when
+ * a `.volatile()` config field changes (no plugin remount). The dev pins
+ * predate the event, so the signature is augmented here — mirroring the host
+ * runtime, which passes the changed config paths.
+ */
+declare module '@deepseek-ai/cordis' {
+    interface Events {
+        'loader/volatile-update': (paths: string[]) => void;
+    }
+}
+/**
+ * Read a `.volatile()` field: a live `Volatile` ref on a DSH 0.1.7+ host, a
+ * plain value otherwise. `get()` may return undefined for an absent value, so
+ * the schema default is the fallback.
+ */
+export declare function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T): T;
 /**
  * Plugin body.
  * @param ctx - host context carrying the agent-event dispatch.

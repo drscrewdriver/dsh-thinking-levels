@@ -12,17 +12,17 @@
  * this plugin reads them, so drift against a future harness release shows up
  * as a slot-registration or type error at build time instead of in a browser.
  *
- * Mirror anchors (verified 2026-09-11 against dsh-v0.1.5-rc.2):
+ * Mirror anchors (verified 2026-09-11 against dsh-v0.1.5-rc.2; the
+ * `configForms` face mirrors the DSH 0.1.7 settings contract):
  * - `packages/client/ui-renderer/src/client/registry.ts:95` — `SlotRegistry`,
  *   the `slots` service behind this mirror's `SlotsFace`.
- * - `packages/client/ui-settings/src/client/settings-contract.ts` — `SettingsScope`.
+ * - `packages/client/ui-settings/src/client/settings-contract.ts` — `ConfigForm`.
  * - `packages/client/locale/src/client/index.ts:380` — the `register` overloads.
  */
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   /** Slot map entries consumed by this plugin (subset of the harness table). */
   export interface SlotMap {
-    'settings.plugin.item': { kind: 'keyed'; scope: 'root'; owner: object }
     /**
      * The composer tool row's right seat (next to the model/effort control,
      * before the send button): the plugin renders its context-window quick
@@ -77,8 +77,8 @@ declare module '@deepseek-ai/dsh-client-locale/client' {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-settings/client' {
-  /** Snapshot of one durable namespace scope, as the settings card reads it. */
-  export interface SettingsScopeSnapshot<T> {
+  /** Snapshot of one plugin's config form, as the client reads it. */
+  export interface ConfigFormSnapshot<T> {
     status: 'loading' | 'ready' | 'unavailable'
     value: T | undefined
     /** Composition base layer and raw user layer, exposed for override display. */
@@ -90,16 +90,27 @@ declare module '@deepseek-ai/dsh-client-ui-settings/client' {
     mode: 'host' | 'memory'
   }
 
-  /** Durable namespace scope owner used by the settings card. */
-  export interface SettingsScope<T> {
-    getSnapshot(): SettingsScopeSnapshot<T>
+  /**
+   * One plugin's config form (DSH 0.1.7 `configForms` service), keyed by the
+   * plugin's composition entry id. Replaces the retired per-namespace
+   * binding service: same accessor names, `update` renamed to `mutate`, plus
+   * an explicit `dispose`.
+   */
+  export interface ConfigForm<T> {
+    getSnapshot(): ConfigFormSnapshot<T>
     subscribe(listener: () => void): () => void
     set(field: string, value: unknown): Promise<void>
     unset(field: string): Promise<void>
+    /** Merge a partial patch into the form's user layer (the retired `update`). */
+    mutate(patch: Partial<T>): Promise<void>
+    /** Release the form binding; the holder must call it when done. */
+    dispose(): void
   }
 
-  /** Context merge providing namespace binding. */
-  export interface SettingsScopeFace {
-    bind<T>(spec: { namespace: string; decode?: (section: unknown) => T | undefined }): SettingsScope<T>
+  /** The `configForms` service face available on the client context. */
+  export interface ConfigFormsFace {
+    get<T>(entryId: string): ConfigForm<T>
   }
 }
+
+

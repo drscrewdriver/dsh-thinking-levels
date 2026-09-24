@@ -1,20 +1,20 @@
 /**
  * dsh-thinking-levels — browser half.
  *
- * Registers the `thinking-levels` dictionaries and one `settings.plugin.item`
- * card keyed by the plugin's settings namespace, so the shared Plugins
- * settings tab renders an editable card: the level picker (off / low / high /
- * max / auto) plus the scheduler toggles.
+ * Registers the `thinking-levels` dictionaries and one composer tool-row
+ * control (`conversation.input.right`) for the context-window quick editor.
  *
- * The DSH 0.1.5 line still declares the `settings.plugin.item` seat (verified
- * against dsh-v0.1.5-rc.2 and v0.1.6-alpha.1: `ui-settings-plugins` keeps it as
- * the child of its built-in configurable tab), so this single registration
- * covers the whole supported segment. A `settings.plugins.tab` registration
- * would additionally mint a dedicated top-level Plugins tab duplicating the
- * item card, so none is made.
+ * The plugin's own settings (default level, enable toggle, scheduler bounds)
+ * have NO client registration since the DSH 0.1.7 line: the host renders the
+ * Plugins settings form declaratively from the `.volatile()` fields of the
+ * schema in src/index.ts, and the runtime values flow through the
+ * `configForms` service keyed by the composition entry id. The former
+ * per-plugin settings card was dropped with that migration (its seat no
+ * longer exists in 0.1.7), including its llm-pi-ai model-capability editor —
+ * the composer quick control below keeps serving the context-window edits.
  *
  * All @deepseek-ai/* imports are type-only: collaboration happens through
- * cordis services (`settingsScope`) and slot registration only (client bundle
+ * cordis services (`configForms`) and slot registration only (client bundle
  * purity).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -24,19 +24,20 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // the retired `dsh-client-runtime` package): importing the client types restores
 // the typed `ctx.slots` member on the cordis Context surface.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type { ThinkingLevelsConfig } from '../index.ts'
 import { NS, en, ja, ko, zh } from './locales.ts'
-import { ThinkingLevelsCard, type ThinkingLevelsCardInjected } from './card.tsx'
 import { ContextQuick, type ContextQuickInjected } from './context-quick.tsx'
 
-/** The settings namespace the host half registers (kept in lockstep with src/index.ts). */
-const THINKING_LEVELS_NS = 'thinking-levels'
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    configForms: import('@deepseek-ai/dsh-client-ui-settings/client').ConfigFormsFace
+  }
+}
 
 /** Services required by the browser half. */
-export const inject = ['slots', 'locale', 'settingsScope']
+export const inject = ['slots', 'locale', 'configForms']
 
 /**
- * Client plugin body: dictionaries plus the settings card registration.
+ * Client plugin body: dictionaries plus the composer quick-control slot.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -52,45 +53,24 @@ export function apply(ctx: ClientContext): void {
     return () => { for (const dispose of disposers) dispose() }
   }, 'dsh-thinking-levels: dictionaries')
 
-  ctx.slots.inject('settings.plugin.item', function* () {
-    yield ctx.slots.register({
-      name: 'settings.plugin.item',
-      // Both keys are supplied: CLI dsh declares this slot `keyed` (needs
-      // `key`) while DSH Desktop's bundled version declares it `list` (needs
-      // `id`) — the slots service validates only its kind's field, so the pair
-      // keeps the card working in both environments.
-      id: THINKING_LEVELS_NS,
-      key: THINKING_LEVELS_NS,
-      locale: NS,
-      inject: (): ThinkingLevelsCardInjected => {
-        const scope = ctx.settingsScope.bind<ThinkingLevelsConfig>({ namespace: THINKING_LEVELS_NS })
-        // The llm-pi-ai namespace is bound read/write so the card can surface
-        // and edit custom-provider model capabilities (vision / thinking /
-        // effort levels / thinking format / the route-level official
-        // compat.supportsDeveloperRole flag) without touching any official
-        // package — llm-pi-ai's own schema validates every write.
-        const piAiScope = ctx.settingsScope.bind<unknown>({ namespace: 'llm-pi-ai' })
-        return { scope, piAiScope }
-      },
-    }, ThinkingLevelsCard)
-  })
-
   // Composer tool row: one compact context-window control next to the
   // model/effort select (`conversation.input.right`, a session-scoped list seat
   // any plugin may occupy). It edits the current session model's `contextWindow`
-  // live: custom gateways write the `llm-pi-ai` namespace (same scope the card
-  // uses), official DeepSeek models write the `llm-deepseek` namespace (its
-  // `models[].contextWindow`, else the provider default). The model card itself
-  // is not an option: the shipped `ModelSelect` renders no slots, so a plugin
-  // cannot contribute inside that popup.
+  // live: custom gateways write the `llm-pi-ai` entry config (same config form
+  // the card used), official DeepSeek models write the `llm-deepseek` entry
+  // (its `models[].contextWindow`, else the provider default). The model card
+  // itself is not an option: the shipped `ModelSelect` renders no slots, so a
+  // plugin cannot contribute inside that popup.
   ctx.slots.inject('conversation.input.right', function* () {
     yield ctx.slots.register({
       name: 'conversation.input.right',
       id: 'context-window-quick',
       locale: NS,
       inject: (): ContextQuickInjected => {
-        const piAiScope = ctx.settingsScope.bind<unknown>({ namespace: 'llm-pi-ai' })
-        const deepseekScope = ctx.settingsScope.bind<unknown>({ namespace: 'llm-deepseek' })
+        // Entry ids of the target plugins: each dsh llm plugin's composition
+        // entry id matches its settings namespace (`llm-pi-ai` / `llm-deepseek`).
+        const piAiScope = ctx.configForms.get<unknown>('llm-pi-ai')
+        const deepseekScope = ctx.configForms.get<unknown>('llm-deepseek')
         return { piAiScope, deepseekScope }
       },
     }, ContextQuick)

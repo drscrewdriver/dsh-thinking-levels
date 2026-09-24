@@ -29,10 +29,12 @@
  *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
  *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
  *   stay a pull from `session.events`.
- * - settings service namespace (like DSH-better-sidebar's PrefsSchema) for
- *   the user toggles.
+ * - declarative settings (DSH 0.1.7+): the runtime-adjustable `Config` fields
+ *   are marked `.volatile()`, the host generates the settings form from the
+ *   schema alone, and the plugin reads the live values per request.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cosmokit'
 import z from '@deepseek-ai/schemastery'
 import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
 import { recentToolCalls } from './session-events.ts'
@@ -68,13 +70,14 @@ export interface ModelCapabilityOverride {
 
 /** Plugin settings. */
 export interface ThinkingLevelsConfig {
-  enabled: boolean
+  /** On a DSH 0.1.7+ host the schema's `.volatile()` fields arrive as live refs — read them through `readVolatile`. */
+  enabled: boolean | Volatile<boolean>
   /** User-selected level: off / on / minimal / low / medium / high / xhigh / max fix the wire level; `auto` schedules per step. */
-  level: EffortId
+  level: EffortId | Volatile<EffortId>
   /** Scheduler preference: allow dropping below the `high` hub. */
-  allowDowngrade: boolean
+  allowDowngrade: boolean | Volatile<boolean>
   /** Scheduler preference: allow lifting above the `high` hub to `max`. */
-  allowUpgrade: boolean
+  allowUpgrade: boolean | Volatile<boolean>
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
 }
@@ -83,15 +86,16 @@ const effortId = z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhig
 
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
- * time (cordis.yml `config:` of the plugin row). The settings namespace
- * reuses the same schema, so a value admitted at one surface is admitted
- * at the other.
+ * time (cordis.yml `config:` of the plugin row). The same schema doubles as
+ * the settings surface: DSH 0.1.7 renders the plugin's settings form from the
+ * `.volatile()` fields alone (no registration call), and hands `apply` the
+ * validated entry with those fields as live `Volatile` refs.
  */
-export const Config: z<ThinkingLevelsConfig> = z.object({
-  enabled: z.boolean().default(true),
-  level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto'),
-  allowDowngrade: z.boolean().default(true),
-  allowUpgrade: z.boolean().default(false),
+export const Config = z.object({
+  enabled: z.boolean().default(true).volatile(),
+  level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto').volatile(),
+  allowDowngrade: z.boolean().default(true).volatile(),
+  allowUpgrade: z.boolean().default(false).volatile(),
   models: z.dict(z.object({
     // schemastery fields are optional unless marked `.required()`.
     vision: z.boolean(),
@@ -110,59 +114,57 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   models: {},
 }
 
-/** Runtime-adjustable settings namespace: level + scheduler toggles. */
-export const THINKING_LEVELS_SETTINGS_NAMESPACE = 'thinking-levels'
-
 /**
- * Minimal faces of the dsh `settings` service (typed locally — the plugin must
- * NOT value-import the official `@deepseek-ai/dsh-settings` package: it is not
- * part of a profile's resolvable tree by design, and the service is provided
- * by the dsh runtime instead).
+ * The `loader/volatile-update` event is emitted by the DSH 0.1.7+ loader when
+ * a `.volatile()` config field changes (no plugin remount). The dev pins
+ * predate the event, so the signature is augmented here — mirroring the host
+ * runtime, which passes the changed config paths.
  */
-interface SettingsScopeLike {
-  get(): unknown
-  watch(callback: () => void): () => void
-}
-interface SettingsServiceLike {
-  register(ns: string, schema: unknown, options?: { base?: unknown }): SettingsScopeLike
-}
-interface SettingsAwareCtx {
-  inject(deps: readonly string[], fn: (sctx: {
-    settings: SettingsServiceLike
-    effect(cleanup: () => (() => void) | void, label?: string): void
-  }) => void): void
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'loader/volatile-update': (paths: string[]) => void
+  }
 }
 
 /**
- * Inline equivalent of the official `installSettingsSection` helper: register
- * the namespace through the `settings` service (cordis injection), layer the
- * composition entry as `base`, and keep the runtime source live. Kept local so
- * the host half has no value dependency on `@deepseek-ai/dsh-settings`.
- * @param ctx - host context carrying the settings service.
- * @param ns - settings namespace to register.
- * @param schema - schemastery schema resolving the namespace value.
- * @param entry - composition-entry config used as the `base` layer.
- * @param hooks - source sink and change notification.
+ * Read a `.volatile()` field: a live `Volatile` ref on a DSH 0.1.7+ host, a
+ * plain value otherwise. `get()` may return undefined for an absent value, so
+ * the schema default is the fallback.
  */
-function installSettingsSection<T>(
-  ctx: Context,
-  ns: string,
-  schema: unknown,
-  entry: T,
-  hooks: { setSource: (source: () => T) => void; onChange: () => void },
-): void {
-  ;(ctx as unknown as SettingsAwareCtx).inject(['settings'], (sctx) => {
-    const scope = sctx.settings.register(ns, schema, { base: entry })
-    hooks.setSource(() => scope.get() as T)
-    hooks.onChange()
-    // Detach: on plugin unload fall back to the composition entry, mirroring
-    // the official helper's disposer.
-    sctx.effect(() => () => {
-      hooks.setSource(() => entry)
-      hooks.onChange()
-    })
-    scope.watch(() => hooks.onChange())
-  })
+export function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T): T {
+  if (value !== null && typeof value === 'object' && typeof (value as Volatile<T>).get === 'function') {
+    const snapshot = (value as Volatile<T>).get()
+    return (snapshot === undefined ? fallback : snapshot) as T
+  }
+  return (value as T | undefined) ?? fallback
+}
+
+/**
+ * The live configuration snapshot: the runtime-adjustable fields resolved to
+ * plain values (volatile refs read through).
+ */
+interface LiveConfig {
+  enabled: boolean
+  level: EffortId
+  allowDowngrade: boolean
+  allowUpgrade: boolean
+  models: Record<string, ModelCapabilityOverride>
+}
+
+/**
+ * Resolve the live configuration snapshot: the runtime-adjustable fields are
+ * read through their (possibly volatile) composition-entry values on every
+ * call, so a committed settings change applies to the next request without a
+ * plugin remount.
+ */
+function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
+  return {
+    enabled: readVolatile(config.enabled, true),
+    level: readVolatile(config.level, 'auto'),
+    allowDowngrade: readVolatile(config.allowDowngrade, true),
+    allowUpgrade: readVolatile(config.allowUpgrade, false),
+    models: config.models,
+  }
 }
 
 /**
@@ -383,23 +385,18 @@ function capabilityResolver(ctx: Context): {
  * @param config - resolved plugin configuration.
  */
 export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFIG): void {
-  if (!config.enabled) return
   // Fail-loud: a stray config value (e.g. `medium` from an old profile) must
   // not ride through into the model request, where dsh throws
   // UNSUPPORTED_REASONING_EFFORT per request.
-  assertEffortId(config.level, 'dsh-thinking-levels config.level')
+  assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
 
-  // Runtime-adjustable configuration source: the composition entry is the
-  // base; the settings namespace layers on top and `current()` always reads
-  // the active section (official dsh settings integration pattern).
-  let current: () => ThinkingLevelsConfig = () => config
-  installSettingsSection(ctx, THINKING_LEVELS_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    // The decision is read per request, so a committed change needs no
-    // re-registration.
-    onChange: () => {},
+  // Runtime-adjustable configuration: the `.volatile()` fields arrive as live
+  // refs (DSH 0.1.7+) and are re-read per request, so a committed settings
+  // change needs no re-registration; `loader/volatile-update` re-validates the
+  // committed level eagerly instead of failing on the next model request.
+  const current: () => LiveConfig = () => resolveLiveConfig(config)
+  ctx.on('loader/volatile-update', () => {
+    assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
   })
 
   // Official-compat bridge (check branch): write the OFFICIAL compat surface

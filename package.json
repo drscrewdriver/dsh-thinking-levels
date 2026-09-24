@@ -1,10 +1,10 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
-    "tag": "dsh-0.1.5"
+    "tag": "dsh-0.1.7"
   },
   "description": "DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "repository": {
@@ -46,14 +46,14 @@
   },
   "engines": {
     "node": ">=22.19.0 || >=24.0.0",
-    "dsh": ">=0.1.5-alpha.1 <0.2.0-0"
+    "dsh": ">=0.1.7-rc.1 <0.2.0-0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.5-alpha.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.5-alpha.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.5-alpha.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.5-alpha.1 <0.2.0-0"
+    "@deepseek-ai/dsh-client-locale": ">=0.1.7-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.7-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.7-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.7-rc.1 <0.2.0-0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-client-locale": {
@@ -70,7 +70,7 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.0"
+    "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -86,7 +86,8 @@
     "tsdown": "^0.22.2",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "@deepseek-ai/schemastery": "^3.18.4"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown",
@@ -109,4 +110,5 @@
       ],
       "platform": "web"
     }
-  }}
+  }
+}

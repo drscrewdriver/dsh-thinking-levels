@@ -18,17 +18,14 @@
 
 > **▼ DSH version support**
 >
-> This release supports **DSH v0.1.2 or newer** only.
+> This release supports **DSH v0.1.7-rc.1 or newer** only.
 >
 > | DSH version | Status | Notes |
 > | --- | --- | --- |
-> | ≥ 0.1.5-rc.1 | ✅ Supported | Settings card rides the `settings.plugin.item` seat on every supported line (2.0.0-beta.4+); verified against 0.1.5-rc.2 |
-> | ≥ 0.1.2-alpha.1 | ✅ Supported | Covers the 0.1.2 / 0.1.3 / 0.1.4 lines (same `settings.plugin.item` seat) |
-> | < 0.1.2-alpha.1 | ⚠️ Not recommended | Stay on the previous plugin line (0.7.1-beta.2 or earlier). Do not run an older plugin build against DSH v0.1.2+ — upgrade the plugin instead. |
+> | ≥ 0.1.7-rc.1 | ✅ Supported | Declarative settings: the host renders the Plugins form from the plugin's `.volatile()` schema fields; cross-plugin reads/writes go through the `configForms` service |
+> | < 0.1.7-rc.1 | ⚠️ Not supported | DSH 0.1.7 removed the imperative settings registration and the per-plugin card seat the earlier lines (3.0.x and below) relied on — stay on plugin 3.0.1 for 0.1.2–0.1.6 hosts. |
 >
-> The boundary is `0.1.2-alpha.1`, where DSH removed `@deepseek-ai/dsh-client-runtime`. This release imports `Context` from `@deepseek-ai/cordis` instead of the deleted `ClientContext`, matching the official client plugins. DSH 0.1.5 kept the `settings.plugin.item` seat (verified against v0.1.5-rc.2 and v0.1.6-alpha.1: it remains the child of the built-in configurable Plugins tab), so one item-card registration covers the whole supported segment; no dedicated `settings.plugins.tab` page is contributed.
->
-> **Upgrading an existing profile to DSH 0.1.5:** if the plugin card (or the whole plugin tree) disappears after the upgrade, hard-refresh the browser first — the stale client combo cache is a known 0.1.5 upgrade issue, not a plugin defect.
+> The boundary is `0.1.7-rc.1`, where DSH removed the imperative settings registration (`settings.register` / `installSettingsSection`) and the client `settingsScope` service. This release targets the 0.1.7 declarative surface: the runtime-adjustable config fields are marked `.volatile()` in the schemastery schema, the host generates the settings form from that schema alone (no registration call, no client settings card), and the plugin reads the live values per request, driven by `loader/volatile-update`.
 
 > **Compatibility note:** Version `0.6.0` includes Japanese (`ja`) and Korean (`ko`) dictionaries and selector entries, but the current official DSH releases expose only `zh` and `en` through `LocaleRuntime`. On stock DSH, selecting `ja` or `ko` fails with `locale "<id>" is not registered`. These languages will work after official DSH adds the locale IDs. Advanced users can use a DSH fork that updates `packages/client/locale/src/locale-settings.ts` (`LOCALE_IDS`) and `packages/client/locale/src/client/index.ts` (`LOCALES` labels), together with the corresponding core dictionaries and tests, then rebuild and run the forked DSH. Changing this plugin alone cannot extend DSH's global locale list.
 
@@ -44,13 +41,13 @@ Screenshots of the live UI (dsh web):
 </figure>
 
 <figure>
-  <img style="max-width:100%" alt="思考档位 settings card: default level (auto scheduling), enable / allow-downgrade / allow-upgrade toggles, llm-pi-ai custom-provider model-capability table with the progressive per-model editor, and apply-to-all presets (Off/High/Max official DeepSeek style, Off/Low/Medium/High generic)." src="assets/自动思考级别配置.png" />
-  <figcaption>Thinking-level settings card: the auto scheduler plus its boundaries, and llm-pi-ai model-capability mapping (gear → gateway wire values).</figcaption>
+  <img style="max-width:100%" alt="Thinking-level settings (3.0.x card shown): default level (auto scheduling), enable / allow-downgrade / allow-upgrade toggles, llm-pi-ai custom-provider model-capability table with the progressive per-model editor, and apply-to-all presets (Off/High/Max official DeepSeek style, Off/Low/Medium/High generic)." src="assets/自动思考级别配置.png" />
+  <figcaption>Thinking-level settings, 3.0.x card (screenshot kept for reference). Since 3.1.0 / DSH 0.1.7 the level, enable and scheduler toggles render as a host-generated declarative form; the custom card and its llm-pi-ai capability editor were removed with the retired seat.</figcaption>
 </figure>
 
 <figure>
-  <img style="max-width:100%" alt="Per-model capability editor for a custom openai-completions model (local-35b / Qwen3.6-35B-A3B): thinking model and vision enabled, support think effort off, thinking format qwen-chat-template (auto-filled); no takeover switch — the official compat flag lives on the provider row; context-window limit presets 64K/128K/256K/400K/512K/1M with a custom input." src="assets/自定义模型的思考接管-短路-上下文窗口限制.png" />
-  <figcaption>Per-model capability card — pairs with <a href="https://github.com/drscrewdriver/dsh-llm-openai-completions">dsh-llm-openai-completions</a>: this card detects &amp; writes capabilities into the official llm-pi-ai compat surface (no adapter needed since 0.7.0-beta.1).</figcaption>
+  <img style="max-width:100%" alt="Per-model capability editor for a custom openai-completions model (local-35b / Qwen3.6-35B-A3B), as shipped in the 3.0.x settings card: thinking model and vision enabled, support think effort off, thinking format qwen-chat-template (auto-filled); no takeover switch — the official compat flag lives on the provider row; context-window limit presets 64K/128K/256K/400K/512K/1M with a custom input." src="assets/自定义模型的思考接管-短路-上下文窗口限制.png" />
+  <figcaption>Per-model capability card, 3.0.x (screenshot kept for reference). Since 3.1.0 / DSH 0.1.7 the capability editor ships no more; edit `llm-pi-ai` model capabilities through the official Models settings instead.</figcaption>
 </figure>
 
 ## Levels
@@ -71,14 +68,16 @@ Wire-level facts (verified against the official DeepSeek docs and dsh's `llm-dee
 
 ## Custom wire mapping
 
-For hand-declared `llm-pi-ai` models the settings card lets you map each level to the exact value your gateway expects (borrowed from dsh-thinking-effort): tick a level and enter its wire value, e.g. `high` → `ultra`. The mapping is stored as the model's `reasoningEfforts` table, so the Composer selection `High` sends `ultra` to the gateway. Leaving `off` empty means "do not send".
+For hand-declared `llm-pi-ai` models, map each level to the exact value your gateway expects (borrowed from dsh-thinking-effort): tick a level and enter its wire value, e.g. `high` → `ultra`. The mapping is stored as the model's `reasoningEfforts` table in the `llm-pi-ai` config, so the Composer selection `High` sends `ultra` to the gateway. Leaving `off` empty means "do not send".
 
 - Official preset: `Off / High / Max` (official DeepSeek style)
 - Generic preset: `Off / Low / Medium / High`
 
+> The visual editor for this mapping rode the plugin's settings card, which the DSH 0.1.7 migration removed (the seat no longer exists). Edit the `reasoningEfforts` table through the official Models settings surface instead — the host-side detection and injection read it live either way.
+
 ## Context-window presets
 
-The settings card's per-model editor now includes a **context window limit** control: preset buttons `64K / 128K / 256K / 400K / 512K / 1M`, a custom integer input, and a clear button. The value is written to the `llm-pi-ai` model entry `contextWindow` (integer `2000`–`1000000`).
+The composer tool-row quick control (next to the model/effort select) edits a **context window limit**: preset stops `64K / 128K / 256K / 400K / 512K / 1M`, a custom integer input, and a clear button. The value is written to the `llm-pi-ai` model entry `contextWindow` (integer `2000`–`1000000`) — or to the `llm-deepseek` entry for official DeepSeek models.
 
 Upstream, the harness consumes it through `resolveModelInfo(...).context.contextWindow` for compaction thresholds, context-overflow detection and context-pressure projections. Because `llm-pi-ai` re-reads the live config on every resolve and the compat sync does not block model discovery, a settings edit takes effect on the next request without a restart.
 
@@ -169,7 +168,7 @@ Two surfaces share one schema:
     allowDowngrade: true   # let the scheduler drop below `high`
     allowUpgrade: false    # forbid the scheduler lifting to `max`
   ```
-- **Runtime** — the dsh-settings namespace `thinking-levels` (`level`, `allowDowngrade`, `allowUpgrade`, `enabled`, `models`): changes apply to the next model request, no restart needed. A visual editor is available under Settings → Plugins → configurable plugins.
+- **Runtime** — the plugin's `.volatile()` config fields (`enabled`, `level`, `allowDowngrade`, `allowUpgrade`): DSH 0.1.7 renders the Plugins settings form from the declared schema, and committed changes reach the plugin as live config references (`loader/volatile-update`) — they apply to the next model request, no restart needed. (`models` stays a configurer-level field: edit it in the profile composition.)
 
 Per-model capability overrides (`models`, keyed `provider/model`) confirm what auto-detection
 finds; the configurer has the final word:
@@ -216,19 +215,15 @@ is no longer needed and should stay uninstalled:
   `settings.update('llm-pi-ai', …)`), so dsh's schema validates the write **where it is
   written**: a dsh older than rc.8 rejects the fields with a log warning — no silent
   misconfiguration; explicit values on any layer are never clobbered;
-- Triggers on plugin start, `llm/adapters-updated`, and `llm-pi-ai` settings changes — no
+- Triggers on plugin start, `llm/adapters-updated`, and `llm-pi-ai` config changes — no
   manual config editing;
-- The capability card is de-short-circuited too: the provider-level switch is now
-  "**gateway rejects the developer role**" (writes/clears the route-level flag; unchecking
-  restores inheritance), and the model editor is progressive
-  (thinking/vision → effort support → effort editor);
 - Response-side inline `<think>` splitting remains a **gateway concern**: bare vLLM needs
   `--reasoning-parser qwen3` (pi-ai parses only `reasoning_content` / `reasoning` /
   `reasoning_text`).
 
 # Dependency note
 
-The host half does **not** value-depend on `@deepseek-ai/dsh-settings` (settings registration goes through the cordis `settings` service provided by the dsh runtime) — no need to install official packages into the profile manually. `dependencies` is just `@deepseek-ai/schemastery` (installed automatically with the package).
+The host half does **not** value-depend on `@deepseek-ai/dsh-settings` — since the DSH 0.1.7 line there is no settings registration at all: the settings form is generated by the host from the plugin's declared schemastery schema (`.volatile()` fields), and the client half talks to the `configForms` service provided by the dsh runtime. No need to install official packages into the profile manually. `dependencies` is just `@deepseek-ai/schemastery` (installed automatically with the package).
 
 ## Development
 

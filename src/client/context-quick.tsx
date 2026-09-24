@@ -19,16 +19,16 @@
  * whole slot entry down. A harness that provides neither seat renders nothing
  * here instead of a dead control.
  *
- * Two model families are served, each with its own writable settings
- * namespace (both consumed live by `resolveModelInfo(...).context.contextWindow`,
+ * Two model families are served, each with its own writable config form
+ * (both consumed live by `resolveModelInfo(...).context.contextWindow`,
  * so a write takes effect on the next request without a restart):
  * - Custom gateways (`llm-pi-ai` providers): writes the model entry's
  *   `contextWindow` under `providers[provider].models[i]`.
  * - Official DeepSeek models (`deepseek-official`, the `llm-deepseek`
- *   namespace): writes the catalog model's `contextWindow` when the model is
+ *   entry): writes the catalog model's `contextWindow` when the model is
  *   listed, otherwise caps via `defaultContextWindow`.
  *
- * Write discipline: dragging the slider only moves a local draft; the settings
+ * Write discipline: dragging the slider only moves a local draft; the config
  * write happens once per gesture (pointer release, key release, blur), so a
  * drag never floods the host with intermediate values.
  *
@@ -38,7 +38,7 @@
  */
 import { useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 
 /** The official DeepSeek provider route owned by the llm-deepseek adapter. */
@@ -48,12 +48,12 @@ const DEEPSEEK_DEFAULT_WINDOW = 1_000_000
 /** Slider stop an unset window parks on: the thumb needs a position, the readout stays "unset". */
 const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value === 256_000)
 
-/** One injected face: the `llm-pi-ai` and `llm-deepseek` namespace scopes. */
+/** One injected face: the `llm-pi-ai` and `llm-deepseek` config forms. */
 export interface ContextQuickInjected {
-  /** The `llm-pi-ai` settings namespace (custom gateway models). */
-  piAiScope: SettingsScope<unknown>
-  /** The `llm-deepseek` settings namespace (official DeepSeek models). */
-  deepseekScope: SettingsScope<unknown>
+  /** The `llm-pi-ai` config form (custom gateway models). */
+  piAiScope: ConfigForm<unknown>
+  /** The `llm-deepseek` config form (official DeepSeek models). */
+  deepseekScope: ConfigForm<unknown>
 }
 
 /** The narrow trajectory-view slice the component reads for provider/model. */

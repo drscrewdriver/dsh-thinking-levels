@@ -18,7 +18,7 @@
 
 > **互換性について：** `0.6.0` には日本語（`ja`）と韓国語（`ko`）の辞書と選択項目が含まれていますが、現在の公式 DSH は `LocaleRuntime` 経由で `zh` と `en` のみを提供しています。純正 DSH で `ja` または `ko` を選択すると `locale "<id>" is not registered` で失敗します。公式 DSH が対応 locale ID を追加するまで利用できません。上級ユーザーは DSH フォークを保守し、`packages/client/locale/src/locale-settings.ts` の `LOCALE_IDS` と `packages/client/locale/src/client/index.ts` の `LOCALES` ラベルを更新し、コア辞書とテストを追加して再ビルド・実行してください。このプラグインだけでは DSH のグローバル locale 一覧を拡張できません。
 
-> **バージョン互換（2.0.0-beta.4+）：** DSH ≥ 0.1.2-alpha.1 に対応。実測（v0.1.5-rc.2 および v0.1.6-alpha.1）により、DSH 0.1.5 は `settings.plugin.item` スロットを維持しています（内蔵の設定タブ内カードリスト）。本プラグインはこのカード 1 枚のみを登録して全サポート線をカバーし、専用の `settings.plugins.tab` ページは提供しません。既存プロファイルを DSH 0.1.5 にアップグレードした後にカードが消えた場合は、まずブラウザーを強制リロードしてください（client combo キャッシュの陳腐化は 0.1.5 の既知のアップグレード問題です）。
+> **バージョン互換：** 本リリースは **DSH ≥ 0.1.7-rc.1** のみに対応。DSH 0.1.7 は命令的な設定登録（`settings.register` / `installSettingsSection`）とクライアントの `settingsScope` サービスおよびプラグイン別カードスロットを削除しました——旧ライン（3.0.x 以前）が依存する表面は存在しません。0.1.2–0.1.6 ホストではプラグイン 3.0.1 を使用してください。3.1.0 は 0.1.7 の宣言的表面を対象とします：実行時に変更できる設定フィールドは schemastery スキーマで `.volatile()` 付きとし、設定フォームはホストがスキーマから自動生成（登録呼び出しもクライアント設定カードも不要）、プラグインは `loader/volatile-update` に従ってリクエストごとに最新値を読みます。
 
 マルチステップのツールチェーンでは、モデルは**ツール呼び出しのたびに**再思考します——その思考がウォールクロック時間の大半を占めます（50 ステップのエージェントタスクはツール間に数分の推論を費やし得ます）。`dsh-thinking-levels` は、dsh が毎ステップ再解決する `agent/request` waterfall（`prepend` で最外層に登録し、セッションのモデル選択アセンブリに上書きされないようにする）に接続し、次のモデルリクエストに思考レベルを注入します。
 
@@ -40,7 +40,9 @@
 
 ## カスタム送信値マッピング
 
-`llm-pi-ai` で手動宣言したモデルでは、設定カードで各レベルをゲートウェイが実際に受け付ける値にマッピングできます（dsh-thinking-effort から借用）：レベルにチェックを入れ、送信値を入力します（例：`high` → `ultra`）。マッピングはモデルの `reasoningEfforts` テーブルとして保存され、Composer で `High` を選ぶとゲートウェイには `ultra` が送信されます。`off` を空欄にすると送信されません。
+`llm-pi-ai` で手動宣言したモデルでは、各レベルをゲートウェイが実際に受け付ける値にマッピングできます（dsh-thinking-effort から借用）：レベルにチェックを入れ、送信値を入力します（例：`high` → `ultra`）。マッピングはモデルの `reasoningEfforts` テーブルとして保存され、Composer で `High` を選ぶとゲートウェイには `ultra` が送信されます。`off` を空欄にすると送信されません。
+
+> このマッピングのビジュアルエディターは以前プラグイン設定カードに搭載されていましたが、DSH 0.1.7 移行で削除しました（対応スロットが廃止されたため）。公式の「モデル」設定面から `reasoningEfforts` テーブルを編集してください——host 側の検出と注入はもともとその設定をライブで読みます。
 
 - 公式プリセット：`Off / High / Max`（公式 DeepSeek 形式）
 - 汎用プリセット：`Off / Low / Medium / High`
@@ -121,7 +123,7 @@ cd ~/.dsh/profiles/web && pnpm install && dsh web
     allowDowngrade: true   # スケジューラーが `high` より下へ下げるのを許可
     allowUpgrade: false    # スケジューラーが `max` へ上げるのを禁止
   ```
-- **ランタイム** — dsh-settings 名前空間 `thinking-levels`（`level`、`allowDowngrade`、`allowUpgrade`、`enabled`、`models`）：変更は次のモデルリクエストから有効、再起動不要。設定パネル（設定 → プラグイン → 設定可能なプラグイン）にビジュアルエディターがあります（レベルグリッド + 送信値入力 + 検索 + ワンクリックプリセット）。
+- **ランタイム** — プラグインの `.volatile()` 設定フィールド（`enabled`、`level`、`allowDowngrade`、`allowUpgrade`）：DSH 0.1.7 が宣言されたスキーマから「プラグイン」設定フォームを生成し、確定した変更はライブ設定参照（`loader/volatile-update`）としてプラグインへ届き、次のモデルリクエストから有効、再起動不要。（`models` は設定者レベルのフィールドのまま：プロファイル構成で編集してください。）
 
 モデル毎の能力オーバーライド（`models`、キーは `provider/model`）は自動検出の結果を確定します。構成者が最終判断します：
 
@@ -150,12 +152,11 @@ config:
 
 - ルートレベル `compat.supportsDeveloperRole: false`（`Unexpected message role` 400 を修正）と、トグル型思考モデルへのモデルレベル `compat.thinkingFormat: 'qwen-chat-template'`（`chat_template_kwargs.enable_thinking` を送信）を自動書き込み；
 - 公式設定チャネルで書き込み、dsh のスキーマが書き込み時に検証（rc.8 未満では拒否してログ警告）；明示的な値は決して上書きしません；
-- プロバイダー行のスイッチは「ゲートウェイは developer ロール非対応」に置き換わり、モデルエディタは段階的 UI に；
 - 応答側のインライン `<think>` 分割はゲートウェイの責務（vLLM は `--reasoning-parser qwen3`）。
 
 # 依存関係
 
-host 側は `@deepseek-ai/dsh-settings` に値依存しません（設定登録は cordis の `settings` サービス経由。dsh ランタイムが提供）。profile への公式パッケージ手動インストールは不要です。`dependencies` は `@deepseek-ai/schemastery` のみ（パッケージと一緒に自動インストール）。
+host 側は `@deepseek-ai/dsh-settings` に値依存しません——DSH 0.1.7 からは設定登録自体が存在しません：設定フォームはホストがプラグイン宣言の schemastery スキーマ（`.volatile()` フィールド）から生成し、クライアント側は dsh ランタイム提供の `configForms` サービスで連携します。profile への公式パッケージ手動インストールは不要です。`dependencies` は `@deepseek-ai/schemastery` のみ（パッケージと一緒に自動インストール）。
 
 ## 開発
 

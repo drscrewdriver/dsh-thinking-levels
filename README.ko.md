@@ -18,7 +18,7 @@
 
 > **호환성 참고:** `0.6.0`에는 일본어(`ja`)와 한국어(`ko`) 사전 및 선택 항목이 포함되어 있지만, 현재 공식 DSH는 `LocaleRuntime`을 통해 `zh`와 `en`만 제공합니다. 순정 DSH에서 `ja` 또는 `ko`를 선택하면 `locale "<id>" is not registered` 오류가 발생합니다. 공식 DSH가 해당 locale ID를 추가할 때까지 사용할 수 없습니다. 고급 사용자는 DSH 포크를 유지하면서 `packages/client/locale/src/locale-settings.ts`의 `LOCALE_IDS`와 `packages/client/locale/src/client/index.ts`의 `LOCALES` 라벨을 업데이트하고 핵심 사전과 테스트를 추가한 뒤 다시 빌드하여 실행할 수 있습니다. 이 플러그인만으로는 DSH의 전역 locale 목록을 확장할 수 없습니다.
 
-> **버전 호환(2.0.0-beta.4+):** DSH ≥ 0.1.2-alpha.1 지원. 실측(v0.1.5-rc.2 및 v0.1.6-alpha.1) 결과 DSH 0.1.5는 `settings.plugin.item` 슬롯을 유지합니다(내장 구성 탭의 카드 목록). 이 플러그인은 이 카드 하나만 등록하여 전체 지원 라인을 커버하며, 별도의 `settings.plugins.tab` 페이지는 제공하지 않습니다. 기존 프로필을 DSH 0.1.5로 업그레이드한 후 카드가 사라지면 먼저 브라우저를 강제 새로 고침하세요(client combo 캐시 정체는 0.1.5의 알려진 업그레이드 문제입니다).
+> **버전 호환:** 본 릴리스는 **DSH ≥ 0.1.7-rc.1**만 지원. DSH 0.1.7은 명령형 설정 등록(`settings.register` / `installSettingsSection`)과 클라이언트 `settingsScope` 서비스 및 플러그인별 카드 슬롯을 제거했습니다——구 라인(3.0.x 이하)이 의존하던 표면은 더 이상 존재하지 않습니다. 0.1.2–0.1.6 호스트에서는 플러그인 3.0.1을 사용하세요. 3.1.0은 0.1.7 선언적 표면을 대상으로 합니다: 런타임 조정 가능한 설정 필드는 schemastery 스키마에 `.volatile()`로 표시되고, 설정 폼은 호스트가 스키마에서 자동 생성(등록 호출도 클라이언트 설정 카드도 없음)하며, 플러그인은 `loader/volatile-update`에 따라 요청마다 최신 값을 읽습니다.
 
 멀티스텝 도구 체인에서 모델은 **모든 도구 호출 전에** 다시 생각합니다——그 사고가 벽시계 시간의 대부분을 차지합니다(50스텝 에이전트 작업은 도구 사이에 수 분의 추론을 쓸 수 있습니다). `dsh-thinking-levels`는 dsh가 매 스텝 다시 해석하는 `agent/request` waterfall(`prepend`로 최외곽에 등록하여 세션 모델 선택 어셈블리가 덮어쓰지 못하게 함)에 연결되어 다음 모델 요청에 사고 수준을 주입합니다.
 
@@ -40,7 +40,9 @@
 
 ## 사용자 지정 전송 값 매핑
 
-`llm-pi-ai`에 수동 선언한 모델은 설정 카드에서 각 수준을 게이트웨이가 실제로 받아들이는 값으로 매핑할 수 있습니다(dsh-thinking-effort에서 차용): 수준을 체크하고 전송 값을 입력합니다(예: `high` → `ultra`). 매핑은 모델의 `reasoningEfforts` 테이블로 저장되며, Composer에서 `High`를 선택하면 게이트웨이에는 `ultra`가 전송됩니다. `off`를 비워 두면 전송되지 않습니다.
+`llm-pi-ai`에 수동 선언한 모델은 각 수준을 게이트웨이가 실제로 받아들이는 값으로 매핑할 수 있습니다(dsh-thinking-effort에서 차용): 수준을 체크하고 전송 값을 입력합니다(예: `high` → `ultra`). 매핑은 모델의 `reasoningEfforts` 테이블로 저장되며, Composer에서 `High`를 선택하면 게이트웨이에는 `ultra`가 전송됩니다. `off`를 비워 두면 전송되지 않습니다.
+
+> 이 매핑의 시각적 편집기는 이전에 플러그인 설정 카드에 탑재되어 있었으나, DSH 0.1.7 마이그레이션에서 제거되었습니다(해당 슬롯 폐지). 공식 「모델」 설정 면에서 `reasoningEfforts` 테이블을 편집하세요——호스트 측 감지와 주입은 원래 그 설정을 라이브로 읽습니다.
 
 - 공식 프리셋: `Off / High / Max`(공식 DeepSeek 방식)
 - 일반 프리셋: `Off / Low / Medium / High`
@@ -121,7 +123,7 @@ cd ~/.dsh/profiles/web && pnpm install && dsh web
     allowDowngrade: true   # 스케줄러가 `high` 아래로 내리는 것을 허용
     allowUpgrade: false    # 스케줄러가 `max`로 올리는 것을 금지
   ```
-- **런타임** — dsh-settings 네임스페이스 `thinking-levels`(`level`, `allowDowngrade`, `allowUpgrade`, `enabled`, `models`): 변경은 다음 모델 요청부터 적용, 재시작 불필요. 설정 패널(설정 → 플러그인 → 설정 가능한 플러그인)에 시각적 편집기가 있습니다(수준 그리드 + 전송 값 입력 + 검색 + 원클릭 프리셋).
+- **런타임** — 플러그인의 `.volatile()` 설정 필드(`enabled`, `level`, `allowDowngrade`, `allowUpgrade`): DSH 0.1.7이 선언된 스키마에서 「플러그인」 설정 폼을 생성하고, 확정된 변경은 라이브 설정 참조(`loader/volatile-update`)로 플러그인에 전달되어 다음 모델 요청부터 적용, 재시작 불필요. (`models`는 구성자 수준 필드로 유지: profile 구성에서 편집하세요.)
 
 모델별 능력 오버라이드(`models`, 키는 `provider/model`)는 자동 감지 결과를 확정합니다. 구성자가 최종 결정권을 가집니다:
 
@@ -150,12 +152,11 @@ config:
 
 - 라우트 수준 `compat.supportsDeveloperRole: false`(`Unexpected message role` 400 수정)와 토글형 사고 모델에 대한 모델 수준 `compat.thinkingFormat: 'qwen-chat-template'`(`chat_template_kwargs.enable_thinking` 전송)을 자동 기록;
 - 공식 설정 채널로 기록하며 dsh 스키마가 기록 시 검증(rc.8 미만은 거부 및 로그 경고); 명시적 값은 절대 덮어쓰지 않음;
-- 제공자 행의 스위치는 「게이트웨이가 developer 역할 미지원」으로 교체되고, 모델 편집기는 점진적 UI로 변경;
 - 응답 측 인라인 `<think>` 분할은 게이트웨이 책임(vLLM은 `--reasoning-parser qwen3`).
 
 # 의존성
 
-호스트 측은 `@deepseek-ai/dsh-settings`에 값 의존하지 않습니다(설정 등록은 cordis `settings` 서비스 경유, dsh 런타임 제공). profile에 공식 패키지를 수동 설치할 필요가 없습니다. `dependencies`는 `@deepseek-ai/schemastery`뿐입니다(패키지와 함께 자동 설치).
+호스트 측은 `@deepseek-ai/dsh-settings`에 값 의존하지 않습니다——DSH 0.1.7부터 설정 등록 자체가 존재하지 않습니다: 설정 폼은 호스트가 플러그인 선언 schemastery 스키마(`.volatile()` 필드)에서 생성하고, 클라이언트 측은 dsh 런타임이 제공하는 `configForms` 서비스로 협력합니다. profile에 공식 패키지를 수동 설치할 필요가 없습니다. `dependencies`는 `@deepseek-ai/schemastery`뿐입니다(패키지와 함께 자동 설치).
 
 ## 개발
 

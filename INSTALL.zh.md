@@ -20,16 +20,16 @@
 - `dsh-thinking-levels`：npm 包名与运行时插件 ID；
 - `thinking-levels`：Cordis 组合条目与设置页 Slot ID。
 
-> **版本要求 —— 仅支持 DSH v0.1.2 及以上。**
+> **版本要求 —— 仅支持 DSH v0.1.7-rc.1 及以上。**
 >
 > 安装前先确认版本（`dsh --version`）。
 >
 > | DSH 版本 | 操作 |
 > | --- | --- |
-> | ≥ 0.1.2 | 安装本版本。 |
-> | < 0.1.2 | 留在旧版插件（0.7.1-beta.2 及更早）。**不要在 v0.1.2+ 的 DSH 上运行旧版插件，请升级插件。** |
+> | ≥ 0.1.7-rc.1 | 安装本版本。 |
+> | < 0.1.7-rc.1 | 留在旧版插件（3.0.1）。**不要在 DSH 0.1.7+ 上运行旧版插件，请升级插件。** |
 >
-> 分界点是 `0.1.2-alpha.1`：该版本删除了 `@deepseek-ai/dsh-client-runtime`。本版本改用 `@deepseek-ai/cordis` 的 `Context`（替代已删除的 `ClientContext`），与官方客户端插件一致。
+> 分界点是 `0.1.7-rc.1`：该版本删除了命令式设置注册（`settings.register` / `installSettingsSection`）与客户端 `settingsScope` 服务。本版本面向 0.1.7 声明式设置表面（`.volatile()` schema 字段 + `configForms`）。
 
 ## 0. 前置检查与 profile 确认
 
@@ -125,13 +125,13 @@ dsh --profile <profile> --dump-default-config
   name: dsh-thinking-levels
 ```
 
-## 5. 验证设置卡片
+## 5. 验证设置表单
 
-重启 DSH 后刷新 Web 页面。打开「设置 → 插件 → 可配置插件」，展开「思考档位」卡片。
+重启 DSH 后刷新 Web 页面。打开「设置 → 插件」，找到 **dsh-thinking-levels** 条目——自 DSH 0.1.7 起，表单由宿主按插件声明的 `.volatile()` schema 字段自动生成（不再有自定义客户端卡片）。
 
-1. 档位选择器提供 8 个标准档位加 `auto`；下方是调度开关。
-2. 模型能力区按提供方分组；每个模型行显示文字/图片徽标与声明的上下文长度，展开后进入逐档编辑器。
-3. 勾选档位并填写网关线上值（如 `high` → `ultra`），点击「应用档位」保存。`off` 留空表示不发送。
+1. 表单包含启用开关、档位选择器（8 个标准档位加 `auto`）与调度开关（`allowDowngrade` / `allowUpgrade`）。
+2. 提交的改动对下一次模型请求生效，无需重启（实时 volatile 配置）。
+3. 逐模型能力编辑器（网关线上值、llm-pi-ai）随被废除的卡片一并移除——请通过官方「模型」设置面编辑 llm-pi-ai 模型能力。
 4. 搜索框可筛选模型；官方/通用预设一键应用到全部思考模型。
 
 ## 日语与韩语支持状态
@@ -155,7 +155,7 @@ dsh --profile <profile> --dump-default-config
 | 插件显示「已停用/未挂载」且无错误 | 检查 profile 组合；宿主不得值依赖 `@deepseek-ai/dsh-settings`（本插件没有）。 |
 | client 入口不在 `__DSH_BOOT__` | 确认 `exports["./client"]` 存在且 host fiber 已建立。 |
 | 模型选择器没有 `Auto` | 确认 adapter `resolveModel` 包装已生效（`llm/adapters-updated` 时重新包装）。 |
-| 设置卡片写入失败 | 值被 llm-pi-ai schema 拒绝（如 `reasoningEfforts` 表没有任何思考档位）。检查填写值。 |
+| 设置表单写入失败 | 值被插件 schema 拒绝；请对齐声明的 `.volatile()` 字段类型。 |
 | 子 agent 报 `UNSUPPORTED_REASONING_EFFORT` | 目标模型未声明该档位；改用支持的档位或恢复提供方默认。 |
 | 浏览器显示旧 bundle | 升级后硬刷新（Ctrl+Shift+R）。 |
 

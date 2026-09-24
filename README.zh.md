@@ -18,7 +18,7 @@
 
 > **兼容性说明：** `0.6.0` 已包含日本語（`ja`）和한국어（`ko`）字典及选择项，但当前官方 DSH 只通过 `LocaleRuntime` 提供 `zh` 和 `en`。在原版 DSH 中选择 `ja` 或 `ko` 会失败，并提示 `locale "<id>" is not registered`。需要等待官方 DSH 增加对应 locale ID 后才能正常使用。高级用户可以维护 DSH fork，在 `packages/client/locale/src/locale-settings.ts` 更新 `LOCALE_IDS`，在 `packages/client/locale/src/client/index.ts` 更新 `LOCALES` 标签，并补齐核心字典和测试，然后重新构建并运行 fork 版本。仅修改本插件无法扩展 DSH 的全局 locale 列表。
 
-> **版本兼容（2.0.0-beta.4+）：** 支持 DSH ≥ 0.1.2-alpha.1。经实测（v0.1.5-rc.2 与 v0.1.6-alpha.1），DSH 0.1.5 仍保留 `settings.plugin.item` 槽位（内置"配置" tab 的卡片列表），本插件只注册这一张卡片，覆盖全部支持版本线；不贡献独立的 `settings.plugins.tab` 页。从旧 profile 升级到 DSH 0.1.5 后若插件卡片消失，请先强制刷新浏览器（client combo 缓存陈旧是 0.1.5 已知升级问题）。
+> **版本兼容：** 本版本仅支持 **DSH ≥ 0.1.7-rc.1**。DSH 0.1.7 移除了命令式设置注册（`settings.register` / `installSettingsSection`）与客户端 `settingsScope` 服务及每插件卡片槽位，旧版本线（3.0.x 及更早）依赖的表面已不存在——0.1.2–0.1.6 宿主请继续使用插件 3.0.1。3.1.0 面向 0.1.7 声明式表面：可运行时调整的配置字段在 schemastery schema 中标 `.volatile()`，设置表单由宿主按 schema 自动生成（无注册调用、无客户端设置卡片），插件按请求读取实时值（由 `loader/volatile-update` 驱动）。
 
 在多步工具链任务中，模型在**每一次工具调用前**都会重新思考——而这个思考过程占据了绝大部分墙钟时间（一个 50 步的 agent 任务可能在工具之间花费数分钟思考）。`dsh-thinking-levels` 接入 dsh 每一步都会重新解析的 `agent/request` waterfall（以 `prepend` 置于最外层，避免被会话模型选择覆盖），向下一次模型请求注入思考档位。
 
@@ -40,7 +40,9 @@
 
 ## 自定义传输字段映射
 
-对 `llm-pi-ai` 手工声明的模型，设置卡片可以把每个档位映射为你网关真正接受的值（借鉴 dsh-thinking-effort）：勾选档位并填写线上值，例如 `high` → `ultra`。映射存为该模型的 `reasoningEfforts` 表——Composer 选中 `High` 时，网关实际收到 `ultra`。`off` 留空表示不发送。
+对 `llm-pi-ai` 手工声明的模型，可以把每个档位映射为你网关真正接受的值（借鉴 dsh-thinking-effort）：勾选档位并填写线上值，例如 `high` → `ultra`。映射存为该模型的 `reasoningEfforts` 表——Composer 选中 `High` 时，网关实际收到 `ultra`。`off` 留空表示不发送。
+
+> 该映射的可视化编辑器原先搭载在插件设置卡片上，DSH 0.1.7 迁移已将其移除（对应槽位不复存在）。请改为通过官方「模型」设置面编辑 `reasoningEfforts` 表——host 侧的检测与注入本就实时读取该配置。
 
 - 官方预设：`Off / High / Max`（官方 DeepSeek 风格）
 - 通用预设：`Off / Low / Medium / High`
@@ -125,7 +127,7 @@ cd ~/.dsh/profiles/web && pnpm install && dsh web
     allowDowngrade: true   # 允许调度器降到 `high` 以下
     allowUpgrade: false    # 禁止调度器升到 `max`
   ```
-- **运行时** — dsh-settings 命名空间 `thinking-levels`（`level`、`allowDowngrade`、`allowUpgrade`、`enabled`、`models`）：改动对下一次模型请求生效，无需重启。设置面板（设置 → 插件 → 可配置插件）提供可视化编辑（档位网格 + 线上值输入 + 搜索 + 一键预设）。
+- **运行时** — 插件的 `.volatile()` 配置字段（`enabled`、`level`、`allowDowngrade`、`allowUpgrade`）：DSH 0.1.7 按声明的 schema 自动生成「插件」设置表单，提交的改动以实时配置引用送达插件（`loader/volatile-update`），对下一次模型请求生效，无需重启。（`models` 仍是配置级字段：请在 profile 组合中编辑。）
 
 按模型的 `models` 覆盖（键为 `provider/model`）用于确认自动检测结果，配置者拥有最终决定权：
 
@@ -159,12 +161,11 @@ config:
   - toggle 型思考模型（思考表存在、行级无 `supportsReasoningEffort`）自动补模型级 `compat.thinkingFormat: 'qwen-chat-template'`——pi-ai 发 `chat_template_kwargs.enable_thinking`（裸 vLLM 忽略顶层 `enable_thinking`）；
 - 写入走官方设置通道（读 → 纯变换 → 整段 `settings.update('llm-pi-ai', …)`），dsh 的 schema 在**写入处**校验：低于 rc.8 的 dsh 会拒绝并日志告警，绝不静默错配；任何层级的显式值（true/false、已声明格式）永不覆盖；
 - 触发时机：插件启动、`llm/adapters-updated`、`llm-pi-ai` 的 settings 变化——无需手动改配置；
-- 能力卡片同步去短路化：provider 行的开关是「**网关不支持 developer 角色**」（写/清路由级 flag，取消勾选恢复继承），模型编辑器按渐进层级展示（思考/视觉 → effort 支持 → effort 编辑表）；
 - 响应侧的内联 `<think>` 拆分是**网关职责**：裸 vLLM 请加 `--reasoning-parser qwen3`（pi-ai 只解析 `reasoning_content` / `reasoning` / `reasoning_text`）。
 
 # 依赖说明
 
-插件 host 侧**不**值依赖 `@deepseek-ai/dsh-settings`（设置注册通过 cordis 的 `settings` 服务，由 dsh 运行时提供）——无需在 profile 中手动安装官方包。`dependencies` 仅 `@deepseek-ai/schemastery`（随包自动安装）。
+插件 host 侧**不**值依赖 `@deepseek-ai/dsh-settings`——DSH 0.1.7 起不再有任何设置注册：设置表单由宿主按插件声明的 schemastery schema（`.volatile()` 字段）生成，客户端通过 dsh 运行时提供的 `configForms` 服务协作。无需在 profile 中手动安装官方包。`dependencies` 仅 `@deepseek-ai/schemastery`（随包自动安装）。
 
 ## 开发
 
