@@ -27,9 +27,11 @@ The placeholders in this guide are:
 > | DSH version | Action |
 > | --- | --- |
 > | ≥ 0.1.7-rc.1 | Install this release. |
-> | < 0.1.7-rc.1 | Stay on the previous plugin line (3.0.1). Do not run an older plugin build against DSH 0.1.7+ — upgrade the plugin instead. |
+> | < 0.1.7-rc.1 | Stay on the previous plugin line (3.0.2). Do not run an older plugin build against DSH 0.1.7+ — upgrade the plugin instead. |
 >
 > The boundary is `0.1.7-rc.1`, where DSH removed the imperative settings registration (`settings.register` / `installSettingsSection`) and the client `settingsScope` service. This release targets the declarative 0.1.7 settings surface (`.volatile()` schema fields + `configForms`).
+
+> Older DSH lines install from npm via their dist-tag: `dsh plugin add dsh-thinking-levels@dsh-0.1.5` (DSH 0.1.5), `...@dsh-0.1.2` (DSH 0.1.2), `...@compat` (DSH 0.1.0–0.1.1). Never install the bare `latest`-era `0.x` versions (≤ 0.6.0) — they carry no dsh peer declarations.
 
 ## 0. Prerequisites and profile discovery
 
@@ -54,7 +56,7 @@ dsh plugin --profile <profile> add dsh-thinking-levels -w
 Install the current release explicitly:
 
 ```bash
-dsh plugin --profile <profile> add dsh-thinking-levels@0.6.0 -w
+dsh plugin --profile <profile> add dsh-thinking-levels@3.1.0 -w
 ```
 
 The official CLI updates the profile dependency, lockfile, and `dsh.profile.bundles` automatically. Do not add a manual YAML row.
@@ -67,7 +69,7 @@ version with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`. Add the version to
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-thinking-levels@0.6.0
+  - dsh-thinking-levels@3.1.0
 ```
 
 ## 2. Upgrade
@@ -110,7 +112,7 @@ grep -n "dsh-thinking-levels" \
 node -p "require('${DSH_HOME:-$HOME/.dsh}/profiles/<profile>/node_modules/dsh-thinking-levels/package.json').version"
 ```
 
-The version must be `0.6.0` for this release.
+The version must be `3.1.0` for this release.
 
 Check the official composition:
 

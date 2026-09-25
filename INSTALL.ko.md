@@ -20,6 +20,8 @@
 - `dsh-thinking-levels`: npm 패키지 이름이자 런타임 플러그인 ID;
 - `thinking-levels`: Cordis 구성 항목이자 설정 Slot ID.
 
+> 구버전 DSH는 npm dist-tag로 해당 라인을 설치하세요: `dsh plugin add dsh-thinking-levels@dsh-0.1.5`(DSH 0.1.5), `...@dsh-0.1.2`(DSH 0.1.2), `...@compat`(DSH 0.1.0–0.1.1). ≤ 0.6.0의 구 0.x 버전은 dsh peer 선언이 없으므로 설치하지 마세요.
+
 ## 0. 사전 확인과 profile 확인
 
 ```bash
@@ -43,7 +45,7 @@ dsh plugin --profile <profile> add dsh-thinking-levels -w
 현재 릴리스 명시적 설치:
 
 ```bash
-dsh plugin --profile <profile> add dsh-thinking-levels@0.6.0 -w
+dsh plugin --profile <profile> add dsh-thinking-levels@3.1.0 -w
 ```
 
 공식 CLI는 profile 의존성, 잠금 파일, `dsh.profile.bundles`를 자동으로 갱신합니다. 수동으로 YAML을 추가하지 마세요.
@@ -56,7 +58,7 @@ dsh 런타임은 pnpm 11을 사용하며 `minimumReleaseAge` 정책이 새로 �
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-thinking-levels@0.6.0
+  - dsh-thinking-levels@3.1.0
 ```
 
 ## 2. 업그레이드
@@ -99,7 +101,7 @@ grep -n "dsh-thinking-levels" \
 node -p "require('${DSH_HOME:-$HOME/.dsh}/profiles/<profile>/node_modules/dsh-thinking-levels/package.json').version"
 ```
 
-이 릴리스의 버전은 `0.6.0`이어야 합니다.
+이 릴리스의 버전은 `3.1.0`이어야 합니다.
 
 공식 구성 확인:
 
