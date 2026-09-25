@@ -1,7 +1,12 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "[LEGACY: DSH < 0.1.2-alpha.1 only — mainline is DSH 0.1.2+ on the master branch] DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "tag": "dsh-0.1.1"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/drscrewdriver/dsh-thinking-levels.git"
