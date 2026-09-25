@@ -1,10 +1,10 @@
 {
   "id": "dsh-external/dsh-thinking-levels",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "main": "./lib/index.js",
   "description": "thinking-level (reasoning_effort) control — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "engines": {
-    "dsh": ">=0.1.7-rc.1 <0.2.0-0"
+    "dsh": ">=0.1.7-rc.1 <0.1.8-0"
   },
   "contributes": {
     "tools": [],
