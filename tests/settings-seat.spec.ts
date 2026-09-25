@@ -64,23 +64,22 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(inject).toEqual(['slots', 'locale', 'configForms'])
   })
 
-  it('registers the composer quick control and the family shared Plugins tab', () => {
+  it('registers the composer quick control and the family top-level section', () => {
     const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.right', 'settings.plugins.tab'])
+    expect(declared).toEqual(['conversation.input.right', 'settings.section'])
     expect(registrations).toHaveLength(2)
     expect(registrations[0]!.slot).toBe('conversation.input.right')
-    expect(registrations[1]!.slot).toBe('settings.plugins.tab')
+    expect(registrations[1]!.slot).toBe('settings.section')
   })
 
-  it('never mints the removed settings surfaces (the item card or a standalone section)', () => {
+  it('never mints the removed settings surfaces (the item card)', () => {
     const { declared } = collectRegistrations()
     expect(declared).not.toContain('settings.plugin.item')
-    expect(declared).not.toContain('settings.section')
   })
 
-  it('declares the family child slot exactly once, on the Plugins tab entry', () => {
+  it('declares the family child slot exactly once, on the section entry', () => {
     const { registrations } = collectRegistrations()
-    const tab = registrations.find(r => r.slot === 'settings.plugins.tab')
+    const tab = registrations.find(r => r.slot === 'settings.section')
     expect(tab).toBeDefined()
     expect(tab!.options['id']).toBe('dsh-family')
     expect(tab!.options['children']).toEqual({ 'dsh-family.tab': { kind: 'list', scope: 'root' } })

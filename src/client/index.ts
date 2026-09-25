@@ -26,18 +26,21 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, en, ja, ko, zh } from './locales.ts'
 import { ContextQuick, type ContextQuickInjected } from './context-quick.tsx'
-import { FamilySettingsTab } from './family-tab.tsx'
+import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 import type { ThinkingLevelsCardInjected } from './card.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
+// Type-only: pulls the settings shell's SlotMap merges ('settings.section').
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 
 /**
- * The plugin-family shared settings tab. One `settings.plugins.tab` entry
- * (label 「起子插件设置」-style family brand) hosts this plugin's own card and
- * a declared child slot (`dsh-family.tab`) that sibling plugins contribute
- * their cards into — session-guard today, more later. Declaring is claiming
- * (ui-slots): the child slot exists exactly while this tab entry does, and a
- * contributor's `ctx.slots.inject('dsh-family.tab', …)` idles harmlessly if
- * this plugin is absent (an undischarged inject never blocks the client half).
+ * The plugin-family shared settings surface: ONE top-level `settings.section`
+ * nav entry (「起子插件设置」) whose entry declares the `dsh-family.tab` child
+ * slot; sibling plugins contribute their cards there (session-guard first) and
+ * the section renders them as tabs — the built-in Plugins section's
+ * tabs-around-pages pattern. Declaring is claiming (ui-slots): the child slot
+ * exists exactly while this section entry does, and a contributor's
+ * `ctx.slots.inject('dsh-family.tab', …)` idles harmlessly if this plugin is
+ * absent (an undischarged inject never blocks the client half).
  */
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -89,20 +92,59 @@ export function apply(ctx: ClientContext): void {
     }, ContextQuick)
   })
 
-  // Family settings tab (see the SlotMap note above): this plugin's own card
-  // first, then every contributor registered under `dsh-family.tab`.
-  ctx.slots.inject('settings.plugins.tab', function* () {
+  // Family settings section (see the SlotMap note above): the contributor
+  // ledger is projected exactly like the built-in Plugins section projects its
+  // tab ledger (cache until ledger/locale revision bumps, so useSyncExternalStore
+  // sees a stable snapshot).
+/** Registrant labels arrive as a string or a locale thunk; unwrap either. */
+const resolveLabel = (label: unknown): string =>
+  typeof label === 'function' ? (label as () => string)() : typeof label === 'string' ? label : ''
+
+  let tabsVersion = -1
+  let tabsRevision = -1
+  let tabs: readonly FamilyTabEntry[] = []
+  const sectionInjected = (): FamilySectionInjected => ({
+    scope: ctx.configForms.get<ThinkingLevelsConfig>('dsh-thinking-levels'),
+    piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
+    hooks: {
+      tabs: {
+        getSnapshot: () => {
+          const version = ctx.slots.getVersion('dsh-family.tab')
+          const revision = ctx.locale.getSnapshot().revision
+          if (version !== tabsVersion || revision !== tabsRevision) {
+            tabsVersion = version
+            tabsRevision = revision
+            tabs = ctx.slots.entries('dsh-family.tab')
+              .map(entry => ({
+                id: entry.options.id ?? '',
+                order: entry.options.order ?? 0,
+                label: resolveLabel(entry.options.label),
+              }))
+              .sort((a, b) => a.order - b.order)
+          }
+          return tabs
+        },
+        subscribe: (listener) => {
+          const offLedger = ctx.slots.subscribe('dsh-family.tab', listener)
+          const offLocale = ctx.locale.subscribe(listener)
+          return () => {
+            offLedger()
+            offLocale()
+          }
+        },
+      },
+    },
+  })
+
+  ctx.slots.inject('settings.section', function* () {
     yield ctx.slots.register({
-      name: 'settings.plugins.tab',
+      name: 'settings.section',
       id: 'dsh-family',
       order: 40,
       label: () => t('family.title'),
       locale: NS,
-      inject: (): ThinkingLevelsCardInjected => ({
-        scope: ctx.configForms.get<ThinkingLevelsConfig>('dsh-thinking-levels'),
-        piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
-      }),
+      inject: sectionInjected,
       children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
-    }, FamilySettingsTab)
+    }, FamilySettingsSection)
   })
 }
