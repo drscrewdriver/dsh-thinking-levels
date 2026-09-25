@@ -6,6 +6,7 @@ export const NS = 'thinking-levels'
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'card.title': '思考档位',
+  'family.title': '起子插件设置',
   'card.description': '在模型选择器中可选 Auto（mask）：按工具调用历史自动在 low / high / max 间调度后提交 API。此处配置默认档位、调度边界与模型能力（档位 → 网关线上值映射）。',
   'card.level': '默认档位',
   'card.level.off': 'off — 关闭思考（仅手动，永不自动选择）',
@@ -75,6 +76,7 @@ export const zh = {
 /** English dictionary (keys mirror zh). */
 export const en: Record<keyof typeof zh, string> = {
   'card.title': 'Thinking Levels',
+  'family.title': 'Qizi Plugin Settings',
   'card.description': 'Pick Auto in the model selector: the plugin schedules low / high / max per tool round before submitting the API effort. Here you configure the default level, scheduler bounds, and per-model capabilities (level → gateway wire value mapping).',
   'card.level': 'Default level',
   'card.level.off': 'off — disable thinking (manual only, never auto-picked)',
@@ -144,6 +146,7 @@ export const en: Record<keyof typeof zh, string> = {
 /** Japanese dictionary (keys mirror zh). */
 export const ja: Record<keyof typeof zh, string> = {
   'card.title': '思考レベル',
+  'family.title': '起子プラグイン設定',
   'card.description': 'モデルセレクターで Auto（マスク）を選択すると、ツール呼び出し履歴から low / high / max を自動スケジュールして API に送信します。ここでは既定レベル、スケジューラーの境界、モデル能力（レベル → ゲートウェイ送信値のマッピング）を設定します。',
   'card.level': '既定レベル',
   'card.level.off': 'off — 思考を無効化（手動のみ、自動選択はされません）',
@@ -213,6 +216,7 @@ export const ja: Record<keyof typeof zh, string> = {
 /** Korean dictionary (keys mirror zh). */
 export const ko: Record<keyof typeof zh, string> = {
   'card.title': '사고 수준',
+  'family.title': '起子 플러그인 설정',
   'card.description': '모델 선택기에서 Auto(마스크)를 선택하면 도구 호출 기록을 기반으로 low / high / max 를 자동 스케줄링하여 API에 제출합니다. 여기서 기본 수준, 스케줄러 경계, 모델 기능(수준 → 게이트웨이 전송 값 매핑)을 구성합니다.',
   'card.level': '기본 수준',
   'card.level.off': 'off — 사고 비활성화(수동 전용, 자동 선택 안 됨)',

@@ -1,2 +1,5 @@
-﻿allowBuilds:
+packages:
+  - .
+
+allowBuilds:
   esbuild: true

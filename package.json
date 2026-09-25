@@ -74,10 +74,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings": "0.1.5-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
@@ -87,7 +87,8 @@
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.67.0",
     "vitest": "^3.0.0",
-    "@deepseek-ai/schemastery": "^3.18.4"
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@deepseek-ai/cosmokit": "^1.8.5"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown",

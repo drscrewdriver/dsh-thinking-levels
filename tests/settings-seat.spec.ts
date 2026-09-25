@@ -59,23 +59,31 @@ function collectRegistrations(): { declared: string[]; registrations: CapturedRe
   return { declared, registrations, forms }
 }
 
-describe('config-form contract (declarative settings, no client settings seat)', () => {
+describe('config-form contract (declarative settings, family shared tab)', () => {
   it('declares the services apply consumes (cordis waits; no lazy-get race)', () => {
     expect(inject).toEqual(['slots', 'locale', 'configForms'])
   })
 
-  it('registers exactly one seat: the composer quick control (the settings card is host-generated)', () => {
+  it('registers the composer quick control and the family shared Plugins tab', () => {
     const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.right'])
-    expect(registrations).toHaveLength(1)
+    expect(declared).toEqual(['conversation.input.right', 'settings.plugins.tab'])
+    expect(registrations).toHaveLength(2)
     expect(registrations[0]!.slot).toBe('conversation.input.right')
+    expect(registrations[1]!.slot).toBe('settings.plugins.tab')
   })
 
-  it('never mints a settings surface: the item card, a Plugins tab or a standalone section', () => {
+  it('never mints the removed settings surfaces (the item card or a standalone section)', () => {
     const { declared } = collectRegistrations()
     expect(declared).not.toContain('settings.plugin.item')
-    expect(declared).not.toContain('settings.plugins.tab')
     expect(declared).not.toContain('settings.section')
+  })
+
+  it('declares the family child slot exactly once, on the Plugins tab entry', () => {
+    const { registrations } = collectRegistrations()
+    const tab = registrations.find(r => r.slot === 'settings.plugins.tab')
+    expect(tab).toBeDefined()
+    expect(tab!.options['id']).toBe('dsh-family')
+    expect(tab!.options['children']).toEqual({ 'dsh-family.tab': { kind: 'list', scope: 'root' } })
   })
 
   it('pins the composer quick-control options (identity + inject factory + config-form entry ids)', () => {

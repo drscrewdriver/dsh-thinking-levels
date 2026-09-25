@@ -38,7 +38,7 @@
  */
 import { useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
-import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsScope } from './scope-face.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 
 /** The official DeepSeek provider route owned by the llm-deepseek adapter. */
@@ -51,9 +51,9 @@ const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value
 /** One injected face: the `llm-pi-ai` and `llm-deepseek` config forms. */
 export interface ContextQuickInjected {
   /** The `llm-pi-ai` config form (custom gateway models). */
-  piAiScope: ConfigForm<unknown>
+  piAiScope: SettingsScope<unknown>
   /** The `llm-deepseek` config form (official DeepSeek models). */
-  deepseekScope: ConfigForm<unknown>
+  deepseekScope: SettingsScope<unknown>
 }
 
 /** The narrow trajectory-view slice the component reads for provider/model. */

@@ -26,10 +26,22 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, en, ja, ko, zh } from './locales.ts'
 import { ContextQuick, type ContextQuickInjected } from './context-quick.tsx'
+import { FamilySettingsTab } from './family-tab.tsx'
+import type { ThinkingLevelsCardInjected } from './card.tsx'
+import type { ThinkingLevelsConfig } from '../index.ts'
 
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    configForms: import('@deepseek-ai/dsh-client-ui-settings/client').ConfigFormsFace
+/**
+ * The plugin-family shared settings tab. One `settings.plugins.tab` entry
+ * (label 「起子插件设置」-style family brand) hosts this plugin's own card and
+ * a declared child slot (`dsh-family.tab`) that sibling plugins contribute
+ * their cards into — session-guard today, more later. Declaring is claiming
+ * (ui-slots): the child slot exists exactly while this tab entry does, and a
+ * contributor's `ctx.slots.inject('dsh-family.tab', …)` idles harmlessly if
+ * this plugin is absent (an undischarged inject never blocks the client half).
+ */
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    'dsh-family.tab': { kind: 'list'; scope: 'root' }
   }
 }
 
@@ -41,6 +53,7 @@ export const inject = ['slots', 'locale', 'configForms']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const t = ctx.locale.bind(NS)
   // `register(ns, dicts)` is typed to the built-in locale ids (`zh` / `en`
   // only); the shipped `ja` / `ko` dictionaries go through the single-locale
   // overload, so they are installed and ready once DSH publishes those ids.
@@ -74,5 +87,22 @@ export function apply(ctx: ClientContext): void {
         return { piAiScope, deepseekScope }
       },
     }, ContextQuick)
+  })
+
+  // Family settings tab (see the SlotMap note above): this plugin's own card
+  // first, then every contributor registered under `dsh-family.tab`.
+  ctx.slots.inject('settings.plugins.tab', function* () {
+    yield ctx.slots.register({
+      name: 'settings.plugins.tab',
+      id: 'dsh-family',
+      order: 40,
+      label: () => t('family.title'),
+      locale: NS,
+      inject: (): ThinkingLevelsCardInjected => ({
+        scope: ctx.configForms.get<ThinkingLevelsConfig>('dsh-thinking-levels'),
+        piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
+      }),
+      children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
+    }, FamilySettingsTab)
   })
 }
