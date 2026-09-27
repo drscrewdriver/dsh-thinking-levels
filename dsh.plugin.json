@@ -1,6 +1,6 @@
 {
   "id": "dsh-external/dsh-thinking-levels",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "main": "./lib/index.js",
   "description": "thinking-level (reasoning_effort) control — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "engines": {
@@ -11,6 +11,9 @@
     "skills": []
   },
   "client": {
-    "main": "./lib/client.js"
+    "main": "./lib/client.js",
+    "inject": [
+      "@deepseek-ai/dsh-client-ui-model-selection"
+    ]
   }
 }
