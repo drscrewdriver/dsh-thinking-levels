@@ -13,8 +13,10 @@
  *   - the retired `settings.plugin.item` seat is NOT registered (the host
  *     generates the plugin's settings form from the schema alone);
  *   - `settings.plugins.tab` / `settings.section` stay UNTOUCHED;
- *   - exactly ONE slot remains: the composer quick control, whose injected
- *     face pulls the `llm-pi-ai` / `llm-deepseek` config forms by entry id.
+ *   - the composer MODEL seat (`conversation.input.model`) is occupied with
+ *     the context-window model panel (the dsh-reasoning-effort pattern:
+ *     priority -1 replaces the shipped `ModelSelect`), skipped gracefully
+ *     when the harness lacks `modelDirectories`.
  */
 import { describe, expect, it } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
@@ -25,8 +27,10 @@ interface CapturedRegistration {
   readonly component: unknown
 }
 
-/** Drive apply against a stub host and capture every slot registration. */
-function collectRegistrations(): { declared: string[]; registrations: CapturedRegistration[]; forms: string[] } {
+/** Drive apply against a stub host and capture every slot registration.
+ * @param withDirectories - whether the stub host provides `modelDirectories`;
+ * without it the model-panel registration must be skipped (graceful path). */
+function collectRegistrations(withDirectories = true): { declared: string[]; registrations: CapturedRegistration[]; forms: string[] } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
   const forms: string[] = []
@@ -39,6 +43,16 @@ function collectRegistrations(): { declared: string[]; registrations: CapturedRe
         return { entryId } as unknown as T
       },
     },
+    modelDirectories: withDirectories
+      ? {
+          directoryFor: (sessionId: string) => ({
+            store: { subscribe: () => () => {}, getSnapshot: () => ({}) },
+            load: () => Promise.resolve(),
+            select: () => Promise.resolve(),
+            sessionId,
+          }),
+        }
+      : undefined,
     slots: {
       inject: (slot: string, factory: () => (() => void) | Generator<() => void>) => {
         declared.push(slot)
@@ -61,15 +75,22 @@ function collectRegistrations(): { declared: string[]; registrations: CapturedRe
 
 describe('config-form contract (declarative settings, family shared tab)', () => {
   it('declares the services apply consumes (cordis waits; no lazy-get race)', () => {
-    expect(inject).toEqual(['slots', 'locale', 'configForms'])
+    expect(inject).toEqual(['slots', 'locale', 'configForms', 'modelDirectories'])
   })
 
-  it('registers the composer quick control and the family top-level section', () => {
+  it('registers the composer model panel and the family top-level section', () => {
     const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.right', 'settings.section'])
+    expect(declared).toEqual(['conversation.input.model', 'settings.section'])
     expect(registrations).toHaveLength(2)
-    expect(registrations[0]!.slot).toBe('conversation.input.right')
+    expect(registrations[0]!.slot).toBe('conversation.input.model')
     expect(registrations[1]!.slot).toBe('settings.section')
+  })
+
+  it('skips the model panel entirely when the harness lacks modelDirectories', () => {
+    const { declared, registrations } = collectRegistrations(false)
+    expect(declared).toEqual(['settings.section'])
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0]!.slot).toBe('settings.section')
   })
 
   it('never mints the removed settings surfaces (the item card)', () => {
@@ -85,14 +106,18 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(tab!.options['children']).toEqual({ 'dsh-family.tab': { kind: 'list', scope: 'root' } })
   })
 
-  it('pins the composer quick-control options (identity + inject factory + config-form entry ids)', () => {
+  it('pins the composer model-panel options (identity + inject factory + config-form entry ids)', () => {
     const { registrations, forms } = collectRegistrations()
     const { options } = registrations[0]!
-    expect(options['id']).toBe('context-window-quick')
+    expect(options['id']).toBe('context-window-model-panel')
+    expect(options['priority']).toBe(-1)
     expect(options['locale']).toBe('thinking-levels')
     expect(typeof options['inject']).toBe('function')
-    // The injected face pulls the two cross-plugin config forms by entry id.
-    ;(options['inject'] as () => Record<string, unknown>)()
+    // The injected face binds the session's model directory plus the two
+    // cross-plugin config forms by entry id.
+    const face = (options['inject'] as (sessionId: string) => Record<string, unknown>)('session-1')
     expect(forms).toEqual(['llm-pi-ai', 'llm-deepseek'])
+    expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'piAiScope'])
+    expect(face['directory']).toMatchObject({ sessionId: 'session-1' })
   })
 })

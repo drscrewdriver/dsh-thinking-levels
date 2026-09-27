@@ -8,7 +8,9 @@
  * tab and every contributor as a following tab — the same tabs-around-pages
  * pattern the built-in Plugins section uses (ui-settings-plugins): the tab
  * ledger is a HostObservable projected from the child-slot registry, and the
- * active tab mounts through `renderSlot(key, {}, { only: id })`.
+ * active tab mounts through `renderSlot(key, {}, { only: id })`. Each card is
+ * a disclosure drawer expanded by default, so an opened tab shows its full
+ * panel right away.
  *
  * When this section is absent the whole family surface is absent; a
  * contributor's inject simply idles (an undischarged wait never blocks the

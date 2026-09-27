@@ -968,12 +968,12 @@ function ModelCapabilities(props: {
 
 /**
  * The card body, wrapped in a disclosure shell like every peer settings card:
- * a header (name + description + chevron) that toggles the body, collapsed by
- * default so the plugin tab stays a tidy list of drawers.
+ * a header (name + description + chevron) that toggles the body, expanded by
+ * default so the family section reads as an open page of drawers.
  * @param props - locale copy and the injected scopes.
  */
 export function ThinkingLevelsCard({ t, scope, piAiScope }: ThinkingLevelsCardProps): JSX.Element {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const snapshot = useSyncExternalStore(
     (listener) => scope.subscribe(listener),
     () => scope.getSnapshot(),

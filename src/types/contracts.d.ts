@@ -20,14 +20,76 @@
  * - `packages/client/locale/src/client/index.ts:380` — the `register` overloads.
  */
 
+/**
+ * The harness's shared model-directory faces (owned by the
+ * `dsh-client-ui-model-selection` module). Declared as global ambient types:
+ * the service reaches the plugin through the client context's `modelDirectories`
+ * member (present when the module is listed in the plugin's client inject
+ * table), and harness lines without the module simply leave it undefined —
+ * the model-panel registration is then skipped.
+ */
+interface ModelSnapshotStore<T> {
+  subscribe(listener: () => void): () => void
+  getSnapshot(): T
+}
+
+/** One model catalog entry as the directory state carries it. */
+interface ModelDirectoryModel {
+  id: string
+  name: string
+  description?: string
+  reasoning?: {
+    efforts: { id: string; name: string; description?: string }[]
+    defaultEffort?: string
+  }
+}
+
+/** One provider group of the model catalog. */
+interface ModelDirectoryGroup {
+  id: string
+  name?: string
+  label?: string
+  models: ModelDirectoryModel[]
+}
+
+/** The shared model directory state snapshot. */
+interface ModelDirectoryState {
+  status: 'loading' | 'ready'
+  groups: ModelDirectoryGroup[]
+  current: { provider: string; model: string; reasoningEffort?: string } | null
+  error: string | null
+}
+
+/** One session's model directory: shared store + load + route select. */
+interface ModelDirectoryFace {
+  store: ModelSnapshotStore<ModelDirectoryState>
+  load(): Promise<void>
+  select(selection: { provider: string; model: string; reasoningEffort?: string }): Promise<void>
+}
+
+/** The `modelDirectories` service face, keyed by session id. */
+interface ModelDirectoriesFace {
+  directoryFor(sessionId: string): ModelDirectoryFace
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   /** Slot map entries consumed by this plugin (subset of the harness table). */
   export interface SlotMap {
     /**
+     * The composer's model seat: the shipped `ModelSelect` owns this seat by
+     * default, and a registered entry named after the seat (`priority: -1`,
+     * the dsh-reasoning-effort pattern) replaces the trigger and its popup
+     * outright — the official popup renders no slots, so this override is the
+     * only way to contribute the per-line context-window editor. Session-
+     * scoped single seat carrying the session standard seats (`sessionId`).
+     */
+    'conversation.input.model': { kind: 'single'; scope: 'session' }
+    /**
      * The composer tool row's right seat (next to the model/effort control,
-     * before the send button): the plugin renders its context-window quick
-     * control here. Session-scoped list seat with no owner props, one-row
-     * height budget.
+     * before the send button): a session-scoped list seat with no owner props,
+     * one-row height budget. (Held for other tool-row controls; the retired
+     * context-window pill no longer registers here — its editor moved into
+     * the model panel's per-model lines.)
      */
     'conversation.input.right': { kind: 'list'; scope: 'session' }
   }
@@ -52,6 +114,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     key?: string
     order?: number
     priority?: number
+    /** Registrant label (string or locale thunk) shown by host diagnostics. */
+    label?: string | (() => string)
     locale?: string
     inject?: (...args: never[]) => unknown
   }

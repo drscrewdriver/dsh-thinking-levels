@@ -70,6 +70,11 @@ export const zh = {
   'input.context.clear': '清除',
   'input.context.integer': '上下文长度必须是整数（2000-1000000）',
   'input.context.range': '上下文长度必须在 2000 到 1000000 之间',
+  'model.panel.choose': '选择模型',
+  'model.panel.loading': '模型目录加载中…',
+  'model.panel.empty': '没有可用模型',
+  'model.panel.window': '窗口',
+  'model.panel.noTarget': '该模型没有可写的配置项',
   'card.capabilities.failed': '保存失败：配置被拒绝或冲突，请检查值。',
 } satisfies Record<string, string>
 
@@ -140,6 +145,11 @@ export const en: Record<keyof typeof zh, string> = {
   'input.context.clear': 'Clear',
   'input.context.integer': 'Context length must be an integer (2000-1000000)',
   'input.context.range': 'Context length must be between 2000 and 1000000',
+  'model.panel.choose': 'Choose model',
+  'model.panel.loading': 'Loading the model directory…',
+  'model.panel.empty': 'No models available',
+  'model.panel.window': 'Window',
+  'model.panel.noTarget': 'No writable config entry for this model',
   'card.capabilities.failed': 'Save failed: the value was rejected or conflicted. Check it.',
 }
 
@@ -210,6 +220,11 @@ export const ja: Record<keyof typeof zh, string> = {
   'input.context.clear': 'クリア',
   'input.context.integer': 'コンテキスト長は整数で入力してください（2000-1000000）',
   'input.context.range': 'コンテキスト長は 2000 から 1000000 の範囲で指定してください',
+  'model.panel.choose': 'モデルを選択',
+  'model.panel.loading': 'モデルディレクトリを読み込み中…',
+  'model.panel.empty': '利用可能なモデルがありません',
+  'model.panel.window': 'ウィンドウ',
+  'model.panel.noTarget': 'このモデルには書き込み可能な設定項目がありません',
   'card.capabilities.failed': '保存に失敗しました：値が拒否されたか競合しています。確認してください。',
 }
 
@@ -280,5 +295,10 @@ export const ko: Record<keyof typeof zh, string> = {
   'input.context.clear': '지우기',
   'input.context.integer': '컨텍스트 길이는 정수여야 합니다 (2000-1000000)',
   'input.context.range': '컨텍스트 길이는 2000에서 1000000 사이여야 합니다',
+  'model.panel.choose': '모델 선택',
+  'model.panel.loading': '모델 디렉터리를 불러오는 중…',
+  'model.panel.empty': '사용 가능한 모델이 없습니다',
+  'model.panel.window': '창',
+  'model.panel.noTarget': '이 모델에는 쓰기 가능한 설정 항목이 없습니다',
   'card.capabilities.failed': '저장 실패: 값이 거부되었거나 충돌합니다. 확인하세요.',
 }
