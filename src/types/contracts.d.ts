@@ -30,6 +30,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * height budget.
      */
     'conversation.input.right': { kind: 'list'; scope: 'session' }
+    /**
+     * The composer's model seat: the shipped `ModelSelect` owns this seat by
+     * default, and a registered entry named after the seat (`priority: -1`)
+     * replaces the trigger and its popup outright — the seat panel carries the
+     * per-line context-window editor and reasoning effort. Session-scoped
+     * single seat carrying the session standard seats (`sessionId`).
+     */
+    'conversation.input.model': { kind: 'single'; scope: 'session' }
   }
 
   /** Locale namespaces merged by client plugins. */
@@ -102,4 +110,66 @@ declare module '@deepseek-ai/dsh-client-ui-settings/client' {
   export interface SettingsScopeFace {
     bind<T>(spec: { namespace: string; decode?: (section: unknown) => T | undefined }): SettingsScope<T>
   }
+}
+
+/**
+ * The harness's shared model-directory faces (owned by the
+ * `dsh-client-ui-model-selection` module). Declared as global ambient types:
+ * the service reaches the plugin through a deferred cordis inject (present
+ * when the module ships with the host), and harness lines without the module
+ * simply never fire the inject — the shipped model selector stays untouched.
+ */
+interface ModelSnapshotStore<T> {
+  subscribe(listener: () => void): () => void
+  getSnapshot(): T
+}
+
+/** One model catalog entry as the directory state carries it. */
+interface ModelDirectoryModel {
+  id: string
+  name: string
+  description?: string
+  reasoning?: {
+    efforts: { id: string; name: string; description?: string }[]
+    defaultEffort?: string
+  }
+}
+
+/** One provider group of the model catalog. */
+interface ModelDirectoryGroup {
+  id: string
+  name?: string
+  label?: string
+  models: ModelDirectoryModel[]
+}
+
+/** The shared model directory state snapshot. */
+interface ModelDirectoryState {
+  status: 'loading' | 'ready'
+  groups: ModelDirectoryGroup[]
+  current: { provider: string; model: string; reasoningEffort?: string } | null
+  error: string | null
+}
+
+/** One session's model directory: shared store + load + route select. */
+interface ModelDirectoryFace {
+  store: ModelSnapshotStore<ModelDirectoryState>
+  load(): Promise<void>
+  select(selection: { provider: string; model: string; reasoningEffort?: string }): Promise<void>
+}
+
+/** The `modelDirectories` service face, keyed by session id. */
+interface ModelDirectoriesFace {
+  directoryFor(sessionId: string): ModelDirectoryFace
+}
+
+/**
+ * The narrow `sessions` face `directoryFor` needs. Declared because the
+ * resolver resolves `this.ctx.sessions` against the ACCESSING context (cordis
+ * traceable services rebind `ctx` to the reader): any fiber that calls
+ * `directoryFor` must declare these services itself or the call throws.
+ */
+interface SessionsFace {
+  scope(sessionId: string): unknown
+  binding(sessionId: string): unknown
 }

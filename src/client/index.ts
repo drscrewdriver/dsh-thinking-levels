@@ -1,10 +1,10 @@
 /**
  * dsh-thinking-levels — browser half.
  *
- * Registers the `thinking-levels` dictionaries and one `settings.plugin.item`
- * card keyed by the plugin's settings namespace, so the shared Plugins
- * settings tab renders an editable card: the level picker (off / low / high /
- * max / auto) plus the scheduler toggles.
+ * Registers the `thinking-levels` dictionaries, one `settings.plugin.item`
+ * card keyed by the plugin's settings namespace, and the composer model-seat
+ * panel (`conversation.input.model`) carrying the per-line context-window
+ * editor and reasoning effort.
  *
  * The DSH 0.1.5 line still declares the `settings.plugin.item` seat (verified
  * against dsh-v0.1.5-rc.2 and v0.1.6-alpha.1: `ui-settings-plugins` keeps it as
@@ -12,6 +12,20 @@
  * covers the whole supported segment. A `settings.plugins.tab` registration
  * would additionally mint a dedicated top-level Plugins tab duplicating the
  * item card, so none is made.
+ *
+ * The model-seat panel occupies the seat the shipped `ModelSelect` renders
+ * (`priority: -1` replaces trigger and popup outright) and supersedes the
+ * retired composer context pill: every model line carries a context-window
+ * chip and a reasoning effort dropdown, resolved over the harness's shared
+ * `modelDirectories` service. The service is resolved through a deferred
+ * cordis inject whose dependency set ALSO declares the resolver's own needs
+ * (`sessions`, `remote`, `remote.session`): a cordis Service resolves
+ * `this.ctx` through the ACCESSING context (traceable services rebind `ctx` to
+ * the reader), and `directoryFor()` reads `this.ctx.sessions` — an inject that
+ * declares only `modelDirectories` makes every call throw, and the thrown
+ * render abdicates the seat entry back to the shipped selector. On harness
+ * lines without the module the callback never fires and the shipped selector
+ * stays untouched.
  *
  * All @deepseek-ai/* imports are type-only: collaboration happens through
  * cordis services (`settingsScope`) and slot registration only (client bundle
@@ -27,7 +41,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { ThinkingLevelsConfig } from '../index.ts'
 import { NS, en, ja, ko, zh } from './locales.ts'
 import { ThinkingLevelsCard, type ThinkingLevelsCardInjected } from './card.tsx'
-import { ContextQuick, type ContextQuickInjected } from './context-quick.tsx'
+import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 
 /** The settings namespace the host half registers (kept in lockstep with src/index.ts). */
 const THINKING_LEVELS_NS = 'thinking-levels'
@@ -36,7 +50,8 @@ const THINKING_LEVELS_NS = 'thinking-levels'
 export const inject = ['slots', 'locale', 'settingsScope']
 
 /**
- * Client plugin body: dictionaries plus the settings card registration.
+ * Client plugin body: dictionaries, the settings card, and the model-seat
+ * panel registration.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -75,24 +90,44 @@ export function apply(ctx: ClientContext): void {
     }, ThinkingLevelsCard)
   })
 
-  // Composer tool row: one compact context-window control next to the
-  // model/effort select (`conversation.input.right`, a session-scoped list seat
-  // any plugin may occupy). It edits the current session model's `contextWindow`
-  // live: custom gateways write the `llm-pi-ai` namespace (same scope the card
-  // uses), official DeepSeek models write the `llm-deepseek` namespace (its
-  // `models[].contextWindow`, else the provider default). The model card itself
-  // is not an option: the shipped `ModelSelect` renders no slots, so a plugin
-  // cannot contribute inside that popup.
-  ctx.slots.inject('conversation.input.right', function* () {
-    yield ctx.slots.register({
-      name: 'conversation.input.right',
-      id: 'context-window-quick',
-      locale: NS,
-      inject: (): ContextQuickInjected => {
-        const piAiScope = ctx.settingsScope.bind<unknown>({ namespace: 'llm-pi-ai' })
-        const deepseekScope = ctx.settingsScope.bind<unknown>({ namespace: 'llm-deepseek' })
-        return { piAiScope, deepseekScope }
-      },
-    }, ContextQuick)
+  // Composer model seat: resolve `modelDirectories` through a deferred cordis
+  // inject (see the module comment for the dependency-set rationale). On
+  // harness lines without the service the callback never fires, leaving the
+  // shipped selector untouched.
+  ;(ctx as unknown as {
+    inject: (
+      deps: string[],
+      cb: (scope: {
+        modelDirectories: ModelDirectoriesFace | undefined
+        sessions: unknown
+      }) => void,
+    ) => void
+  }).inject(['modelDirectories', 'sessions', 'remote', 'remote.session'], (scope) => {
+    const directories: ModelDirectoriesFace | undefined = scope.modelDirectories
+    if (directories === undefined) return
+    ctx.slots.inject('conversation.input.model', function* () {
+      yield ctx.slots.register({
+        name: 'conversation.input.model',
+        id: 'context-window-model-panel',
+        priority: -1,
+        locale: NS,
+        inject: (sessionId: string): ModelPanelInjected => {
+          // A `directoryFor` failure (odd session shape) must not throw out of
+          // the render: a thrown inject abdicates the seat entry — the whole
+          // takeover — so degrade to the unavailable face instead.
+          let directory: ModelDirectoryFace | undefined
+          try {
+            directory = directories.directoryFor(sessionId)
+          } catch {
+            directory = undefined
+          }
+          return {
+            directory,
+            piAiScope: ctx.settingsScope.bind<unknown>({ namespace: 'llm-pi-ai' }),
+            deepseekScope: ctx.settingsScope.bind<unknown>({ namespace: 'llm-deepseek' }),
+          }
+        },
+      }, ModelPanel)
+    })
   })
 }
