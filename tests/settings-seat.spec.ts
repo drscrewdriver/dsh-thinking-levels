@@ -53,6 +53,14 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
           }),
         }
       : undefined,
+    // Cordis inject: the panel registration resolves `modelDirectories`
+    // deferred (a synchronous property read races the service start). The
+    // stub fires the callback immediately with the stub service face.
+    inject: (deps: readonly string[], cb: (scope: { modelDirectories: unknown }) => void) => {
+      const directories = ctx.modelDirectories
+      cb({ modelDirectories: directories })
+      return () => {}
+    },
     slots: {
       inject: (slot: string, factory: () => (() => void) | Generator<() => void>) => {
         declared.push(slot)

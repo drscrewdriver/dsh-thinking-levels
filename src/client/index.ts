@@ -77,10 +77,22 @@ export function apply(ctx: ClientContext): void {
   // context-window editor on every model line: custom gateways write the
   // `llm-pi-ai` entry config, official DeepSeek models write the
   // `llm-deepseek` entry (its `models[].contextWindow`, else the provider
-  // default). Skipped entirely on harness lines without the service, leaving
-  // the shipped selector untouched.
-  const directories = (ctx as unknown as { modelDirectories?: ModelDirectoriesFace }).modelDirectories
-  if (directories !== undefined) {
+  // default).
+  // Resolve `modelDirectories` through a cordis inject, NOT a synchronous
+  // property read: at apply time the ui-model-selection module's service may
+  // not be started yet, and the property read returned undefined on 0.1.7
+  // hosts — the whole panel was silently skipped and the shipped selector
+  // stayed. The deferred inject waits for the service to start; on harness
+  // lines without the module the callback never fires or sees undefined,
+  // leaving the shipped selector untouched.
+  ;(ctx as unknown as {
+    inject: (
+      deps: string[],
+      cb: (scope: { modelDirectories: ModelDirectoriesFace | undefined }) => void,
+    ) => void
+  }).inject(['modelDirectories'], (scope) => {
+    const directories = scope.modelDirectories
+    if (directories === undefined) return
     ctx.slots.inject('conversation.input.model', function* () {
       yield ctx.slots.register({
         name: 'conversation.input.model',
@@ -98,7 +110,7 @@ export function apply(ctx: ClientContext): void {
         },
       }, ModelPanel)
     })
-  }
+  })
 
   // Family settings section (see the SlotMap note above): the contributor
   // ledger is projected exactly like the built-in Plugins section projects its
