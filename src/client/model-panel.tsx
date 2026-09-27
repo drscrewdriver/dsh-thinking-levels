@@ -40,10 +40,23 @@ const DEEPSEEK_DEFAULT_WINDOW = 1_000_000
 /** Slider stop an unset window parks on: the thumb needs a position, the readout stays "unset". */
 const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value === 256_000)
 
+/** Snapshot shown when the session's directory face is unavailable. */
+const UNAVAILABLE_STATE: ModelDirectoryState = {
+  status: 'loading',
+  groups: [],
+  current: null,
+  error: null,
+}
+
 /** One injected face: the shared model directory plus the two config forms. */
 export interface ModelPanelInjected {
-  /** The session's shared model directory store, loader and selector. */
-  directory: ModelDirectoryFace
+  /**
+   * The session's shared model directory store, loader and selector.
+   * Undefined when the resolver refused this session (odd session shape):
+   * the panel renders its unavailable notice instead of crashing — a thrown
+   * render abdicates the seat entry and the shipped selector comes back.
+   */
+  directory: ModelDirectoryFace | undefined
   /** The `llm-pi-ai` config form (custom gateway models). */
   piAiScope: SettingsScope<unknown>
   /** The `llm-deepseek` config form (official DeepSeek models). */
@@ -58,21 +71,6 @@ export interface ModelPanelProps extends ModelPanelInjected {
   t: (key: string) => string
 }
 
-/* ── harness faces (mirrored in src/types/contracts.d.ts) ──────────────── */
-
-/** The narrow model-directory slice this panel reads. */
-interface DirectoryStateLike {
-  status: string
-  groups: readonly {
-    id: string
-    name?: string
-    label?: string
-    models: readonly { id: string; name: string; description?: string }[]
-  }[]
-  current: { provider: string; model: string } | null
-  error: string | null
-}
-
 /* ── shared inline styling (no CSS modules in the client bundle) ───────── */
 
 const rootStyle: CSSProperties = { position: 'relative', display: 'inline-flex' }
@@ -83,7 +81,7 @@ const triggerStyle: CSSProperties = {
   gap: '6px',
   height: '26px',
   padding: '0 10px',
-  background: 'var(--dsw-alias-bg-surface, #fff)',
+  background: 'var(--dsw-alias-bg-layer-1)',
   color: 'var(--dsw-alias-label-primary)',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '8px',
@@ -100,6 +98,14 @@ const triggerNameStyle: CSSProperties = {
   textOverflow: 'ellipsis',
 }
 
+const triggerEffortStyle: CSSProperties = {
+  flex: '0 0 auto',
+  maxWidth: '72px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
 const chevronStyle: CSSProperties = {
   flex: '0 0 auto',
   fontSize: '9px',
@@ -113,7 +119,7 @@ const popStyle: CSSProperties = {
   zIndex: 1200,
   width: '320px',
   padding: '8px',
-  background: 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.05))',
+  background: 'var(--dsw-alias-bg-layer-3)',
   color: 'var(--dsw-alias-label-primary)',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '10px',
@@ -151,25 +157,37 @@ const providerMetaStyle: CSSProperties = {
   fontSize: '11px',
 }
 
+/** The model-line row CONTAINER: highlight surface + flex parent of pick/select/chip.
+* Wraps so the inline window editor (a flex item too) takes its own full line. */
 const modelRowStyle: CSSProperties = {
   display: 'flex',
+  flexWrap: 'wrap',
   alignItems: 'center',
   gap: '6px',
   width: '100%',
-  padding: '6px 8px 6px 18px',
-  border: 'none',
   borderRadius: '6px',
+}
+
+const modelRowActiveStyle: CSSProperties = {
+  ...modelRowStyle,
+  background: 'var(--dsw-alias-state-business-primary-weak, var(--dsw-alias-interactive-bg-hover, transparent))',
+}
+
+/** The pick button inside the row: name/description/✓, keeps the row's old padding. */
+const modelPickStyle: CSSProperties = {
+  flex: '1 1 auto',
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '6px 4px 6px 18px',
+  border: 'none',
   background: 'transparent',
   color: 'var(--dsw-alias-label-primary)',
   font: 'inherit',
   fontSize: '12px',
   cursor: 'pointer',
   textAlign: 'left',
-}
-
-const modelRowActiveStyle: CSSProperties = {
-  ...modelRowStyle,
-  background: 'var(--dsw-alias-state-business-primary-weak, rgba(77,107,254,0.10))',
 }
 
 const modelCopyStyle: CSSProperties = {
@@ -182,14 +200,6 @@ const modelCopyStyle: CSSProperties = {
 
 const modelNameStyle: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
-const modelDescriptionStyle: CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  fontSize: '11px',
-  color: 'var(--dsw-alias-label-tertiary)',
-}
-
 const checkStyle: CSSProperties = { flex: '0 0 auto', color: 'var(--dsw-alias-state-business-primary)' }
 
 const chipStyle: CSSProperties = {
@@ -198,7 +208,7 @@ const chipStyle: CSSProperties = {
   padding: '0 6px',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '5px',
-  background: 'var(--dsw-alias-bg-surface, #fff)',
+  background: 'var(--dsw-alias-bg-layer-1)',
   color: 'var(--dsw-alias-label-secondary)',
   fontSize: '11px',
   lineHeight: '16px',
@@ -206,11 +216,29 @@ const chipStyle: CSSProperties = {
   fontVariantNumeric: 'tabular-nums',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+  marginRight: '8px',
 }
 
 const chipDisabledStyle: CSSProperties = { ...chipStyle, cursor: 'default', opacity: 0.55 }
 
+const selectStyle: CSSProperties = {
+  flex: '0 0 auto',
+  height: '18px',
+  maxWidth: '96px',
+  padding: '0 2px',
+  border: '1px solid var(--dsw-alias-border-l2)',
+  borderRadius: '5px',
+  background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-secondary)',
+  font: 'inherit',
+  fontSize: '11px',
+  lineHeight: '16px',
+  cursor: 'pointer',
+  colorScheme: 'dark light',
+}
+
 const editorRowStyle: CSSProperties = {
+  flex: '1 1 100%',
   display: 'flex',
   alignItems: 'center',
   gap: '6px',
@@ -218,7 +246,7 @@ const editorRowStyle: CSSProperties = {
   padding: '6px',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '6px',
-  background: 'var(--dsw-alias-bg-surface, #fff)',
+  background: 'var(--dsw-alias-bg-layer-1)',
   fontSize: '12px',
 }
 
@@ -265,14 +293,14 @@ const inputStyle: CSSProperties = {
   padding: '2px 6px',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '5px',
-  background: 'var(--dsw-alias-bg-surface, #fff)',
+  background: 'var(--dsw-alias-bg-layer-1)',
   color: 'var(--dsw-alias-label-primary)',
   font: 'inherit',
 }
 
 const errorStyle: CSSProperties = {
   flex: '0 0 auto',
-  color: 'var(--dsw-alias-danger, #e5484d)',
+  color: 'var(--dsw-alias-state-error-primary)',
   fontSize: '11px',
 }
 
@@ -285,8 +313,8 @@ const statusStyle: CSSProperties = {
 const errorBannerStyle: CSSProperties = {
   padding: '6px 8px',
   borderRadius: '6px',
-  background: 'var(--dsw-alias-danger-weak, rgba(229,72,77,0.10))',
-  color: 'var(--dsw-alias-danger, #e5484d)',
+  background: 'var(--dsw-alias-interactive-bg-hover-danger)',
+  color: 'var(--dsw-alias-state-error-primary)',
   fontSize: '11px',
 }
 
@@ -368,8 +396,8 @@ function stopIndexOf(value: number | undefined): number {
  */
 export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPanelProps): JSX.Element {
   const state = useSyncExternalStore(
-    listener => directory.store.subscribe(listener),
-    () => directory.store.getSnapshot() as DirectoryStateLike,
+    listener => directory?.store.subscribe(listener) ?? (() => {}),
+    () => directory?.store.getSnapshot() ?? UNAVAILABLE_STATE,
   )
   const piSnapshot = useSyncExternalStore(
     listener => piAiScope.subscribe(listener),
@@ -392,7 +420,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
 
   useEffect(() => {
     if (!open) return
-    directory.load().catch(() => { /* surfaced on the shared store */ })
+    directory?.load().catch(() => { /* surfaced on the shared store */ })
   }, [directory, open])
 
   const close = useCallback((): void => {
@@ -515,14 +543,31 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   }
 
   const chooseModel = (provider: string, model: string): void => {
-    if (busy) return
+    if (busy || directory === undefined) return
     setBusy(true)
     directory.select({ provider, model })
       .then(() => { setBusy(false); close() })
       .catch(() => { setBusy(false) })
   }
 
+  /** Commit one model line's reasoning effort; empty string = provider default (omit the field). */
+  const chooseEffort = (provider: string, model: string, effort: string): void => {
+    if (busy || directory === undefined) return
+    setBusy(true)
+    directory.select({ provider, model, ...(effort === '' ? {} : { reasoningEffort: effort }) })
+      .then(() => { setBusy(false) })
+      .catch(() => { setBusy(false) })
+  }
+
   const triggerLabel = current?.name ?? state.current?.model ?? t('model.panel.choose')
+
+  const currentReasoning = current?.model.reasoning
+  const effectiveEffort = state.current?.reasoningEffort ?? currentReasoning?.defaultEffort
+  const effortLabel = currentReasoning === undefined
+    ? undefined
+    : effectiveEffort === undefined
+      ? t('input.effort.default')
+      : currentReasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
 
   return (
     <div ref={rootRef} style={rootStyle}>
@@ -536,6 +581,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
         onClick={() => { if (open) close(); else { setOpen(true); setError(null) } }}
       >
         <span style={triggerNameStyle}>{triggerLabel}</span>
+        {effortLabel !== undefined && <span style={triggerEffortStyle}>{effortLabel}</span>}
         <span style={chevronStyle}>{open ? '▲' : '▼'}</span>
       </button>
       {open
@@ -544,10 +590,13 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
             <div style={backdropStyle} onClick={close} />
             <div style={popStyle} role="dialog" aria-label={t('model.panel.choose')}>
               <div style={modelsStyle}>
-                {state.status === 'loading' && state.groups.length === 0 && (
+                {directory === undefined && (
+                  <div style={statusStyle}>{t('model.panel.unavailable')}</div>
+                )}
+                {directory !== undefined && state.status === 'loading' && state.groups.length === 0 && (
                   <div style={statusStyle}>{t('model.panel.loading')}</div>
                 )}
-                {state.groups.map(group => {
+                {directory !== undefined && state.groups.map(group => {
                   const isExpanded = expanded.has(group.id)
                   const name = group.name ?? group.label ?? group.id
                   const activeModel = state.current?.provider === group.id ? state.current.model : undefined
@@ -570,50 +619,80 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                         const isEditing = editing !== null
                           && editing.provider === group.id
                           && editing.model === model.id
+                        const lineEffort = active
+                          ? state.current?.reasoningEffort ?? model.reasoning?.defaultEffort
+                          : model.reasoning?.defaultEffort
                         return (
-                          <div key={group.id + ':' + model.id}>
+                          <div key={group.id + ':' + model.id} style={active ? modelRowActiveStyle : modelRowStyle}>
                             <button
                               type="button"
                               role="option"
                               aria-selected={active}
-                              style={active ? modelRowActiveStyle : modelRowStyle}
+                              style={modelPickStyle}
                               disabled={busy}
                               onClick={() => chooseModel(group.id, model.id)}
                             >
                               <span style={modelCopyStyle}>
                                 <span style={modelNameStyle}>{model.name}</span>
-                                {model.description !== undefined && (
-                                  <span style={modelDescriptionStyle}>{model.description}</span>
-                                )}
                               </span>
                               {active && <span style={checkStyle} aria-hidden="true">✓</span>}
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                aria-label={t('input.context.title')}
-                                title={lineWritable
-                                  ? t('input.context.globalHint')
-                                  : t('model.panel.noTarget')}
-                                style={lineWritable && !busy ? chipStyle : chipDisabledStyle}
-                                onClick={event => {
+                            </button>
+                            {model.reasoning !== undefined && (
+                              <select
+                                aria-label={t('input.effort.title')}
+                                title={t('input.effort.title')}
+                                style={selectStyle}
+                                disabled={busy}
+                                value={lineEffort ?? ''}
+                                onClick={event => event.stopPropagation()}
+                                onChange={event => {
                                   event.stopPropagation()
-                                  if (!lineWritable || busy) return
-                                  if (isEditing) { setEditing(null); return }
-                                  openEditor(group.id, model.id)
-                                }}
-                                onKeyDown={event => {
-                                  if (event.key !== 'Enter' && event.key !== ' ') return
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  if (!lineWritable || busy) return
-                                  openEditor(group.id, model.id)
+                                  const value = event.currentTarget.value
+                                  // '' (provider default) only exists for models declaring a
+                                  // defaultEffort: the host keeps the current effort when a
+                                  // selection omits reasoningEffort, so reset submits the
+                                  // declared default instead.
+                                  const target = value === '' ? model.reasoning?.defaultEffort : value
+                                  if (target !== undefined) chooseEffort(group.id, model.id, target)
                                 }}
                               >
-                                {lineWindow === undefined
-                                  ? t('input.context.unset')
-                                  : formatContextWindow(lineWindow)}
-                              </span>
-                            </button>
+                                {model.reasoning.defaultEffort !== undefined && (
+                                  <option value="">{t('input.effort.default')}</option>
+                                )}
+                                {model.reasoning.defaultEffort === undefined && (
+                                  <option value="" hidden>{t('input.effort.default')}</option>
+                                )}
+                                {model.reasoning.efforts.map(level => (
+                                  <option key={level.id} value={level.id}>{level.name}</option>
+                                ))}
+                              </select>
+                            )}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={t('input.context.title')}
+                              title={lineWritable
+                                ? t('input.context.globalHint')
+                                : t('model.panel.noTarget')}
+                              style={lineWritable && !busy ? chipStyle : chipDisabledStyle}
+                              onClick={event => {
+                                event.stopPropagation()
+                                if (!lineWritable || busy) return
+                                if (isEditing) { setEditing(null); return }
+                                openEditor(group.id, model.id)
+                              }}
+                              onKeyDown={event => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return
+                                event.preventDefault()
+                                event.stopPropagation()
+                                if (!lineWritable || busy) return
+                                openEditor(group.id, model.id)
+                              }}
+                            >
+                              {lineWindow === undefined
+                                ? t('input.context.unset')
+                                : formatContextWindow(lineWindow)}
+                            </span>
                             {isEditing && (
                               <div style={editorRowStyle}>
                                 <span style={labelStyle} title={t('input.context.globalHint')}>
@@ -705,11 +784,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                     </section>
                   )
                 })}
-                {state.status !== 'loading' && state.groups.length === 0 && (
+                {directory !== undefined && state.status !== 'loading' && state.groups.length === 0 && (
                   <div style={statusStyle}>{t('model.panel.empty')}</div>
                 )}
               </div>
-              {state.error !== null && <div style={errorBannerStyle} role="status">{state.error}</div>}
+              {directory !== undefined && state.error !== null && <div style={errorBannerStyle} role="status">{state.error}</div>}
             </div>
           </>
         )

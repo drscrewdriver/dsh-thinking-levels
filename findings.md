@@ -1,29 +1,38 @@
-# Findings — DSH 0.1.5-rc 升级兼容（2026-09-13）
+# Findings — 模型面板 effort 接入 + 深色适配（2026-09-27）
 
-> 证据来源：npm `@deepseek-ai/*@0.1.5-rc.2` 解包 .d.ts 探针（/tmp/dsh-probe）+ `dsh-docs-deliverables` 知识库。
+> 证据来源:活页面运行时探针(内置浏览器 evaluate React fiber / 宿主 slot host face)、
+> 宿主包源码(dsh-client-ui-slots@0.1.7-rc.2 未压缩 lib、served dsh-client-ui-model-selection bundle)。
 
-## 0.1.5-rc.2 契约证据
-- `dsh-client-ui-settings/lib/types/client/contract/slots.d.ts`：声明 `settings.action` / `settings.close` / `settings.section` / `settings.plugins.tab` / `settings.onboarding` / `settings.general.item` —— **无 `settings.plugin.item`**。`settings.plugins.tab` 为 list 槽，注释明确：*Options: `id` (tab key), `order`, `label` (registrant-localized tab text)... the section supplies nothing... your own inject face*。
-- `dsh-client-ui-slots/lib/types/index.d.ts`：`SlotLabel = string | (() => string)`；`register` 仍支持 `inject: (...args) => I` 业务面工厂 + `locale` 选项 + `id`/`key` 按 kind 校验。
-- `dsh-client-ui-conversation/.../contract/slots.d.ts:208`：`conversation.input.right` 仍为 list/session 槽，注释「Compact controls before the composer submit action」。
-- `dsh-settings/lib/types/index.d.ts`：`register(ns, schema, options?)`（ns 须为小写连字符标识符，否则 TypeError）、`installSection(owner, ns, schema, entry, hooks)`、`get(ns)`、`update(ns, patch, expectedRevision?)` 均在；`SettingsScope` 仍有 `get()/watch(cb)/update(patch)`。
-- `dsh-settings/lib/types/types.d.ts:101`：`'settings/document-updated'(ns, revision)`。
-- `dsh-client-locale/lib/types/client/index.d.ts:188,198`：`register(ns, dicts)` 与 `register(ns, locale, dict)` 双 overload 均在。
-- `dsh-client-ui-settings/lib/types/client/settings-scope.d.ts:90`：`settingsScope: SettingsScopeBinder` 仍在。
+## 官方 ModelSelect 的 effort 语义(served bundle 反编译证据)
+- 模型行选择即提交:`selection = {provider: group.id, model: model.id, ...model.reasoning?.defaultEffort === void 0 ? {} : {reasoningEffort: model.reasoning.defaultEffort}}` —— 选模型默认带上该模型 `defaultEffort`。
+- 生效档位:`effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort`;目录不可用时回落 `state.retainedEffort`(store 上的名称字符串)。
+- 档位标签:`reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort`;无 reasoning 时显示 `t("effort.providerDefault")`。
+- 档位行:`pending.reasoningEffort === level.effort` 判定进行中,`effectiveEffort === level.effort` 判定当前(带 StateDot)。
+- 提交通道:`directory.select(selection)` → `sessions.selectModel({sessionId, provider, model, reasoningEffort?})`;缺省 `reasoningEffort` = 回提供方默认(官方 submit 的省略语义)。
+- 触发器:`triggerEffort` span 显示 effortLabel;aria-label 格式「选择模型，当前 X，推理等级 Y」。
 
-## 回退探测方案
-- `ctx.slots.entries(key)` 对未声明 key 返回空数组（ui-slots index.d.ts `entries()` 注释：*empty for keys not (or no longer) declared*）。但「空」也可能因为声明该槽的宿主插件尚未加载（load order 问题）。
-- 因此采用 **try 模式**：优先按 0.1.5 契约注册 `settings.plugins.tab`；若 `slots.register` 因槽未声明抛错（或注册后 `isLive` 为 false），catch 后回退注册 `settings.plugin.item`。插件已有「CLI 与 Desktop 声明不同 kind，同时带 id+key」的先例（src/client/index.ts 注释），双槽位注册是同一兼容思路的延续。
-- 备选：同时注册两个槽位——旧宿主忽略未声明槽（entries 空数组不渲染，无副作用），新宿主同理忽略 `settings.plugin.item`。实现更简单（无需 try/catch），先验证旧宿主对未声明槽注册是否静默容忍，若不容忍再用 try/catch。
+## 槽位选举与 abdication(接管 3.4.1 失败的完整机制,已由 3.4.2 修复)
+- `conversation.input.model` 是 `kind: "single", scope: "session"`;渲染取 `entriesOfSlot(key)[0]`。
+- 选举:`entries` 按 `priority` 升序稳定排序,`entriesOfSlot` 返回每 cell 第一个**未 abdicated** 条目。我们 `priority: -1` > 官方缺省 0。
+- abdication:条目 render/inject 抛错 → `SlotErrorBoundary` → `reportEntryError(abdicate: true)` → 永久罢黜,官方条目(下一顺位)顶上;DOM 无任何可见痕迹(无 `data-slot-error`)。
+- 3.4.1 根因:cordis `Service` 经 traceable proxy 把 `this.ctx` 重绑到**访问方** ctx(`createTraceable` get trap:`if (prop === tracker.property) return ctx`)。`directoryFor()` 读 `this.ctx.sessions`;我们延迟注入 fiber 只声明了 `modelDirectories` → `sessions` 解析为 undefined → TypeError → 整条目罢黜。`ModelDirectoryResolver.static inject = ["sessions", "remote", "remote.session"]` 即访问方必须声明的依赖集。
+- 运行时证据(修复前):`entriesOf('conversation.input.model')` 返回 2 条(我们 + 官方),`entriesOfSlot` 只剩官方 —— 与上述机制吻合。
 
-## 升级陷阱对照（来自 knowledge base `plugin-framework/upgrade-pitfalls.md`）
-- 本插件**不写** session source kind / marker → §1（会话拒载）不适用。
-- 本插件**不用** RPC/HTTP 通道 → §2.1/2.2 不适用。
-- 客户端 bundle 无 eager 重依赖（locale 字典 + React 组件）→ §3.2 不适用。
-- §4.1（配置字段重命名无迁移）：本次不改 Config schema 字段，无风险。
-- §3.1（client combo 缓存陈旧）：**适用**——升级用户可能报「插件卡片消失」，需写进 README 排障。
-- #6221（settings 写入删除同命名空间外部编辑）：`takeover-sync` 的 `update(PI_AI_NAMESPACE, {providers})` 整节 patch 在 0.1.5 的合并语义下仍在，但新增 `expectedRevision` 可选参数可用于乐观并发（本轮不启用，YAGNI；记录为后续可选）。
+## 主题 token 事实(深色适配依据)
+- token 定义在 **`body`**(computed 487 个自定义属性),不在 `:root`(仅 radius/font 等静态 token)。随 `body[data-ds-dark-theme]` 翻转;本机当前深色(`data-ds-theme-source=system` + `prefers-color-scheme: dark`),装了第三方皮肤 maid-atelier。
+- 插件样式引用的 10 个名字中 **5 个不存在**(永远走亮色 fallback):`--dsw-alias-bg-surface`、`--dsw-alias-danger`、`--dsw-alias-danger-weak`(及 `--dsw-alias-state-business-primary-weak` 需复核)——这就是深色下底色偏白的根因。
+- 实测翻转值(body 作用域解析):`bg-layer-1` #f8faffb8/#121f43e6、`bg-layer-2` #ebf0fad6/#182850eb、`bg-layer-3` #e0e7f6e0/#20315bf0、`border-l2` #475b914d/#97a9d857、`label-primary` #172347/#e7ecf7、`label-secondary` #4d5d7f/#bdc9e3、`label-tertiary` #6f7c99/#96a6c9、`state-business-primary` #536eae/#9bb0e1、`state-error-primary` #ec1313/#f25a5a、`interactive-bg-hover-danger` #ec13130d/(暗随主题)。
+- `--ds-font-family-code` 在 `:root` 定义,现有引用有效。
+
+## 技术选型
+- 原生 `<select>` 做档位下拉:inline-style 约束下唯一自带弹层、免定位/免键盘处理的控件;官方菜单原语(`_7KE1Ra_menu`)是 CSS module,client bundle 纯洁性约束下不可复用。
+- chip 从行 `<button>` 移出:`<button>` 内嵌 `role="button"` span 本就属非法交互嵌套(现有代码),加 select 后必须重构为兄弟节点。
+
+## 约束与依赖
+- 本机 profile 无 `llm-deepseek` → 官方 DeepSeek 分支(`deepseek-official`)无实机写入路径,仅做「徽章禁用、不崩溃」回归。
+- 服务端 HMR 已证实:改 `~/.dsh/profiles/web/node_modules/.../lib/client.js` 后页面 boot roster 的 per-file `rev` 自动更新(`8533d66f67cc` → `e9957d026371`),无需重启进程。
 
 ## 风险识别
-- `agent/request` waterfall 与 `session.events` 的 `tool/call` 形状属 core 包（@deepseek-ai/dsh-agent 等），探针未覆盖；由「升级 devDeps 后 typecheck + vitest（session-events 有专门护栏测试）+ 实机冒烟」三重验证兜底。
-- `settings.plugins.tab` 的 `label` 是注册方本地化文本（旧宿主是 `locale: NS` 让 owner 用字典渲染 tab 文案）；新契约要求注册时给 `label`，可用 `() => string` 工厂配合 `ctx.locale` 读取当前语言，locale 切换时需重注册（ui-settings 注释确认：*the registrant re-registers with fresh text on locale change*）。
+- `<select>` 在深色下的 option 列表底色由浏览器/OS 决定,inline style 只能控制闭合态;可给 select 加 `color-scheme: dark light` 让原生弹层跟随主题(计划内)。
+- 第三方皮肤(maid-atelier)下 `bg-layer-*` 可能被皮肤重定义 → 面板与页面仍同色系(预期行为),不做像素断言,验证以「亮暗一致、无白底」为准。
+- `state.retainedEffort` 未纳入契约(目录不可用时的档位名回落)——目录不可用时面板本身已降级,YAGNI 不补。

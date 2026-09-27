@@ -72,6 +72,17 @@ interface ModelDirectoriesFace {
   directoryFor(sessionId: string): ModelDirectoryFace
 }
 
+/**
+ * The narrow `sessions` face `directoryFor` needs. Declared because the
+ * resolver resolves `this.ctx.sessions` against the ACCESSING context (cordis
+ * traceable services rebind `ctx` to the reader): any fiber that calls
+ * `directoryFor` must declare these services itself or the call throws.
+ */
+interface SessionsFace {
+  scope(sessionId: string): unknown
+  binding(sessionId: string): unknown
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   /** Slot map entries consumed by this plugin (subset of the harness table). */
   export interface SlotMap {

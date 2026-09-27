@@ -1,22 +1,21 @@
-# Tasks — DSH 0.1.5-rc 升级兼容（compat/0.1.5 分支）
+# Tasks — 模型面板 effort 接入 + 深色适配（3.4.3）
 
-## Phase 1: 分支与依赖
-- [ ] task_1: `git checkout -b compat/0.1.5 master`（确认工作树干净）
-- [ ] task_2: package.json devDeps 五个 `@deepseek-ai/dsh-client-*` → `0.1.5-rc.2`（精确版本，不用 ^）；`npm install`
-- [ ] task_3: `npm run typecheck` 记录全部类型漂移清单（预期集中在 slots 契约）
+## Phase 1: effort 接入（src/client）
+- [x] task_1: `src/client/locales.ts` 四语各加 `input.effort.title`、`input.effort.default`(文案见 spec §A.5)
+- [x] task_2: `src/client/model-panel.tsx` 触发器 effort 徽章:`current` memo 后计算 `effectiveEffort`/`effortLabel`(spec §A.1),渲染 `triggerEffort` span(新样式:tertiary 色、省略号、`flex: 0 0 auto`)
+- [x] task_3: `src/client/model-panel.tsx` 模型行重构:行容器 `div`(flex, gap 6, padding `6px 8px 6px 18px`)承载 [行按钮(flex:1, 名称/描述/✓)] [effort select] [window chip 移出按钮];chip 的 onClick/onKeyDown/title/aria 原样迁移
+- [x] task_4: `src/client/model-panel.tsx` 新增 `chooseEffort(provider, model, effort | undefined)`(spec §A.3)+ 新样式 `selectStyle`(chip 同族、`colorScheme: "dark light"`);select `value` = 激活线生效值 ?? 非激活线 defaultEffort ?? `""`
+- [x] task_5: 回归自查:chooseModel/close/backdrop 不受重构影响;busy 禁用 select
 
-## Phase 2: settings 卡片槽位迁移（src/client/index.ts）
-- [ ] task_4: 验证回退方式——在 0.1.5-rc.2 类型下确认 `ctx.slots.register` 对未声明槽的行为（读 dsh-client-ui-slots dist js 的 register 路径）；确定「双注册静默容忍」或「try/catch 回退」
-- [ ] task_5: 新增 `settings.plugins.tab` 注册分支：options `{ name: 'settings.plugins.tab', id: THINKING_LEVELS_NS, order: 100, label, locale: NS, inject }`，`label` 用 `() => ctx.locale.t(NS, 'cardTitle')` 形式的本地化工厂（与 card.tsx 现有 title key 对齐）；inject 工厂复用现有 `{ scope, piAiScope }`
-- [ ] task_6: 保留 `settings.plugin.item` 回退注册（现有代码不动或按 task_4 结论包 try/catch）
-- [ ] task_7: locale 切换重注册：若 label 为工厂函数仍不刷新（见 ui-settings 注释要求 registrant 重注册），监听 locale 变更事件 dispose + 重新注册 tab
+## Phase 2: 深色适配（src/client/model-panel.tsx 样式区）
+- [x] task_6: token 替换(spec §B 表):`bg-surface`→`bg-layer-1`(triggerStyle/chipStyle/chipDisabledStyle/editorRowStyle/inputStyle 的 background)、`danger`→`state-error-primary`(errorStyle)、`danger-weak`→`interactive-bg-hover-danger`(errorBannerStyle)
+- [x] task_7: 删硬编码亮色 fallback:`#fff`、`rgba(127,127,127,0.05)`(popStyle 背景改纯 `var(--dsw-alias-bg-layer-3)`)、`#e5484d`、`rgba(229,72,77,0.10)`、`rgba(77,107,254,0.10)`(modelRowActiveStyle 改 `var(--dsw-alias-state-business-primary-weak, transparent)`,若该 token 未定义则用 `--dsw-alias-interactive-bg-hover`);复核全部 `var()` 引用无臆造名残留
 
-## Phase 3: 修复与验证
-- [ ] task_8: 修复 task_3 暴露的其余类型漂移（预期候选：`settings/document-updated` 回调签名、slots 类型参数）；不改宿主半逻辑
-- [ ] task_9: `npm run lint && npm run test && npm run build` 全绿
-- [ ] task_10: 版本号 → 2.0.0-beta.3（package.json + dsh.plugin.json + CHANGELOG.md/zh/ja/ko 追加条目）
+## Phase 3: 构建与部署
+- [x] task_8: `npx tsc --noEmit` + `npx vitest run` + `npm run build` 全绿;版本 → 3.4.3(package.json + dsh.plugin.json)
+- [x] task_9: 同步 `lib/*.js|d.ts|map` + 两份 manifest 到 `~/.dsh/profiles/web/node_modules/dsh-thinking-levels/`;确认页面 boot roster 中该插件 `rev` 变化(HMR),未变化则重启 web 进程并重取 token
 
-## Phase 4: 文档与收尾
-- [ ] task_11: README/README.zh（+ja/ko）版本矩阵加 0.1.5 行；排障章节加「升级后卡片不显示 → 强制刷新浏览器」
-- [ ] task_12: 提交 compat/0.1.5 分支（feat: DSH 0.1.5-rc compat — settings.plugins.tab seat + devDeps 0.1.5-rc.2）
-- [ ] task_13: 实机验收过 checklist.md「Must Pass」各项（0.1.5-rc.2 + 0.1.2-rc.1 回退）
+## Phase 4: 实机验证（checklist.md 全项）
+- [x] task_10: 深色环境(当前):触发器徽章、下拉选档、窗口编辑、模型切换逐项过
+- [x] task_11: 亮色验证:临时 `body.removeAttribute('data-ds-dark-theme')` 目检后恢复
+- [x] task_12: 回归:context window 行内编辑全流程 + 控制台零新增报错

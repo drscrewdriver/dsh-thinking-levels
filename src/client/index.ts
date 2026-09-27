@@ -85,12 +85,24 @@ export function apply(ctx: ClientContext): void {
   // stayed. The deferred inject waits for the service to start; on harness
   // lines without the module the callback never fires or sees undefined,
   // leaving the shipped selector untouched.
+  //
+  // The inject must ALSO declare the resolver's own dependency set
+  // (`sessions`, `remote`, `remote.session` — ui-model-selection's
+  // `ModelDirectoryResolver.static inject`): a cordis Service resolves
+  // `this.ctx` through the ACCESSING context (the traceable proxy rebinds
+  // `ctx` to the reader), and `directoryFor()` reads `this.ctx.sessions` —
+  // with only `modelDirectories` declared that read came back undefined and
+  // every `directoryFor` call threw, so the seat entry crashed on first
+  // render and the slot boundary abdicated it back to the shipped selector.
   ;(ctx as unknown as {
     inject: (
       deps: string[],
-      cb: (scope: { modelDirectories: ModelDirectoriesFace | undefined }) => void,
+      cb: (scope: {
+        modelDirectories: ModelDirectoriesFace | undefined
+        sessions: SessionsFace | undefined
+      }) => void,
     ) => void
-  }).inject(['modelDirectories'], (scope) => {
+  }).inject(['modelDirectories', 'sessions', 'remote', 'remote.session'], (scope) => {
     const directories = scope.modelDirectories
     if (directories === undefined) return
     ctx.slots.inject('conversation.input.model', function* () {
@@ -102,8 +114,17 @@ export function apply(ctx: ClientContext): void {
         inject: (sessionId: string): ModelPanelInjected => {
           // Entry ids of the target plugins: each dsh llm plugin's composition
           // entry id matches its settings namespace (`llm-pi-ai` / `llm-deepseek`).
+          // A `directoryFor` failure (odd session shape) must not throw out of
+          // the render: a thrown inject abdicates the seat entry — the whole
+          // takeover — so degrade to the unavailable face instead.
+          let directory: ModelDirectoryFace | undefined
+          try {
+            directory = directories.directoryFor(sessionId)
+          } catch {
+            directory = undefined
+          }
           return {
-            directory: directories.directoryFor(sessionId),
+            directory,
             piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
             deepseekScope: ctx.configForms.get<unknown>('llm-deepseek'),
           }
