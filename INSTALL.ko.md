@@ -20,7 +20,19 @@
 - `dsh-thinking-levels`: npm 패키지 이름이자 런타임 플러그인 ID;
 - `thinking-levels`: Cordis 구성 항목이자 설정 Slot ID.
 
-> 구버전 DSH는 npm dist-tag로 해당 라인을 설치하세요: `dsh plugin add dsh-thinking-levels@dsh-0.1.5`(DSH 0.1.5), `...@dsh-0.1.2`(DSH 0.1.2), `...@compat`(DSH 0.1.0–0.1.1). ≤ 0.6.0의 구 0.x 버전은 dsh peer 선언이 없으므로 설치하지 마세요.
+> **버전 요구 사항 —— DSH v0.2.0-rc.1 이상만 지원.**
+>
+> 설치 전 버전을 확인하세요(`dsh --version`).
+>
+> | DSH 버전 | 조치 |
+> | --- | --- |
+> | ≥ 0.2.0-rc.1 | 본 릴리스(4.0.x) 설치. |
+> | ≥ 0.1.7-rc.1 ~ < 0.2.0 | 3.x 라인 설치: `dsh plugin --profile <profile> add dsh-thinking-levels@dsh-0.1.7 -w`(3.4.3). |
+> | < 0.1.7-rc.1 | 구 플러그인 라인(3.0.2) 유지. **DSH 0.1.7+에서 구 플러그인 빌드를 실행하지 마세요——플러그인을 업그레이드하세요.** |
+>
+> 경계는 `0.1.7-rc.1`입니다: 이 버전에서 명령형 설정 등록(`settings.register` / `installSettingsSection`)과 클라이언트 `settingsScope` 서비스가 제거되었습니다. 이후 3.x 라인(0.1.7 호스트)과 본 릴리스(0.2.0-rc 호스트)는 동일한 선언적 설정 표면(`.volatile()` 스키마 필드 + `configForms`)을 대상으로 합니다.
+
+> 구버전 DSH는 npm dist-tag로 해당 라인을 설치하세요: `dsh plugin add dsh-thinking-levels@dsh-0.1.7`(DSH 0.1.7–0.1.x, 플러그인 3.4.3), `...@dsh-0.1.5`(DSH 0.1.5), `...@dsh-0.1.2`(DSH 0.1.2), `...@compat`(DSH 0.1.0–0.1.1). ≤ 0.6.0의 구 0.x 버전은 dsh peer 선언이 없으므로 설치하지 마세요.
 
 ## 0. 사전 확인과 profile 확인
 
@@ -45,7 +57,7 @@ dsh plugin --profile <profile> add dsh-thinking-levels -w
 현재 릴리스 명시적 설치:
 
 ```bash
-dsh plugin --profile <profile> add dsh-thinking-levels@3.1.0 -w
+dsh plugin --profile <profile> add dsh-thinking-levels@4.0.0 -w
 ```
 
 공식 CLI는 profile 의존성, 잠금 파일, `dsh.profile.bundles`를 자동으로 갱신합니다. 수동으로 YAML을 추가하지 마세요.
@@ -58,7 +70,7 @@ dsh 런타임은 pnpm 11을 사용하며 `minimumReleaseAge` 정책이 새로 �
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-thinking-levels@3.1.0
+  - dsh-thinking-levels@4.0.0
 ```
 
 ## 2. 업그레이드
@@ -101,7 +113,7 @@ grep -n "dsh-thinking-levels" \
 node -p "require('${DSH_HOME:-$HOME/.dsh}/profiles/<profile>/node_modules/dsh-thinking-levels/package.json').version"
 ```
 
-이 릴리스의 버전은 `3.1.0`이어야 합니다.
+이 릴리스의 버전은 `4.0.0`이어야 합니다.
 
 공식 구성 확인:
 

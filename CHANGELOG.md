@@ -8,6 +8,28 @@ All notable changes to `dsh-thinking-levels` are documented here.
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-09-29
+
+### Changed — DSH 0.2.0-rc compatibility
+
+- **Peer gate retargeted to the 0.2.0-rc segment.** All seven `@deepseek-ai/dsh-*` peer
+  declarations and `engines.dsh` now read `>=0.2.0-rc.1 <0.2.1-0` (replacing
+  `>=0.1.7-rc.1 <0.1.8-0`). Hosts on 0.1.7-rc.1 to < 0.2.0 stay on the 3.x line
+  (npm dist-tag `dsh-0.1.7`, 3.4.3); hosts below 0.1.7-rc.1 stay on 3.0.2.
+- **devDependencies moved to the 0.2.0 line** — `dsh-client-locale` / `dsh-client-ui-renderer` /
+  `dsh-client-ui-settings` / `dsh-client-ui-slots` / `dsh-client-store` → `0.2.0-rc.1`, and
+  `@deepseek-ai/cordis` → `^4.0.4` (required by the 0.2.0-rc.1 client packages' `~4.0.4` peer) —
+  so typecheck / tests / build run against the real 0.2.0-rc.1 types.
+- **Metadata hygiene:** `dsh.plugin.json` version and `engines.dsh` synced to 4.0.0 and the
+  0.2.0-rc segment; `publishConfig.tag` → `dsh-0.2.0` with a new `release:4x` script so a
+  publish can never overwrite the `dsh-0.1.7` / `latest` tags; both lockfiles
+  (`package-lock.json` / `pnpm-lock.yaml`) regenerated against the 0.2.0 dependency tree.
+- **No host-half or client-half code changes.** The packages this plugin imports
+  (`dsh-client-locale`, `dsh-client-store`, `dsh-client-ui-renderer`, `dsh-client-ui-settings`,
+  `dsh-client-ui-slots`) change only their package version between 0.1.7-rc.2 and 0.2.0-rc.1;
+  the `settings` / `llm` service faces and the `llm-pi-ai` adapter are unchanged too. The full
+  suite (lint / typecheck / 71 tests / build) passes unchanged against 0.2.0-rc.1.
+
 ### Fixed — duplicate Plugins settings entry — 2.0.0-beta.4
 
 - **Removed the `settings.plugins.tab` registration.** The 0.1.5 compat work assumed DSH 0.1.5

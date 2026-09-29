@@ -20,7 +20,19 @@
 - `dsh-thinking-levels`：npm パッケージ名とランタイムプラグイン ID；
 - `thinking-levels`：Cordis 構成エントリと設定 Slot ID。
 
-> 旧い DSH は npm の dist-tag で対応ラインをインストールします：`dsh plugin add dsh-thinking-levels@dsh-0.1.5`（DSH 0.1.5）、`...@dsh-0.1.2`（DSH 0.1.2）、`...@compat`（DSH 0.1.0–0.1.1）。≤ 0.6.0 の旧 0.x 版は dsh peer 宣言を持たないためインストールしないでください。
+> **バージョン要件 —— DSH v0.2.0-rc.1 以降のみ対応。**
+>
+> インストール前にバージョンを確認してください（`dsh --version`）。
+>
+> | DSH バージョン | 操作 |
+> | --- | --- |
+> | ≥ 0.2.0-rc.1 | 本リリース（4.0.x）をインストール。 |
+> | ≥ 0.1.7-rc.1 〜 < 0.2.0 | 3.x ラインをインストール：`dsh plugin --profile <profile> add dsh-thinking-levels@dsh-0.1.7 -w`（3.4.3）。 |
+> | < 0.1.7-rc.1 | 旧プラグインライン（3.0.2）を使用。**DSH 0.1.7+ で旧プラグインビルドを実行しないでください——プラグインをアップグレードしてください。** |
+>
+> 境界は `0.1.7-rc.1` です：このバージョンで命令的な設定登録（`settings.register` / `installSettingsSection`）とクライアント `settingsScope` サービスが削除されました。以降、3.x ライン（0.1.7 ホスト）も本リリース（0.2.0-rc ホスト）も同一の宣言的設定表面（`.volatile()` スキーマフィールド + `configForms`）を対象とします。
+
+> 旧い DSH は npm の dist-tag で対応ラインをインストールします：`dsh plugin add dsh-thinking-levels@dsh-0.1.7`（DSH 0.1.7–0.1.x、プラグイン 3.4.3）、`...@dsh-0.1.5`（DSH 0.1.5）、`...@dsh-0.1.2`（DSH 0.1.2）、`...@compat`（DSH 0.1.0–0.1.1）。≤ 0.6.0 の旧 0.x 版は dsh peer 宣言を持たないためインストールしないでください。
 
 ## 0. 前提と profile の確認
 
@@ -45,7 +57,7 @@ dsh plugin --profile <profile> add dsh-thinking-levels -w
 現在のリリースを明示的にインストール：
 
 ```bash
-dsh plugin --profile <profile> add dsh-thinking-levels@3.1.0 -w
+dsh plugin --profile <profile> add dsh-thinking-levels@4.0.0 -w
 ```
 
 公式 CLI は profile の依存関係、ロックファイル、`dsh.profile.bundles` を自動更新します。手動で YAML を追加しないでください。
@@ -58,7 +70,7 @@ dsh ランタイムは pnpm 11 を使用し、`minimumReleaseAge` ポリシー�
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-thinking-levels@3.1.0
+  - dsh-thinking-levels@4.0.0
 ```
 
 ## 2. アップグレード
@@ -101,7 +113,7 @@ grep -n "dsh-thinking-levels" \
 node -p "require('${DSH_HOME:-$HOME/.dsh}/profiles/<profile>/node_modules/dsh-thinking-levels/package.json').version"
 ```
 
-このリリースではバージョンは `3.1.0` でなければなりません。
+このリリースではバージョンは `4.0.0` でなければなりません。
 
 公式構成を確認：
 

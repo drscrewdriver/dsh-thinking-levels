@@ -8,6 +8,28 @@
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-09-29
+
+### 변경 — DSH 0.2.0-rc 호환
+
+- **peer 게이트를 0.2.0-rc 세그먼트로 재설정.** 7개 모든 `@deepseek-ai/dsh-*` peer 선언과
+  `engines.dsh`를 `>=0.2.0-rc.1 <0.2.1-0`으로 변경(기존 `>=0.1.7-rc.1 <0.1.8-0`에서). 0.1.7-rc.1~
+  <0.2.0 호스트는 3.x 라인(npm dist-tag `dsh-0.1.7`, 3.4.3)을, 0.1.7-rc.1 미만 호스트는 3.0.2를
+  사용하세요.
+- **devDependencies를 0.2.0 라인으로 이동** — `dsh-client-locale` / `dsh-client-ui-renderer` /
+  `dsh-client-ui-settings` / `dsh-client-ui-slots` / `dsh-client-store` → `0.2.0-rc.1`, 그리고
+  `@deepseek-ai/cordis` → `^4.0.4`(0.2.0-rc.1 클라이언트 패키지의 `~4.0.4` peer 요구)——이로써
+  typecheck / 테스트 / 빌드가 실제 0.2.0-rc.1 타입으로 실행됩니다.
+- **메타데이터 정합성:** `dsh.plugin.json`의 version과 `engines.dsh`를 4.0.0 및 0.2.0-rc 세그먼트로
+  동기화; `publishConfig.tag` → `dsh-0.2.0` 및 신규 `release:4x` 스크립트로 게시가 `dsh-0.1.7` /
+  `latest` 태그를 덮어쓰지 않음을 보장; 두 lockfile(`package-lock.json` / `pnpm-lock.yaml`)을
+  0.2.0 의존성 트리로 재생성.
+- **host 측·client 측 코드 변경 없음.** 본 플러그인이 import하는 패키지(`dsh-client-locale`,
+  `dsh-client-store`, `dsh-client-ui-renderer`, `dsh-client-ui-settings`, `dsh-client-ui-slots`)는
+  0.1.7-rc.2 → 0.2.0-rc.1 사이에서 패키지 버전만 변동; `settings` / `llm` 서비스 면과 `llm-pi-ai`
+  어댑터도 미변경. 전체 스위트(lint / typecheck / 71 테스트 / 빌드)가 0.2.0-rc.1 대상으로 무변경
+  통과.
+
 ### 수정 — 플러그인 설정 중복 표시 — 2.0.0-beta.4
 
 - **`settings.plugins.tab` 등록 제거.** 0.1.5 호환 작업에서 DSH 0.1.5가 `settings.plugin.item` 슬롯을 폐지했다고 가정했지만, 릴리스된 0.1.5-rc.2(및 0.1.6-alpha.1)의 `ui-settings-plugins`는 내장 구성 탭의 자식으로 해당 슬롯을 유지합니다. 두 슬롯이 모두 선언되어 두 등록이 동시에 발화했고, 설정 → 플러그인에 항목 카드와 전용 탭이 함께 표시되었습니다. 항목 카드만으로 전체 지원 라인을 커버할 수 있으므로 탭 등록(및 `ctx.locale.bind` 라벨 thunk)을 제거했습니다.

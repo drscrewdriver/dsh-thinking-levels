@@ -20,18 +20,19 @@
 - `dsh-thinking-levels`：npm 包名与运行时插件 ID；
 - `thinking-levels`：Cordis 组合条目与设置页 Slot ID。
 
-> **版本要求 —— 仅支持 DSH v0.1.7-rc.1 及以上。**
+> **版本要求 —— 仅支持 DSH v0.2.0-rc.1 及以上。**
 >
 > 安装前先确认版本（`dsh --version`）。
 >
 > | DSH 版本 | 操作 |
 > | --- | --- |
-> | ≥ 0.1.7-rc.1 | 安装本版本。 |
-> | < 0.1.7-rc.1 | 留在旧版插件（3.0.1）。**不要在 DSH 0.1.7+ 上运行旧版插件，请升级插件。** |
+> | ≥ 0.2.0-rc.1 | 安装本版本（4.0.x）。 |
+> | ≥ 0.1.7-rc.1 至 < 0.2.0 | 安装 3.x 线：`dsh plugin --profile <profile> add dsh-thinking-levels@dsh-0.1.7 -w`（3.4.3）。 |
+> | < 0.1.7-rc.1 | 留在旧版插件（3.0.2）。**不要在 DSH 0.1.7+ 上运行旧版插件，请升级插件。** |
 >
-> 分界点是 `0.1.7-rc.1`：该版本删除了命令式设置注册（`settings.register` / `installSettingsSection`）与客户端 `settingsScope` 服务。本版本面向 0.1.7 声明式设置表面（`.volatile()` schema 字段 + `configForms`）。
+> 分界点是 `0.1.7-rc.1`：该版本删除了命令式设置注册（`settings.register` / `installSettingsSection`）与客户端 `settingsScope` 服务。自此之后，3.x 线（0.1.7 宿主）与本版本（0.2.0-rc 宿主）面向同一声明式设置表面（`.volatile()` schema 字段 + `configForms`）。
 
-> 旧版 DSH 通过 npm dist-tag 安装对应线：`dsh plugin add dsh-thinking-levels@dsh-0.1.5`（DSH 0.1.5）、`...@dsh-0.1.2`（DSH 0.1.2）、`...@compat`（DSH 0.1.0–0.1.1）。不要安装 ≤ 0.6.0 的旧 0.x 版本——它们没有声明任何 dsh peer 依赖。
+> 旧版 DSH 通过 npm dist-tag 安装对应线：`dsh plugin add dsh-thinking-levels@dsh-0.1.7`（DSH 0.1.7–0.1.x，插件 3.4.3）、`...@dsh-0.1.5`（DSH 0.1.5）、`...@dsh-0.1.2`（DSH 0.1.2）、`...@compat`（DSH 0.1.0–0.1.1）。不要安装 ≤ 0.6.0 的旧 0.x 版本——它们没有声明任何 dsh peer 依赖。
 
 ## 0. 前置检查与 profile 确认
 
@@ -56,7 +57,7 @@ dsh plugin --profile <profile> add dsh-thinking-levels -w
 显式安装当前发布版：
 
 ```bash
-dsh plugin --profile <profile> add dsh-thinking-levels@3.1.0 -w
+dsh plugin --profile <profile> add dsh-thinking-levels@4.0.0 -w
 ```
 
 官方 CLI 会自动更新 profile 依赖、锁文件与 `dsh.profile.bundles`。不要手工追加 YAML。
@@ -69,7 +70,7 @@ dsh 运行环境使用 pnpm 11，其 `minimumReleaseAge` 策略可能拦截刚�
 
 ```yaml
 minimumReleaseAgeExclude:
-  - dsh-thinking-levels@3.1.0
+  - dsh-thinking-levels@4.0.0
 ```
 
 ## 2. 升级
@@ -112,7 +113,7 @@ grep -n "dsh-thinking-levels" \
 node -p "require('${DSH_HOME:-$HOME/.dsh}/profiles/<profile>/node_modules/dsh-thinking-levels/package.json').version"
 ```
 
-本版本的版本号必须是 `3.1.0`。
+本版本的版本号必须是 `4.0.0`。
 
 检查官方组合配置：
 

@@ -1,10 +1,10 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "3.4.3",
+  "version": "4.0.0",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
-    "tag": "dsh-0.1.7"
+    "tag": "dsh-0.2.0"
   },
   "description": "DSH host plugin: thinking-level (reasoning_effort) control for dsh — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "repository": {
@@ -46,17 +46,17 @@
   },
   "engines": {
     "node": ">=22.19.0 || >=24.0.0",
-    "dsh": ">=0.1.7-rc.1 <0.1.8-0"
+    "dsh": ">=0.2.0-rc.1 <0.2.1-0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-api-remotes": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-api-session-controller": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-client-ui-model-selection": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.7-rc.1 <0.1.8-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.7-rc.1 <0.1.8-0"
+    "@deepseek-ai/dsh-api-remotes": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-client-ui-model-selection": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.0-rc.1 <0.2.1-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.1 <0.2.1-0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-api-remotes": {
@@ -85,11 +85,11 @@
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
@@ -101,11 +101,12 @@
     "vitest": "^3.0.0",
     "@deepseek-ai/schemastery": "^3.18.4",
     "@deepseek-ai/cosmokit": "^1.8.5",
-    "@deepseek-ai/dsh-client-store": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-client-store": "0.2.0-rc.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown",
     "prepublishOnly": "npm run build",
+    "release:4x": "npm publish --tag dsh-0.2.0 --registry=https://registry.npmjs.org",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "vitest run"
