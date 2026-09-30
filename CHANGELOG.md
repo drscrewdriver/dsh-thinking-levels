@@ -5,6 +5,11 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
+- [Changelog en français](./CHANGELOG.fr.md)
+- [Changelog auf Deutsch](./CHANGELOG.de.md)
+- [Changelog in italiano](./CHANGELOG.it.md)
+- [Список изменений на русском](./CHANGELOG.ru.md)
+- [Changelog en español](./CHANGELOG.es.md)
 
 ## [Unreleased]
 
