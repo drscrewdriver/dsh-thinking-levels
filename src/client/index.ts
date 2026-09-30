@@ -24,7 +24,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // the retired `dsh-client-runtime` package): importing the client types restores
 // the typed `ctx.slots` member on the cordis Context surface.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { NS, en, ja, ko, zh } from './locales.ts'
+import { NS, de, en, es, fr, it, ja, ko, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
@@ -57,13 +57,19 @@ export const inject = ['slots', 'locale', 'configForms', 'modelDirectories']
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   // `register(ns, dicts)` is typed to the built-in locale ids (`zh` / `en`
-  // only); the shipped `ja` / `ko` dictionaries go through the single-locale
-  // overload, so they are installed and ready once DSH publishes those ids.
+  // only); the shipped `ja` / `ko` / `fr` / `de` / `it` / `ru` / `es`
+  // dictionaries go through the single-locale overload, so they are installed
+  // and ready once DSH publishes those ids.
   ctx.effect(() => {
     const disposers = [
       ctx.locale.register(NS, { zh, en }),
       ctx.locale.register(NS, 'ja', ja),
       ctx.locale.register(NS, 'ko', ko),
+      ctx.locale.register(NS, 'fr', fr),
+      ctx.locale.register(NS, 'de', de),
+      ctx.locale.register(NS, 'it', it),
+      ctx.locale.register(NS, 'ru', ru),
+      ctx.locale.register(NS, 'es', es),
     ]
     return () => { for (const dispose of disposers) dispose() }
   }, 'dsh-thinking-levels: dictionaries')
