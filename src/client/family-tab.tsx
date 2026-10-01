@@ -47,9 +47,16 @@ export interface FamilySectionInjected extends ThinkingLevelsCardInjected {
   }
 }
 
-/** The framework-delivered child-slot dispatcher, narrowed to our one child key. */
+/**
+ * The framework-delivered child-slot dispatcher, narrowed to our one child key.
+ * Optional: the Plugins-page `plugins.bundle.config` card renders this same
+ * component WITHOUT a children declaration (the `dsh-family.tab` child slot is
+ * claimed by the settings.section entry alone), so the machinery delivers no
+ * renderSlot seat on that surface — contributor tabs degrade to empty panels
+ * there instead of crashing on an absent dispatcher.
+ */
 interface FamilyRenderSlots {
-  renderSlot(key: 'dsh-family.tab', owner?: object, opts?: { only?: string; fallback?: React.ReactNode }): React.ReactNode
+  renderSlot?(key: 'dsh-family.tab', owner?: object, opts?: { only?: string; fallback?: React.ReactNode }): React.ReactNode
 }
 
 /** Full props: locale + contributor dispatcher + the resolved inject face. */
@@ -106,7 +113,7 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
       <div role="tabpanel">
         {active === OWN_TAB_ID
           ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} />
-          : renderSlot('dsh-family.tab', {}, { only: active, fallback: null })}
+          : renderSlot?.('dsh-family.tab', {}, { only: active, fallback: null })}
       </div>
     </div>
   )
