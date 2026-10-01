@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Thinking Levels",
+    "description": "DSH host plugin: thinking-level (reasoning_effort) control — auto-adjusts per tool round, with optional manual lock and per-tool timing telemetry."
+  }
+}

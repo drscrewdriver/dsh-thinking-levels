@@ -24,7 +24,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // the retired `dsh-client-runtime` package): importing the client types restores
 // the typed `ctx.slots` member on the cordis Context surface.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { NS, en, ja, ko, zh } from './locales.ts'
+import { NS, dictionaries } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
@@ -56,16 +56,16 @@ export const inject = ['slots', 'locale', 'configForms', 'modelDirectories']
  */
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
-  // `register(ns, dicts)` is typed to the built-in locale ids (`zh` / `en`
-  // only); the shipped `ja` / `ko` dictionaries go through the single-locale
-  // overload, so they are installed and ready once DSH publishes those ids.
+  // Single consolidated registration: one `register(ns, dicts)` call activates
+  // all 9 languages (zh, en, ja, ko, fr, de, it, ru, es) — the untyped map
+  // overload accepts any BCP-47-style id and throws only on duplicate (ns, locale).
+  // Wrapped in try/catch so a throw can never escape the effect body (S5).
   ctx.effect(() => {
-    const disposers = [
-      ctx.locale.register(NS, { zh, en }),
-      ctx.locale.register(NS, 'ja', ja),
-      ctx.locale.register(NS, 'ko', ko),
-    ]
-    return () => { for (const dispose of disposers) dispose() }
+    try {
+      return ctx.locale.register(NS, dictionaries)
+    } catch {
+      return () => {}
+    }
   }, 'dsh-thinking-levels: dictionaries')
 
   // Composer model seat: one registered entry named after the seat with

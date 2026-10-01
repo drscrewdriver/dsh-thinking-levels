@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Niveles de razonamiento",
+    "description": "Plugin de host DSH: control de nivel de razonamiento (reasoning_effort) — ajuste automático por ronda de herramientas, con bloqueo manual opcional y telemetría de temporización por herramienta."
+  }
+}

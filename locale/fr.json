@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Niveaux de réflexion",
+    "description": "Plugin hôte DSH : contrôle du niveau de réflexion (reasoning_effort) — ajustement automatique par tour d'outil, avec verrouillage manuel optionnel et télémétrie de temporisation par outil."
+  }
+}

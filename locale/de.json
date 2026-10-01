@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Denkstufen",
+    "description": "DSH-Host-Plugin: Denkstufen-Steuerung (reasoning_effort) — automatische Anpassung pro Tool-Runde, mit optionaler manueller Sperre und Tool-Timing-Telemetrie."
+  }
+}

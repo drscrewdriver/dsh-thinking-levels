@@ -14,6 +14,7 @@
   "type": "module",
   "files": [
     "lib",
+    "locale",
     "cordis.patch.yml",
     "dsh.plugin.json",
     "README.md",
@@ -42,7 +43,8 @@
     "./client": {
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "engines": {
     "node": ">=22.19.0 || >=24.0.0",
