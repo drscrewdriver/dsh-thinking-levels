@@ -6,12 +6,15 @@
  * editor.
  *
  * The plugin's own settings (default level, enable toggle, scheduler bounds)
- * have NO client registration since the DSH 0.1.7 line: the host renders the
- * Plugins settings form declaratively from the `.volatile()` fields of the
+ * have NO standalone settings card since the DSH 0.1.7 line: the host renders
+ * the Plugins settings form declaratively from the `.volatile()` fields of the
  * schema in src/index.ts, and the runtime values flow through the
  * `configForms` service keyed by the composition entry id. The former
  * per-plugin settings card was dropped with that migration (its seat no
  * longer exists in 0.1.7), including its llm-pi-ai model-capability editor.
+ * The family settings section below and the Plugins-page
+ * `plugins.bundle.config` card (same component, same inject factory) give
+ * them a client face on hosts that declare the seat.
  *
  * All @deepseek-ai/* imports are type-only: collaboration happens through
  * cordis services (`configForms`) and slot registration only (client bundle
@@ -44,6 +47,14 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     'dsh-family.tab': { kind: 'list'; scope: 'root' }
+    /**
+     * Plugins-page configuration card (official ui-plugin-manager contract):
+     * keyed by the bundle's package name, rendered on the bundle's detail page
+     * with `{ view: 'page' }` owner props. Declared here because community
+     * plugins don't import the official package's client types — the same
+     * merge pattern as dsh-tidy-display's settings-slots.ts.
+     */
+    'plugins.bundle.config': { kind: 'keyed'; scope: 'root'; owner: Record<string, unknown> }
   }
 }
 
@@ -196,4 +207,20 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
       children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
     }, FamilySettingsSection)
   })
+
+  // Plugins-page configuration card: the Plugins page renders no volatile
+  // config form on its own — the bundle's detail page mounts the
+  // `plugins.bundle.config` keyed slot, dispatched by the package name, and
+  // without a registration here the page shows no configuration card at all.
+  // SAME component and SAME inject factory as the family section above, so
+  // both surfaces stay one source of truth. On hosts whose slot map does not
+  // declare the seat this inject idles harmlessly (an undischarged inject
+  // never blocks the client half — same story as the `dsh-family.tab` note
+  // above).
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: 'dsh-thinking-levels',
+    locale: NS,
+    inject: sectionInjected,
+  }, FamilySettingsSection))
 }
