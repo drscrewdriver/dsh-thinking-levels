@@ -271,8 +271,12 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     // CHECK the model-seat takeover removed. The projection seat arrives via
     // the slot's injected props; hosts without it render nothing (the ring is
     // a 0.2.0 feature — on the ≤0.1.6 lines the seat props lack the hook).
-    ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
-      name: 'conversation.input.right',
+    // The ring rides `conversation.composer.dock` — the host renders this seat
+    // as the ContextMeter's own sibling in the trailing dock container, so the
+    // ring lands at the FAR RIGHT of the tool row, exactly where the shipped
+    // meter sat.
+    ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+      name: 'conversation.composer.dock',
       id: 'context-check-ring',
       order: 5,
     }, ContextRing))

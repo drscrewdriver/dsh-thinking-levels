@@ -52,7 +52,23 @@ export interface ContextBreakdownLike {
  */
 type ProjectionHook = <T>(key: string) => T | undefined
 
-/** Full props: the session seats the harness injects into this list entry. */
+/** The cache-billing projection slice (better-er/dsh-cache-billing, optional). */
+export interface CacheBillingLike {
+  available?: boolean
+  cost?: number
+  missCost?: number
+  outputCost?: number
+  cacheReadTokens?: number
+  turnCost?: number
+  sessionCacheHitCost?: number
+  sessionMissCost?: number
+  sessionOutputCost?: number
+  sessionRounds?: number
+  currency?: string
+  modelMatched?: boolean
+}
+
+/** Full props: the session seats the harness injects into this entry. */
 export interface ContextRingProps {
   /** The session id of the slot's owning conversation (standard seat). */
   sessionId?: string
@@ -74,6 +90,13 @@ interface CopyShape {
   warning: string
   aria: (percent: string) => string
   unset: string
+  billing: string
+  billStep: string
+  billTurn: string
+  billSession: string
+  billCacheRead: string
+  billPriced: string
+  billEstimate: string
 }
 
 const COPY: Record<'zh' | 'en', CopyShape> = {
@@ -89,6 +112,13 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     warning: '上下文即将用尽——建议压缩上下文或开启新会话。',
     aria: (percent: string) => `上下文已用 ${percent}`,
     unset: '本轮尚未产生用量',
+    billing: '缓存账单',
+    billStep: '当前步',
+    billTurn: '当前轮',
+    billSession: '会话累计',
+    billCacheRead: '缓存命中',
+    billPriced: '按 DeepSeek-V4.1-Flash 计价',
+    billEstimate: '按 Flash 价估算',
   },
   en: {
     title: 'Context check',
@@ -102,6 +132,13 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     warning: 'Context is nearly full — compact the context or start a new session.',
     aria: (percent: string) => `${percent} of context used`,
     unset: 'No usage yet in this turn',
+    billing: 'Cache billing',
+    billStep: 'This step',
+    billTurn: 'This turn',
+    billSession: 'Session total',
+    billCacheRead: 'Cache read',
+    billPriced: 'priced as DeepSeek-V4.1-Flash',
+    billEstimate: 'estimated at Flash prices',
   },
 } as const
 
@@ -221,6 +258,11 @@ export function formatTokens(n: number): string {
   return String(Math.round(n))
 }
 
+/** Format an amount: four decimals for a step, fewer for the totals. */
+function formatMoney(amount: number, digits: number): string {
+  return `¥${amount.toFixed(digits)}`
+}
+
 /** The SVG ring: one background track + one pressure arc. */
 function Ring({ percent, color }: { percent: number; color: string }): JSX.Element {
   const r = (RING_SIZE - RING_STROKE) / 2
@@ -256,6 +298,9 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
   const { useProjection } = props
   const pressure = useProjection?.('contextPressure') as ContextPressureLike | undefined
   const breakdown = useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
+  // The billing section appears only when dsh-cache-billing is composed (its
+  // projection unit feeds the numbers) — absent projection, absent section.
+  const billing = useProjection?.('cacheBilling') as CacheBillingLike | undefined
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
@@ -343,8 +388,34 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
               {rows.map(row => <BreakdownRow key={row.label} label={row.label} value={row.value as number} color={row.color} />)}
             </dl>
           )}
+          {billing?.available === true && (
+            <dl style={{ margin: '4px 0 0', padding: '6px 0 0', borderTop: '1px solid var(--dsw-alias-border-l3, rgba(127,127,127,0.18))' }}>
+              <dt style={{ ...rowLabelStyle, fontWeight: 600 }}>{c.billing}</dt>
+              <div style={rowStyle}>
+                <dt style={rowLabelStyle}>{c.billStep}</dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatMoney(billing.cost ?? 0, 4)}</dd>
+              </div>
+              <div style={rowStyle}>
+                <dt style={rowLabelStyle}>{c.billTurn}</dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatMoney(billing.turnCost ?? 0, 3)}</dd>
+              </div>
+              <div style={rowStyle}>
+                <dt style={rowLabelStyle}>{c.billSession}</dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>
+                  {formatMoney((billing.sessionCacheHitCost ?? 0) + (billing.sessionMissCost ?? 0) + (billing.sessionOutputCost ?? 0), 2)}
+                </dd>
+              </div>
+              <div style={rowStyle}>
+                <dt style={rowLabelStyle}>{c.billCacheRead}</dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatTokens(billing.cacheReadTokens ?? 0)} tok</dd>
+              </div>
+            </dl>
+          )}
           {percent >= 85 && <div style={warnStyle}>{c.warning}</div>}
-          <div style={footStyle}>{c.window}: {hasReading ? (window_ as number).toLocaleString() : c.unset}</div>
+          <div style={footStyle}>
+            {c.window}: {hasReading ? (window_ as number).toLocaleString() : c.unset}
+            {billing?.available === true ? ` · ${billing.modelMatched === false ? c.billEstimate : c.billPriced}` : ''}
+          </div>
         </div>
       )}
     </div>
