@@ -98,10 +98,10 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(declared).toEqual(['conversation.input.model', 'conversation.input.right', 'settings.section', 'plugins.bundle.config'])
     expect(registrations).toHaveLength(4)
     expect(registrations[0]!.slot).toBe('conversation.input.model')
-    expect(registrations[1]!.slot).toBe('settings.section')
-    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
-    expect(registrations[3]!.slot).toBe('conversation.input.right')
-    expect(registrations[3]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[1]!.slot).toBe('conversation.input.right')
+    expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[2]!.slot).toBe('settings.section')
+    expect(registrations[3]!.slot).toBe('plugins.bundle.config')
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
@@ -111,9 +111,10 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     // plugins-page card, and the context-check ring riding its seat) still
     // registers — none of them depend on modelDirectories.
     expect(registrations).toHaveLength(3)
-    expect(registrations[0]!.slot).toBe('settings.section')
-    expect(registrations[1]!.slot).toBe('plugins.bundle.config')
-    expect(registrations[2]!.slot).toBe('conversation.input.right')
+    expect(registrations[0]!.slot).toBe('conversation.input.right')
+    expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[1]!.slot).toBe('settings.section')
+    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
     // The projection hook rides the right seat on every generation; only the
     // ring (0.2.0 projection consumers) gates on the data being present.
   })
