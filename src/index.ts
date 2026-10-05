@@ -40,6 +40,7 @@ import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
   TAKEOVER_NAMESPACE,
+  takeoverPatch,
   takeoverProvidersOf,
   withOfficialCompatFixes,
   type PiAiSection,
@@ -75,6 +76,13 @@ export interface ThinkingLevelsConfig {
   allowDowngrade: boolean
   /** Scheduler preference: allow lifting above the `high` hub to `max`. */
   allowUpgrade: boolean
+  /**
+   * Master takeover switch: mirrored into the openai-completions transport's
+   * own section (`llm-openai-completions.enabled`) when it flips. The
+   * transport's dispatch judgment stays single-source in ITS section; this
+   * flag is the control-layer UI for it.
+   */
+  takeover: boolean
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
 }
@@ -92,6 +100,7 @@ export const Config: z<ThinkingLevelsConfig> = z.object({
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto'),
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
+  takeover: z.boolean().default(false),
   models: z.dict(z.object({
     // schemastery fields are optional unless marked `.required()`.
     vision: z.boolean(),
@@ -107,6 +116,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   level: 'auto',
   allowDowngrade: true,
   allowUpgrade: false,
+  takeover: false,
   models: {},
 }
 
@@ -441,11 +451,37 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // and every llm-pi-ai settings update so a Settings → Models edit propagates.
   // The write is identity-gated, so the re-entry triggered by our own update
   // settles immediately).
+  // Takeover mirror: this plugin's `takeover` switch (registered settings
+  // section) is the control-layer master; the write lands in the transport's
+  // OWN section (`llm-openai-completions.enabled`). On this line the settings
+  // face is imperative and cross-namespace get/update are live — the same
+  // channel the compat bridge uses. Writes fire only on divergence.
+  const syncTakeover = (): void => {
+    syncTail = syncTail.then(async () => {
+      const settings = ctx.get('settings') as {
+        get?: (ns: string) => unknown
+        update?: (ns: string, patch: unknown) => Promise<unknown>
+      } | undefined
+      const section = settings?.get?.(TAKEOVER_NAMESPACE) as { enabled?: unknown } | undefined
+      const patch = takeoverPatch(section, current().takeover)
+      if (patch === undefined) return
+      await settings?.update?.(TAKEOVER_NAMESPACE, patch)
+      ctx.logger?.info?.('[thinking-levels] takeover switch %s written to %s.enabled', String(current().takeover), TAKEOVER_NAMESPACE)
+    }).catch((error) => {
+      ctx.logger?.warn?.('[thinking-levels] takeover mirror write rejected (schema gate); kept previous section', error)
+    })
+  }
+
   syncDeveloperRole()
+  syncTakeover()
   const onSyncAny = ctx.on as unknown as (event: string, listener: (...args: never[]) => unknown) => void
-  onSyncAny('llm/adapters-updated', () => syncDeveloperRole())
+  onSyncAny('llm/adapters-updated', () => {
+    syncDeveloperRole()
+    syncTakeover()
+  })
   onSyncAny('settings/document-updated', (ns: string) => {
     if (ns === PI_AI_NAMESPACE) syncDeveloperRole()
+    syncTakeover()
   })
 
   // Inject the level decision into every model request of a step.
