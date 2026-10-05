@@ -67,7 +67,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
  * each get their own inject that simply never fires where the service is
  * missing — shape-detected availability, never version-guessed.
  */
-(globalThis as Record<string, unknown>).__TL_BUILD_MARKER__ = "ring-v3-instrumented"
 export const inject = ['slots', 'locale']
 
 /**
