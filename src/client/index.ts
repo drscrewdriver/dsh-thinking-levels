@@ -173,6 +173,7 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
   const sectionInjected = (): FamilySectionInjected => ({
     scope: ctx.configForms.get<ThinkingLevelsConfig>('dsh-thinking-levels'),
     piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
+    ocScope: ctx.configForms.get<unknown>('llm-openai-completions'),
     hooks: {
       tabs: {
         getSnapshot: () => {

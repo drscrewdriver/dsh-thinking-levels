@@ -13,6 +13,23 @@ All notable changes to `dsh-thinking-levels` are documented here.
 
 ## [Unreleased]
 
+### Added — effort slider (whale-girl runner thumb) — 4.1.0
+
+- **The model panel's per-line effort `<select>` became a segment slider.** Click a line's
+  effort chip and a full-width slider expands under that line: the stop count adapts to the
+  model's advertised efforts, `auto` is pinned leftmost (then `off`/`on`, the strength
+  gradient, unknown gateway wire values last), the thumb follows the pointer continuously
+  and snaps on release (one route write per gesture), ←/→/Home/End step stop-by-stop, and
+  the old "Provider default" reset survives as the ↺ button of the slider row.
+- **Whale-girl runner thumb on DeepSeek lines.** Official DeepSeek routes and gateway
+  models whose id/name says deepseek run an 8-frame side-run strip as the thumb (ping-pong
+  loop, 720 ms per direction at rest / 420 ms while dragging, frozen under
+  `prefers-reduced-motion`); every other model keeps a plain white knob. Community
+  whale-girl artwork sourced from HanaAyane/dsh-reasoning-effort
+  (`assets/chibi-runner-strip.png`); regenerate via `python tools/whale-mascot.py`.
+- **Pure slider helpers** exported from `thinking-level` (`orderEffortsForSlider`,
+  `nearestEffortStopIndex`) with unit coverage.
+
 ## [4.0.0] — 2026-09-29
 
 ### Changed — DSH 0.2.0-rc compatibility

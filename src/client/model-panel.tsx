@@ -24,6 +24,15 @@
  *   the catalog model's `contextWindow` when listed, otherwise caps via
  *   `defaultContextWindow`.
  *
+ * Per-line reasoning effort (the 改造 panel): the retired per-line `<select>`
+ * became an effort chip that expands an inline segment slider
+ * (`EffortSlider`) under the model line — stop count adapts to the model's
+ * advertised efforts, `auto` sits leftmost, the thumb follows the pointer and
+ * snaps on release. DeepSeek lines run the whale-girl runner strip as the
+ * thumb (`isDeepSeekLine`); every other model gets the plain white knob. The
+ * select's "provider default" reset survives as the ↺ button of the slider
+ * row (submits the declared `defaultEffort`).
+ *
  * Graceful degradation: when the harness provides no `modelDirectories`
  * service (older lines) the registration is skipped entirely and the shipped
  * model selector stays untouched.
@@ -31,6 +40,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { SettingsScope } from './scope-face.ts'
+import { EffortSlider } from './effort-slider.tsx'
+import { orderEffortsForSlider } from '../thinking-level.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 
 /** The official DeepSeek provider route owned by the llm-deepseek adapter. */
@@ -39,6 +50,15 @@ const DEEPSEEK_PROVIDER = 'deepseek-official'
 const DEEPSEEK_DEFAULT_WINDOW = 1_000_000
 /** Slider stop an unset window parks on: the thumb needs a position, the readout stays "unset". */
 const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value === 256_000)
+
+/**
+ * Whether one model line gets the whale-girl runner thumb: the official
+ * DeepSeek route plus any gateway model whose id or display name says
+ * deepseek (custom "DeepSeek"-named providers). Every other line gets the
+ * plain white knob.
+ */
+const isDeepSeekLine = (provider: string, modelId: string, name: string | undefined): boolean =>
+  provider === DEEPSEEK_PROVIDER || /deepseek/i.test(modelId) || /deepseek/i.test(name ?? '')
 
 /** Snapshot shown when the session's directory face is unavailable. */
 const UNAVAILABLE_STATE: ModelDirectoryState = {
@@ -116,8 +136,10 @@ const popStyle: CSSProperties = {
   position: 'absolute',
   bottom: 'calc(100% + 8px)',
   left: '0',
-  zIndex: 1200,
-  width: '320px',
+  // Above host chrome (the composer tool rows render z-indexed FABs); capped
+  // by the viewport so a narrow chat column can still reach every row.
+  zIndex: 1300,
+  width: 'min(320px, calc(100vw - 24px))',
   padding: '8px',
   background: 'var(--dsw-alias-bg-layer-3)',
   color: 'var(--dsw-alias-label-primary)',
@@ -129,7 +151,7 @@ const popStyle: CSSProperties = {
   gap: '4px',
 }
 
-const backdropStyle: CSSProperties = { position: 'fixed', inset: 0, zIndex: 1199 }
+const backdropStyle: CSSProperties = { position: 'fixed', inset: 0, zIndex: 1299 }
 
 const modelsStyle: CSSProperties = { maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }
 
@@ -221,20 +243,23 @@ const chipStyle: CSSProperties = {
 
 const chipDisabledStyle: CSSProperties = { ...chipStyle, cursor: 'default', opacity: 0.55 }
 
-const selectStyle: CSSProperties = {
+/** The per-line effort chip (ex-select): shows the line's effective level name. */
+const effortChipStyle: CSSProperties = {
   flex: '0 0 auto',
   height: '18px',
   maxWidth: '96px',
-  padding: '0 2px',
+  padding: '0 6px',
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '5px',
   background: 'var(--dsw-alias-bg-layer-1)',
   color: 'var(--dsw-alias-label-secondary)',
-  font: 'inherit',
   fontSize: '11px',
   lineHeight: '16px',
   cursor: 'pointer',
-  colorScheme: 'dark light',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  userSelect: 'none',
 }
 
 const editorRowStyle: CSSProperties = {
@@ -248,6 +273,10 @@ const editorRowStyle: CSSProperties = {
   borderRadius: '6px',
   background: 'var(--dsw-alias-bg-layer-1)',
   fontSize: '12px',
+  // Stack above the neighboring model rows: the slider's girl/flare layers
+  // must not lose the paint order against the row containers below it.
+  position: 'relative',
+  zIndex: 2,
 }
 
 const labelStyle: CSSProperties = {
@@ -259,15 +288,17 @@ const labelStyle: CSSProperties = {
 const sliderStyle: CSSProperties = {
   flex: '1 1 auto',
   minWidth: '48px',
+  maxWidth: '170px',
   height: '14px',
   margin: '0',
+  padding: '0',
   accentColor: 'var(--dsw-alias-state-business-primary)',
   cursor: 'pointer',
 }
 
 const valueStyle: CSSProperties = {
   flex: '0 0 auto',
-  minWidth: '36px',
+  minWidth: '24px',
   textAlign: 'right',
   color: 'var(--dsw-alias-label-primary)',
   fontFamily: 'var(--ds-font-family-code, monospace)',
@@ -410,7 +441,9 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
 
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  const [editing, setEditing] = useState<{ provider: string; model: string } | null>(null)
+  // One inline editor at a time: the context-window editor or the effort slider,
+  // expanded under their own model line (the row wraps it onto its own line).
+  const [editing, setEditing] = useState<{ provider: string; model: string; kind: 'context' | 'effort' } | null>(null)
   const [draft, setDraft] = useState<number | null>(null)
   const [custom, setCustom] = useState(false)
   const [raw, setRaw] = useState('')
@@ -526,11 +559,19 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   }
 
   const openEditor = (provider: string, model: string): void => {
-    setEditing({ provider, model })
+    setEditing({ provider, model, kind: 'context' })
     setDraft(null)
     setCustom(false)
     setRaw('')
     setError(null)
+  }
+
+  /** Toggle one line's inline effort slider (the ex-select). */
+  const toggleEffortEditor = (provider: string, model: string): void => {
+    setEditing(previous =>
+      previous !== null && previous.provider === provider && previous.model === model && previous.kind === 'effort'
+        ? null
+        : { provider, model, kind: 'effort' })
   }
 
   const toggleProvider = (provider: string): void => {
@@ -616,12 +657,25 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                         const active = activeModel === model.id
                         const lineWritable = writableLine(group.id, model.id)
                         const lineWindow = windowOf(group.id, model.id)
-                        const isEditing = editing !== null
+                        const isContextEditing = editing !== null
                           && editing.provider === group.id
                           && editing.model === model.id
+                          && editing.kind === 'context'
+                        const isEffortEditing = editing !== null
+                          && editing.provider === group.id
+                          && editing.model === model.id
+                          && editing.kind === 'effort'
                         const lineEffort = active
                           ? state.current?.reasoningEffort ?? model.reasoning?.defaultEffort
                           : model.reasoning?.defaultEffort
+                        // Slider stops adapt to the model's advertised efforts;
+                        // `auto` (when the directory masks it in) sits leftmost.
+                        const lineStops = model.reasoning === undefined
+                          ? []
+                          : orderEffortsForSlider(model.reasoning.efforts)
+                        const lineEffortName = lineEffort === undefined
+                          ? t('input.effort.default')
+                          : lineStops.find(stop => stop.id === lineEffort)?.name ?? lineEffort
                         return (
                           <div key={group.id + ':' + model.id} style={active ? modelRowActiveStyle : modelRowStyle}>
                             <button
@@ -637,35 +691,56 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                               </span>
                               {active && <span style={checkStyle} aria-hidden="true">✓</span>}
                             </button>
-                            {model.reasoning !== undefined && (
-                              <select
+                            {(model.reasoning?.efforts.length ?? 0) > 0 && (
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 aria-label={t('input.effort.title')}
                                 title={t('input.effort.title')}
-                                style={selectStyle}
-                                disabled={busy}
-                                value={lineEffort ?? ''}
-                                onClick={event => event.stopPropagation()}
-                                onChange={event => {
+                                aria-expanded={isEffortEditing}
+                                style={effortChipStyle}
+                                onClick={event => {
                                   event.stopPropagation()
-                                  const value = event.currentTarget.value
-                                  // '' (provider default) only exists for models declaring a
-                                  // defaultEffort: the host keeps the current effort when a
-                                  // selection omits reasoningEffort, so reset submits the
-                                  // declared default instead.
-                                  const target = value === '' ? model.reasoning?.defaultEffort : value
-                                  if (target !== undefined) chooseEffort(group.id, model.id, target)
+                                  if (!busy) toggleEffortEditor(group.id, model.id)
+                                }}
+                                onKeyDown={event => {
+                                  if (event.key !== 'Enter' && event.key !== ' ') return
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  if (!busy) toggleEffortEditor(group.id, model.id)
                                 }}
                               >
+                                {lineEffortName}
+                              </span>
+                            )}
+                            {isEffortEditing && model.reasoning !== undefined && (
+                              <div style={editorRowStyle} onClick={event => event.stopPropagation()}>
+                                <span style={labelStyle}>{t('input.effort.title')}</span>
+                                <EffortSlider
+                                  stops={lineStops}
+                                  value={lineEffort}
+                                  mascot={isDeepSeekLine(group.id, model.id, model.name)}
+                                  disabled={busy}
+                                  onCommit={id => chooseEffort(group.id, model.id, id)}
+                                  t={t}
+                                />
                                 {model.reasoning.defaultEffort !== undefined && (
-                                  <option value="">{t('input.effort.default')}</option>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    aria-label={t('input.effort.reset')}
+                                    title={t('input.effort.reset')}
+                                    style={actionButtonStyle}
+                                    onClick={event => {
+                                      event.stopPropagation()
+                                      const target = model.reasoning?.defaultEffort
+                                      if (target !== undefined) chooseEffort(group.id, model.id, target)
+                                    }}
+                                  >
+                                    ↺
+                                  </button>
                                 )}
-                                {model.reasoning.defaultEffort === undefined && (
-                                  <option value="" hidden>{t('input.effort.default')}</option>
-                                )}
-                                {model.reasoning.efforts.map(level => (
-                                  <option key={level.id} value={level.id}>{level.name}</option>
-                                ))}
-                              </select>
+                              </div>
                             )}
                             <span
                               role="button"
@@ -678,7 +753,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                               onClick={event => {
                                 event.stopPropagation()
                                 if (!lineWritable || busy) return
-                                if (isEditing) { setEditing(null); return }
+                                if (isContextEditing) { setEditing(null); return }
                                 openEditor(group.id, model.id)
                               }}
                               onKeyDown={event => {
@@ -693,7 +768,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                                 ? t('input.context.unset')
                                 : formatContextWindow(lineWindow)}
                             </span>
-                            {isEditing && (
+                            {isContextEditing && (
                               <div style={editorRowStyle}>
                                 <span style={labelStyle} title={t('input.context.globalHint')}>
                                   {t('model.panel.window')}

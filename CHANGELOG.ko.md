@@ -13,6 +13,16 @@
 
 ## [Unreleased]
 
+### 추가 — 사고 레벨 슬라이더(고래소녀 러너 썸) — 4.1.0
+
+- 각 행의 사고 레벨 `<select>`를 세그먼트 슬라이더로 개편: 스톱 수는 모델이 광고하는
+  레벨에 적응, `auto`는 항상 최좌측, 썸은 포인터 연속 추적 후 놓을 때 스냅,
+  ←/→/Home/End 지원, "공급자 기본값" 초기화는 ↺ 버튼으로 존속.
+- DeepSeek 계열 행은 8프레임 측면 주행 입썸을 썸으로 사용(핑퐁 루프, 대기 720ms/드래그 중
+  420ms, `prefers-reduced-motion` 시 정지). 소스: HanaAyane/dsh-reasoning-effort,
+  `python tools/whale-mascot.py`로 재생성.
+- `thinking-level`에 `orderEffortsForSlider` / `nearestEffortStopIndex` 추가(테스트 포함).
+
 ## [4.0.0] — 2026-09-29
 
 ### 변경 — DSH 0.2.0-rc 호환

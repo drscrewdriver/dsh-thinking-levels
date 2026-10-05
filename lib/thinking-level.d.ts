@@ -150,3 +150,30 @@ export declare function clampToEfforts(level: EffortId, efforts: readonly string
 export declare function resolveEffortInjection(input: EffortInjectionInput): EffortInjectionDecision;
 /** Wall-clock delta of one tool call, for the timing telemetry. */
 export declare function toolDurationMs(startedAt: number, finishedAt: number): number;
+/**
+ * Display rank of the effort slider stops: `auto` is the scheduler sentinel and
+ * sits LEFTMOST regardless of whether the model allows disabling thinking;
+ * `off` / `on` follow, then the strength gradient. Ids outside the standard set
+ * (custom gateway wire values such as `ultra`) rank last, in arrival order.
+ */
+export declare const EFFORT_SLIDER_RANK: Readonly<Record<string, number>>;
+/**
+ * Order a model's advertised efforts for the slider track (left → right).
+ * Stable sort: unknown ids keep their relative arrival order after the known
+ * ranks, so a gateway's custom wire values are never dropped or reordered
+ * against each other.
+ */
+export declare function orderEffortsForSlider<T extends {
+    id: string;
+}>(efforts: readonly T[]): T[];
+/**
+ * Map the line's effective effort to a stop index of the ordered track: exact
+ * id match wins; an unmatched id (e.g. a defaultEffort the track does not
+ * advertise) parks on the nearest stop by display rank, ties resolving to the
+ * stronger level (higher index); an absent value parks on stop 0 (the neutral
+ * left end — `auto` when advertised) and an empty track always yields 0, so the
+ * caller never faces an out-of-range thumb.
+ */
+export declare function nearestEffortStopIndex(stops: readonly {
+    id: string;
+}[], value: string | undefined): number;

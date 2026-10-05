@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  assertEffortId, decideEffort, isEffortId, reasoningEffortSupported, resolveEffortInjection,
-  toolDurationMs, type EffortDecisionInput, type EffortInjectionInput,
+  assertEffortId, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
+  reasoningEffortSupported, resolveEffortInjection, toolDurationMs,
+  type EffortDecisionInput, type EffortInjectionInput,
 } from '../src/thinking-level.ts'
 
 const base = (over: Partial<EffortDecisionInput>): EffortDecisionInput => ({
@@ -209,5 +210,58 @@ describe('resolveEffortInjection — model capability guard', () => {
       .toEqual({ inject: true, level: 'medium' })
     expect(resolveEffortInjection(base({ efforts: ['off', 'minimal', 'medium', 'high', 'xhigh', 'max'], seedEffort: 'xhigh' })))
       .toEqual({ inject: true, level: 'xhigh' })
+  })
+})
+
+describe('orderEffortsForSlider', () => {
+  it('pins auto leftmost even when off is offered alongside', () => {
+    const ordered = orderEffortsForSlider([{ id: 'off' }, { id: 'high' }, { id: 'auto' }])
+    expect(ordered.map(stop => stop.id)).toEqual(['auto', 'off', 'high'])
+  })
+
+  it('pins auto leftmost when thinking cannot be disabled at all', () => {
+    const ordered = orderEffortsForSlider([{ id: 'high' }, { id: 'auto' }, { id: 'max' }])
+    expect(ordered.map(stop => stop.id)).toEqual(['auto', 'high', 'max'])
+  })
+
+  it('sorts the full standard gradient after off/on', () => {
+    const ids = ['max', 'low', 'auto', 'off', 'medium', 'on', 'minimal', 'xhigh', 'high']
+    const ordered = orderEffortsForSlider(ids.map(id => ({ id })))
+    expect(ordered.map(stop => stop.id))
+      .toEqual(['auto', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+  })
+
+  it('keeps unknown wire values right-most in arrival order', () => {
+    const ordered = orderEffortsForSlider([{ id: 'ultra' }, { id: 'off' }, { id: 'mega' }, { id: 'auto' }])
+    expect(ordered.map(stop => stop.id)).toEqual(['auto', 'off', 'ultra', 'mega'])
+  })
+
+  it('returns an empty track untouched', () => {
+    expect(orderEffortsForSlider([])).toEqual([])
+  })
+})
+
+describe('nearestEffortStopIndex', () => {
+  const stops = [{ id: 'auto' }, { id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }]
+
+  it('matches an advertised id exactly', () => {
+    expect(nearestEffortStopIndex(stops, 'low')).toBe(2)
+    expect(nearestEffortStopIndex(stops, 'max')).toBe(4)
+  })
+
+  it('parks an unadvertised value on the rank-nearest stop, ties toward the stronger level', () => {
+    expect(nearestEffortStopIndex(stops, 'medium')).toBe(3)
+    expect(nearestEffortStopIndex(stops, 'minimal')).toBe(2)
+    expect(nearestEffortStopIndex([{ id: 'low' }, { id: 'high' }], 'medium')).toBe(1)
+  })
+
+  it('lands unknown ids at the right end and absence at the left end', () => {
+    expect(nearestEffortStopIndex(stops, 'ultra')).toBe(4)
+    expect(nearestEffortStopIndex(stops, undefined)).toBe(0)
+  })
+
+  it('degenerate tracks always yield 0', () => {
+    expect(nearestEffortStopIndex([], 'high')).toBe(0)
+    expect(nearestEffortStopIndex([], undefined)).toBe(0)
   })
 })

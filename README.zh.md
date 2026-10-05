@@ -64,6 +64,16 @@
 - 官方预设：`Off / High / Max`（官方 DeepSeek 风格）
 - 通用预设：`Off / Low / Medium / High`
 
+## 思考强度滑块（逐模型行）
+
+模型面板里的逐行思考强度下拉框已改造为**分段滑块**：点击模型行的档位 chip（显示当前生效档位或「提供方默认」），该行下方展开全宽滑动条。分段数随模型广告的档位自适应——toggle 型只有两档、官方 `off/low/high/max`、网关自定义线上值均可；目录带 `auto` mask 时 **auto 恒在最左**，其后依次 off/on 与强度递增档，未知线上值排最末。
+
+交互对齐 dsh-reasoning-effort 已批准的视觉基线：滑钮拖动时连续跟手、**松手吸附**提交（每次手势只写一次路由）；普通滑钮全主题纯白；两端刻度处滑钮完整可见；键盘 ←/→/Home/End 逐档移动。原「提供方默认」重置保留为滑块行的 ↺ 按钮。
+
+DeepSeek 行（官方路由，或 id/名称含 deepseek 的网关模型）滑钮为**鲸鱼娘奔跑立绘**：8 帧侧面奔跑 strip，乒乓循环（静止 720ms/单向，拖动中 420ms/单向），`prefers-reduced-motion` 下冻结；其他模型为普通白色圆钮。
+
+立绘为社区鲸鱼娘二创，来源 [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort)（`assets/chibi-runner-strip.png`）；用 `python tools/whale-mascot.py` 可重新生成内联素材。
+
 ## 模型能力守卫（v0.5.0）
 
 插件**绝不向未声明推理能力的模型发送 `reasoning_effort`**。自定义 openai-completions 路由（如未配置 `reasoningEfforts` 的本地 Qwen3.6）通过 `ctx.llm.resolveModelInfo` 被判定为非推理模型，任何档位（继承的或调度产生的）都会被**剥离**而不是下发——dsh 的逐请求 `UNSUPPORTED_REASONING_EFFORT` 拒绝因此不会触发。不支持的字段绝不打进 API。

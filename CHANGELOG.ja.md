@@ -13,6 +13,16 @@
 
 ## [Unreleased]
 
+### 追加 — 思考レベルスライダー（鲸魚娘ランナーつまみ） — 4.1.0
+
+- 各行の思考レベル `<select>` をセグメントスライダーに改修：ストップ数はモデルの広告
+  レベルに追従、`auto` は常に最左、つまみはポインターに連続追従・リリースでスナップ、
+  ←/→/Home/End 対応、「プロバイダーの既定」リセットは ↺ ボタンとして存続。
+- DeepSeek 系の行は 8 フレームの側面ランニング立絵をつまみに採用（ピンポンループ、静止
+  720ms／ドラッグ中 420ms、`prefers-reduced-motion` で停止）。素材は
+  HanaAyane/dsh-reasoning-effort 提供、`python tools/whale-mascot.py` で再生成。
+- `thinking-level` に `orderEffortsForSlider` / `nearestEffortStopIndex` を追加（テスト付き）。
+
 ## [4.0.0] — 2026-09-29
 
 ### 変更 — DSH 0.2.0-rc 互換

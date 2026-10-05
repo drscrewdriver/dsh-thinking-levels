@@ -9,6 +9,18 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 
 ## [Unreleased]
 
+### Neu — Anstrengungs-Slider (Wal-Mädchen-Läufer-Daumen) — 4.1.0
+
+- Das pro-Zeile `<select>` für Denkstufen wurde zu einem **segmentierten Slider**: Die
+  Stufenzahl passt sich den angezeigten Levels an, `auto` bleibt ganz links, der Daumen
+  folgt dem Zeiger kontinuierlich und rastet beim Loslassen ein, ←/→/Home/End-Tastatur,
+  der alte „Anbieterstandard“-Reset bleibt als ↺-Button erhalten.
+- DeepSeek-Zeilen zeigen den **Wal-Mädchen-Läufer** (8-Frames-Streifen, Ping-Pong-Schleife,
+  720 ms Ruhe / 420 ms beim Ziehen, eingefroren bei `prefers-reduced-motion`); alle anderen
+  behalten den weißen Knopf. Community-Artwork von HanaAyane/dsh-reasoning-effort,
+  Regenerierung via `python tools/whale-mascot.py`.
+- Reine Helfer `orderEffortsForSlider` / `nearestEffortStopIndex` mit Tests exportiert.
+
 ## [4.0.0] — 2026-09-29
 
 ### Geändert — DSH-0.2.0-rc-Kompatibilität

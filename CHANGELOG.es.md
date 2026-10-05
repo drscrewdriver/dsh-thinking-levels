@@ -9,6 +9,18 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 
 ## [Unreleased]
 
+### Añadido — deslizador de nivel de razonamiento (pulgar ballena corredora) — 4.1.0
+
+- El `<select>` de esfuerzo de cada línea pasa a un **deslizador segmentado**: el número de
+  paradas se adapta a los niveles del modelo, `auto` queda siempre a la izquierda, el pulgar
+  sigue el puntero continuamente y se ajusta al soltar, ←/→/Home/End por teclado, el
+  reinicio «predeterminado del proveedor» sobrevive como botón ↺.
+- Las líneas DeepSeek muestran la **ballena corredora** (tira de 8 fotogramas, bucle
+  ping-pong, 720 ms en reposo / 420 ms al arrastrar, congelada con
+  `prefers-reduced-motion`); los demás modelos mantienen el pulgar blanco. Arte de la
+  comunidad de HanaAyane/dsh-reasoning-effort, regenerable con `python tools/whale-mascot.py`.
+- Helpers puros `orderEffortsForSlider` / `nearestEffortStopIndex` exportados con pruebas.
+
 ## [4.0.0] — 2026-09-29
 
 ### Cambiado — compatibilidad con DSH 0.2.0-rc

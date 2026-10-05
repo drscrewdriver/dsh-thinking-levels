@@ -276,17 +276,24 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
     }
   }, [open])
 
+  // Fail-VISIBLE, deliberately unlike the retired pill: a hidden control is
+  // indistinguishable from a dead registration, which cost a debug round-trip
+  // once already. Without a projection seat or a reading, the ring renders
+  // dimmed at 0% with the caption saying why, instead of disappearing.
+  const hasSeat = typeof useProjection === 'function'
   const used = typeof pressure?.usedTokens === 'number' ? pressure.usedTokens : undefined
   const window_ = typeof pressure?.contextWindow === 'number' ? pressure.contextWindow : undefined
-  if (used === undefined || window_ === undefined || window_ <= 0) return null
+  const hasReading = used !== undefined && window_ !== undefined && window_ > 0
 
   const c = copy()
-  const percent = typeof pressure?.percent === 'number'
-    ? pressure.percent
-    : Math.min(100, Math.round((used / window_) * 100))
+  const percent = hasReading
+    ? (typeof pressure?.percent === 'number'
+      ? pressure.percent
+      : Math.min(100, Math.round(((used as number) / (window_ as number)) * 100)))
+    : 0
   const color = pressureColor(percent)
-  const remaining = Math.max(0, window_ - used)
-  const rows: Array<{ label: string; value: number | undefined; color: string }> = breakdown === undefined
+  const remaining = hasReading ? Math.max(0, (window_ as number) - (used as number)) : 0
+  const rows: Array<{ label: string; value: number | undefined; color: string }> = !hasReading || breakdown === undefined
     ? []
     : [
       { label: c.system, value: breakdown.systemTokens, color: BREAKDOWN_COLORS.system },
@@ -298,16 +305,18 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
     <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         type="button"
-        style={triggerStyle}
-        aria-label={c.aria(`${percent}%`)}
-        aria-haspopup="dialog"
+        style={hasReading ? triggerStyle : { ...triggerStyle, opacity: 0.55 }}
+        aria-label={hasReading ? c.aria(`${percent}%`) : c.unset}
+        aria-haspopup={hasReading ? 'dialog' : undefined}
         aria-expanded={open}
-        onClick={() => setOpen(state => !state)}
+        onClick={() => { if (hasReading) setOpen(state => !state) }}
       >
         <Ring percent={percent} color={color} />
-        <span style={{ ...figureStyle, color }}>{percent}%</span>
+        <span style={{ ...figureStyle, color: hasReading ? color : 'var(--dsw-alias-label-caption, inherit)' }}>
+          {hasReading ? `${percent}%` : '–'}
+        </span>
       </button>
-      {open && (
+      {open && hasReading && (
         <div style={popStyle} role="dialog" aria-label={c.title}>
           <div style={headStyle}>
             {c.title}
@@ -327,7 +336,7 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
             </dl>
           )}
           {percent >= 85 && <div style={warnStyle}>{c.warning}</div>}
-          <div style={footStyle}>{c.window}: {window_.toLocaleString()} tok</div>
+          <div style={footStyle}>{c.window}: {hasReading ? (window_ as number).toLocaleString() : c.unset}</div>
         </div>
       )}
     </div>

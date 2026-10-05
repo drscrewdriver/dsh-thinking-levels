@@ -9,6 +9,18 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 
 ## [Unreleased]
 
+### Ajout — curseur de niveau de réflexion (pouce baleine-runner) — 4.1.0
+
+- Le `<select>` d'effort de chaque ligne devient un **curseur segmenté** : le nombre de
+  crans s'adapte aux niveaux annoncés du modèle, `auto` reste à l'extrême gauche, le pouce
+  suit le pointeur en continu et s'aimante au relâchement, ←/→/Home/End pour le clavier,
+  la réinitialisation « valeur du fournisseur » devient le bouton ↺.
+- Les lignes DeepSeek affichent la **baleine-runner** (bande de 8 images, boucle ping-pong,
+  720 ms au repos / 420 ms en glissement, figée sous `prefers-reduced-motion`) ; les autres
+  gardent un pouce blanc. Artwork communautaire de HanaAyane/dsh-reasoning-effort,
+  régénération via `python tools/whale-mascot.py`.
+- Helpers purs `orderEffortsForSlider` / `nearestEffortStopIndex` exportés avec tests.
+
 ## [4.0.0] — 2026-09-29
 
 ### Modifié — compatibilité DSH 0.2.0-rc

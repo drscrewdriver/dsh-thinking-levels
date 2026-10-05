@@ -9,6 +9,18 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 
 ## [Unreleased]
 
+### Aggiunto — slider del livello di ragionamento (pollice balena-runner) — 4.1.0
+
+- Il `<select>` di riga diventa uno **slider a segmenti**: il numero di tacche si adatta ai
+  livelli dichiarati del modello, `auto` resta all'estrema sinistra, il pollice segue il
+  puntatore e aggancia al rilascio, ←/→/Home/End da tastiera, il reset «predefinito del
+  provider» sopravvive come pulsante ↺.
+- Le righe DeepSeek mostrano la **balena-runner** (striscia di 8 fotogrammi, ciclo
+  ping-pong, 720 ms a riposo / 420 ms durante il trascinamento, bloccata con
+  `prefers-reduced-motion`); gli altri modelli mantengono il pollice bianco. Artwork della
+  community da HanaAyane/dsh-reasoning-effort, rigenerabile con `python tools/whale-mascot.py`.
+- Helper puri `orderEffortsForSlider` / `nearestEffortStopIndex` esportati con test.
+
 ## [4.0.0] — 2026-09-29
 
 ### Modificato — compatibilità DSH 0.2.0-rc

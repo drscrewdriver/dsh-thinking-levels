@@ -93,6 +93,16 @@ For hand-declared `llm-pi-ai` models, map each level to the exact value your gat
 
 > The visual editor for this mapping rode the plugin's settings card, which the DSH 0.1.7 migration removed (the seat no longer exists). Edit the `reasoningEfforts` table through the official Models settings surface instead — the host-side detection and injection read it live either way.
 
+## Effort slider (per model line)
+
+The model panel's per-line effort `<select>` became a **segment slider**: click a line's effort chip (it shows the effective level, or *Provider default*) and a full-width slider expands under that line. The stop count adapts to what the model advertises — two-stop toggle-only models, the official `off/low/high/max` set, custom gateway wire values; `auto` (when the directory carries the mask) is pinned **leftmost**, then `off`/`on`, then the strength gradient, unknown wire values last.
+
+Interaction follows the approved dsh-reasoning-effort visual baseline: the thumb follows the pointer continuously and **snaps on release** (one route write per gesture), the plain thumb is pure white in every theme, the thumb stays fully visible at both endpoints, and ←/→/Home/End step stop-by-stop. The select's *Provider default* reset survives as the ↺ button of the slider row.
+
+DeepSeek lines (the official route, or any gateway model whose id/name says deepseek) run the **whale-girl runner** as the thumb: an 8-frame side-run strip, ping-pong looped (720 ms per direction at rest, 420 ms while dragging), frozen under `prefers-reduced-motion`. Every other model gets the plain knob.
+
+The strip is community whale-girl artwork sourced from [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) (`assets/chibi-runner-strip.png`); regenerate the inlined asset with `python tools/whale-mascot.py`.
+
 ## Context-window presets
 
 The composer tool-row quick control (next to the model/effort select) edits a **context window limit**: preset stops `64K / 128K / 256K / 400K / 512K / 1M`, a custom integer input, and a clear button. The value is written to the `llm-pi-ai` model entry `contextWindow` (integer `2000`–`1000000`) — or to the `llm-deepseek` entry for official DeepSeek models.

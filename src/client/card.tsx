@@ -35,6 +35,13 @@ export interface ThinkingLevelsCardInjected {
   scope: SettingsScope<ThinkingLevelsConfig>
   /** The `llm-pi-ai` settings namespace, read and written for model capabilities. */
   piAiScope: SettingsScope<unknown>
+  /**
+   * The openai-completions transport's section (`llm-openai-completions`):
+   * read for the per-route takeover state, written by the route-head takeover
+   * checkbox (`enabled` + the manual `providers` list). Absent face = the
+   * transport is not composed; the checkbox then renders disabled.
+   */
+  ocScope?: SettingsScope<unknown>
 }
 
 /** Full props: locale seat + the injected scopes. */
@@ -279,6 +286,16 @@ function developerRoleDisabledOf(profile: unknown): boolean {
   return (compat as Record<string, unknown>)['supportsDeveloperRole'] === false
 }
 
+/**
+ * Whether the transport currently takes this route over: its master switch on
+ * AND the route in its manual providers list. Pure membership — the checkbox
+ * is the single per-route truth, so dispatch uses the same set.
+ */
+function takeoverActiveOf(section: { enabled?: unknown; providers?: unknown }, providerId: string): boolean {
+  if (section.enabled !== true) return false
+  return Array.isArray(section.providers) && (section.providers as unknown[]).includes(providerId)
+}
+
 /** One flattened capability entry: a provider's model at an array index. */
 interface CapabilityEntry {
   providerId: string
@@ -365,14 +382,26 @@ function ChevronIcon({ open }: { open: boolean }): JSX.Element {
  */
 function ModelCapabilities(props: {
   scope: SettingsScope<unknown>
+  ocScope?: SettingsScope<unknown>
   t: (key: string) => string
   readonly: boolean
 }): JSX.Element {
-  const { scope, t, readonly } = props
+  const { scope, ocScope, t, readonly } = props
   const snapshot = useSyncExternalStore(
     (listener) => scope.subscribe(listener),
     () => scope.getSnapshot(),
   )
+  // The transport's live section: drives the per-route takeover checkbox.
+  const ocSnapshot = useSyncExternalStore(
+    (listener) => ocScope?.subscribe(listener) ?? (() => {}),
+    () => ocScope !== undefined
+      ? ocScope.getSnapshot()
+      : { status: 'unavailable', value: undefined, revision: undefined, writable: false, base: undefined, user: undefined, mode: 'memory' },
+  )
+  const ocSection = (ocSnapshot.status === 'ready' && typeof ocSnapshot.value === 'object' && ocSnapshot.value !== null
+    ? ocSnapshot.value
+    : {}) as { enabled?: unknown; providers?: unknown }
+  const ocWritable = ocSnapshot.status === 'ready' && ocSnapshot.writable && !readonly
   const unavailable = snapshot.status === 'unavailable'
   const providers = snapshot.status === 'ready' ? providersOf(snapshot) : {}
   // Every llm-pi-ai provider is listed with its models — no list gating: the
@@ -414,6 +443,20 @@ function ModelCapabilities(props: {
       else profile['compat'] = compat
       return current
     })
+  }
+
+  /** Toggle the per-route third-party takeover: writes the transport's own section only. */
+  const toggleTakeover = (providerId: string, next: boolean): void => {
+    if (ocScope === undefined || !ocWritable) return
+    const currentProviders = Array.isArray(ocSection.providers)
+      ? (ocSection.providers as unknown[]).filter((id): id is string => typeof id === 'string')
+      : []
+    const providers = next
+      ? [...new Set([...currentProviders, providerId])]
+      : currentProviders.filter((id) => id !== providerId)
+    const enabled = next ? true : ocSection.enabled === true
+    ocScope.set('providers', providers).catch(() => {})
+    if (ocSection.enabled !== enabled) ocScope.set('enabled', enabled).catch(() => {})
   }
 
   /** Patch one model row of one provider. */
@@ -706,6 +749,18 @@ function ModelCapabilities(props: {
                   />
                   <span>{t('card.capabilities.developerRole')}</span>
                 </label>
+                <label
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', whiteSpace: 'nowrap', color: ocWritable ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-label-disabled, var(--dsw-alias-label-caption))' }}
+                  title={ocScope === undefined ? t('card.capabilities.takeoverHintAbsent') : t('card.capabilities.takeoverHint')}
+                >
+                  <input
+                    type="checkbox"
+                    checked={takeoverActiveOf(ocSection, providerId)}
+                    disabled={readonly || busy || !ocWritable}
+                    onChange={(event) => toggleTakeover(providerId, event.currentTarget.checked)}
+                  />
+                  <span>{t('card.capabilities.takeover')}</span>
+                </label>
                 <p style={providerBadgeStyle}>{providerEntries.length}</p>
               </div>
               {providerOpen
@@ -972,7 +1027,7 @@ function ModelCapabilities(props: {
  * default so the family section reads as an open page of drawers.
  * @param props - locale copy and the injected scopes.
  */
-export function ThinkingLevelsCard({ t, scope, piAiScope }: ThinkingLevelsCardProps): JSX.Element {
+export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLevelsCardProps): JSX.Element {
   const [open, setOpen] = useState(true)
   const snapshot = useSyncExternalStore(
     (listener) => scope.subscribe(listener),
@@ -1091,7 +1146,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope }: ThinkingLevelsCardPr
                   </div>
                   {!snapshot.writable
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
-                  <ModelCapabilities scope={piAiScope} t={t} readonly={readonly} />
+                  <ModelCapabilities scope={piAiScope} ocScope={ocScope} t={t} readonly={readonly} />
                 </>
               )}
           </div>
