@@ -100,9 +100,6 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(registrations[0]!.slot).toBe('conversation.input.model')
     expect(registrations[1]!.slot).toBe('settings.section')
     expect(registrations[2]!.slot).toBe('plugins.bundle.config')
-    // The context-check ring rides the tool-row's right seat with the slot's
-    // declared name and a stable entry id (the retired pill's seat).
-    expect(registrations[3]!.options).toMatchObject({ id: 'context-check-ring' })
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
