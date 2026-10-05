@@ -3,6 +3,7 @@ import {
   declaresThinking,
   identifyTakeoverProviders,
   isCustomOpenAiGateway,
+  takeoverPatch,
   takeoverRoutesOf,
   withOfficialCompatFixes,
   type PiAiSection,
@@ -170,6 +171,27 @@ describe('withOfficialCompatFixes', () => {
     const empty: PiAiSection = { providers: {} }
     expect(withOfficialCompatFixes(empty)).toBe(empty)
     expect(withOfficialCompatFixes(undefined)).toBeUndefined()
+  })
+})
+
+describe('takeoverPatch — the mirror write', () => {
+  it('writes only the enabled flag, never the manual providers list', () => {
+    expect(takeoverPatch({ enabled: false, providers: ['manual'] }, true)).toEqual({ enabled: true })
+    expect(takeoverPatch({ enabled: true, providers: ['manual'] }, false)).toEqual({ enabled: false })
+  })
+
+  it('returns undefined when the section already agrees (identity)', () => {
+    expect(takeoverPatch({ enabled: true, providers: [] }, true)).toBeUndefined()
+    expect(takeoverPatch({ enabled: false, providers: [] }, false)).toBeUndefined()
+  })
+
+  it('returns undefined when the transport is not composed (nothing to drive)', () => {
+    expect(takeoverPatch(undefined, true)).toBeUndefined()
+  })
+
+  it('treats any non-boolean enabled as needing the write', () => {
+    expect(takeoverPatch({ enabled: undefined }, true)).toEqual({ enabled: true })
+    expect(takeoverPatch({}, false)).toEqual({ enabled: false })
   })
 })
 

@@ -42,6 +42,7 @@ import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
   TAKEOVER_NAMESPACE,
+  takeoverPatch,
   takeoverRoutesOf,
   withOfficialCompatFixes,
   type PiAiSection,
@@ -79,6 +80,13 @@ export interface ThinkingLevelsConfig {
   allowDowngrade: boolean | Volatile<boolean>
   /** Scheduler preference: allow lifting above the `high` hub to `max`. */
   allowUpgrade: boolean | Volatile<boolean>
+  /**
+   * Master takeover switch: mirrored into the openai-completions transport's
+   * own section (`llm-openai-completions.enabled`) when it flips. The
+   * transport's dispatch judgment stays single-source in ITS section; this
+   * flag is the control-layer UI for it.
+   */
+  takeover: boolean | Volatile<boolean>
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
 }
@@ -97,6 +105,7 @@ export const Config = z.object({
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto').volatile(),
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
+  takeover: z.boolean().default(false).volatile(),
   models: z.dict(z.object({
     // schemastery fields are optional unless marked `.required()`.
     vision: z.boolean(),
@@ -112,6 +121,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   level: 'auto',
   allowDowngrade: true,
   allowUpgrade: false,
+  takeover: false,
   models: {},
 }
 
@@ -149,6 +159,7 @@ interface LiveConfig {
   level: EffortId
   allowDowngrade: boolean
   allowUpgrade: boolean
+  takeover: boolean
   models: Record<string, ModelCapabilityOverride>
 }
 
@@ -164,6 +175,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     level: readVolatile(config.level, 'auto'),
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
+    takeover: readVolatile(config.takeover, false),
     models: config.models,
   }
 }
@@ -405,6 +417,8 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   const current: () => LiveConfig = () => resolveLiveConfig(config)
   ctx.on('loader/volatile-update', () => {
     assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
+    // A flipped takeover switch mirrors immediately (identity-gated).
+    syncTakeover()
   })
 
   // Official-compat bridge (check branch): write the OFFICIAL compat surface
@@ -441,15 +455,41 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     })
   }
 
+  // Takeover mirror: this plugin's `takeover` switch (settings UI) is the
+  // control-layer master; the write lands in the transport's OWN section
+  // (`llm-openai-completions.enabled`), whose judgment stays single-source.
+  // Cross-plugin writes are schema-gated at the write site (the transport's
+  // `enabled` is volatile) and never touch its other fields. Writes fire only
+  // on divergence (transport absent = nothing to drive), so a manual edit of
+  // the transport section survives until the switch is actually flipped again.
+  const syncTakeover = (): void => {
+    syncTail = syncTail.then(async () => {
+      const patch = takeoverPatch(readSection<{ enabled?: unknown }>(ctx, TAKEOVER_NAMESPACE)?.value, current().takeover)
+      if (patch === undefined) return
+      const settings = ctx.get('settings') as SettingsWriteLike | undefined
+      await settings?.update?.(TAKEOVER_NAMESPACE, patch)
+      ctx.logger?.info?.('[thinking-levels] takeover switch %s written to %s.enabled', String(current().takeover), TAKEOVER_NAMESPACE)
+    }).catch((error) => {
+      ctx.logger?.warn?.('[thinking-levels] takeover mirror write rejected (schema gate); kept previous section', error)
+    })
+  }
+
   // Initial sync (adapters may register later; re-run on every adapters update
   // and every llm-pi-ai settings update so a Settings → Models edit propagates.
   // The write is identity-gated, so the re-entry triggered by our own update
   // settles immediately).
   syncDeveloperRole()
+  syncTakeover()
   const onSyncAny = ctx.on as unknown as (event: string, listener: (...args: never[]) => unknown) => void
-  onSyncAny('llm/adapters-updated', () => syncDeveloperRole())
+  onSyncAny('llm/adapters-updated', () => {
+    syncDeveloperRole()
+    syncTakeover()
+  })
   onSyncAny('settings/document-updated', (ns: string) => {
     if (ns === PI_AI_NAMESPACE) syncDeveloperRole()
+    // Any settings commit re-checks the mirror (identity-gated); the write we
+    // just made re-enters here and settles without a second write.
+    syncTakeover()
   })
 
   // Inject the level decision into every model request of a step.
