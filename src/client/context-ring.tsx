@@ -52,20 +52,43 @@ export interface ContextBreakdownLike {
  */
 export type ProjectionHook = <T>(key: string) => T | undefined
 
-/** The cache-billing projection slice (better-er/dsh-cache-billing, optional). */
+/** The tlCacheBilling projection wire view (full field set). */
 export interface CacheBillingLike {
   available?: boolean
   cost?: number
   missCost?: number
   outputCost?: number
+  currency?: string
   cacheReadTokens?: number
+  totalInputTokens?: number
+  outputTokens?: number
+  hitRate?: number | null
+  model?: string | null
+  provider?: string | null
+  matchedModel?: string | null
+  modelMatched?: boolean
+  tier?: 'peak' | 'offPeak' | null
+  unitPricePerM?: number | null
+  turn?: number | null
+  step?: number | null
   turnCost?: number
+  turnHitCost?: number
+  turnMissCost?: number
+  turnOutputCost?: number
+  turnTokens?: number
+  turnCacheReadTokens?: number
+  turnInputTokens?: number
+  turnOutputTokens?: number
   sessionCacheHitCost?: number
   sessionMissCost?: number
   sessionOutputCost?: number
+  sessionInputTokens?: number
+  sessionCacheReadTokens?: number
+  sessionOutputTokens?: number
   sessionRounds?: number
-  currency?: string
-  modelMatched?: boolean
+  sessionMissSteps?: number
+  sessionWriteTokens?: number
+  sessionFullMissSteps?: number
 }
 
 /** Full props of the ring entry (all optional — data comes from the store). */
@@ -93,6 +116,12 @@ interface CopyShape {
   billTurn: string
   billSession: string
   billCacheRead: string
+  billCacheMiss: string
+  billOutput: string
+  billFullMiss: string
+  billRoundsWord: string
+  billPeak: string
+  billOffPeak: string
   billPriced: string
   billEstimate: string
 }
@@ -115,6 +144,12 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     billTurn: '当前轮',
     billSession: '会话累计',
     billCacheRead: '缓存命中',
+    billCacheMiss: '缓存未命中',
+    billOutput: '输出',
+    billFullMiss: '完全失效',
+    billRoundsWord: '步',
+    billPeak: '峰价',
+    billOffPeak: '谷价',
     billPriced: '按 DeepSeek-V4.1-Flash 计价',
     billEstimate: '按 Flash 价估算',
   },
@@ -135,6 +170,12 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     billTurn: 'This turn',
     billSession: 'Session total',
     billCacheRead: 'Cache read',
+    billCacheMiss: 'Cache miss',
+    billOutput: 'Output',
+    billFullMiss: 'Full misses',
+    billRoundsWord: 'steps',
+    billPeak: 'Peak rates',
+    billOffPeak: 'Off-peak rates',
     billPriced: 'priced as DeepSeek-V4.1-Flash',
     billEstimate: 'estimated at Flash prices',
   },
@@ -256,6 +297,21 @@ export function formatTokens(n: number): string {
   return String(Math.round(n))
 }
 
+const BILL_COLORS = { hit: '#10b981', miss: '#f59e0b', output: '#3b82f6' } as const
+
+/** One nested billing sub-row (cache-billing's indented swatch row). */
+function BillSubRow({ label, tokens, amount, color }: { label: string; tokens: number; amount: string; color: string }): JSX.Element {
+  return (
+    <div style={{ ...rowStyle, paddingLeft: '16px' }}>
+      <dt style={rowLabelStyle}><span style={swatchStyle(color)} />{label}</dt>
+      <dd style={{ ...rowValueStyle, margin: 0 }}>
+        <span style={{ color: 'var(--dsw-alias-label-caption, inherit)', fontWeight: 400, marginRight: '6px' }}>{formatTokens(tokens)} tok</span>
+        {amount}
+      </dd>
+    </div>
+  )
+}
+
 /** Format an amount: four decimals for a step, fewer for the totals. */
 function formatMoney(amount: number, digits: number): string {
   return `¥${amount.toFixed(digits)}`
@@ -300,7 +356,7 @@ function getStore(): ProjectionSnapshot {
 export function ProjectionDataHook(props: { useProjection?: ProjectionHook }): JSX.Element {
   const pressure = props.useProjection?.('contextPressure') as ContextPressureLike | undefined
   const breakdown = props.useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
-  const billing = props.useProjection?.('cacheBilling') as CacheBillingLike | undefined
+  const billing = props.useProjection?.('tlCacheBilling') as CacheBillingLike | undefined
   useEffect(() => {
     // The seat marker rides the first publish: the ring re-renders on every
     // publish, so a marker arriving after the ring's first render still
@@ -414,31 +470,49 @@ export function ContextRing(_props: ContextRingProps): JSX.Element | null {
           )}
           {billing?.available === true && (
             <dl style={{ margin: '4px 0 0', padding: '6px 0 0', borderTop: '1px solid var(--dsw-alias-border-l3, rgba(127,127,127,0.18))' }}>
-              <dt style={{ ...rowLabelStyle, fontWeight: 600 }}>{c.billing}</dt>
               <div style={rowStyle}>
-                <dt style={rowLabelStyle}>{c.billStep}</dt>
-                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatMoney(billing.cost ?? 0, 4)}</dd>
-              </div>
-              <div style={rowStyle}>
-                <dt style={rowLabelStyle}>{c.billTurn}</dt>
-                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatMoney(billing.turnCost ?? 0, 3)}</dd>
-              </div>
-              <div style={rowStyle}>
-                <dt style={rowLabelStyle}>{c.billSession}</dt>
+                <dt style={{ ...rowLabelStyle, color: '#a78bfa' }}>{c.billStep}</dt>
                 <dd style={{ ...rowValueStyle, margin: 0 }}>
-                  {formatMoney((billing.sessionCacheHitCost ?? 0) + (billing.sessionMissCost ?? 0) + (billing.sessionOutputCost ?? 0), 2)}
+                  {formatTokens((billing.totalInputTokens ?? 0) + (billing.outputTokens ?? 0))} tok {formatMoney(billing.cost ?? 0, 4)}
                 </dd>
               </div>
+              <BillSubRow label={c.billCacheRead} tokens={billing.cacheReadTokens ?? 0} amount={formatMoney(billing.cost ?? 0, 4)} color={BILL_COLORS.hit} />
+              <BillSubRow label={c.billCacheMiss} tokens={(billing.totalInputTokens ?? 0) - (billing.cacheReadTokens ?? 0)} amount={formatMoney(billing.missCost ?? 0, 4)} color={BILL_COLORS.miss} />
+              <BillSubRow label={c.billOutput} tokens={billing.outputTokens ?? 0} amount={formatMoney(billing.outputCost ?? 0, 4)} color={BILL_COLORS.output} />
               <div style={rowStyle}>
-                <dt style={rowLabelStyle}>{c.billCacheRead}</dt>
-                <dd style={{ ...rowValueStyle, margin: 0 }}>{formatTokens(billing.cacheReadTokens ?? 0)} tok</dd>
+                <dt style={{ ...rowLabelStyle, color: '#22d3ee' }}>{c.billTurn}</dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>
+                  {formatTokens(billing.turnTokens ?? 0)} tok {formatMoney(billing.turnCost ?? 0, 3)}
+                </dd>
               </div>
+              <BillSubRow label={c.billCacheRead} tokens={billing.turnCacheReadTokens ?? 0} amount={formatMoney(billing.turnHitCost ?? 0, 3)} color={BILL_COLORS.hit} />
+              <BillSubRow label={c.billCacheMiss} tokens={(billing.turnInputTokens ?? 0) - (billing.turnCacheReadTokens ?? 0)} amount={formatMoney(billing.turnMissCost ?? 0, 3)} color={BILL_COLORS.miss} />
+              <BillSubRow label={c.billOutput} tokens={billing.turnOutputTokens ?? 0} amount={formatMoney(billing.turnOutputCost ?? 0, 3)} color={BILL_COLORS.output} />
+              <div style={rowStyle}>
+                <dt style={{ ...rowLabelStyle, color: '#f472b6' }}>
+                  {c.billSession}{billing.sessionRounds ? ` · ${billing.sessionRounds} ${c.billRoundsWord}` : ''}
+                </dt>
+                <dd style={{ ...rowValueStyle, margin: 0 }}>
+                  {formatTokens((billing.sessionInputTokens ?? 0) + (billing.sessionOutputTokens ?? 0))} tok {formatMoney((billing.sessionCacheHitCost ?? 0) + (billing.sessionMissCost ?? 0) + (billing.sessionOutputCost ?? 0), 2)}
+                </dd>
+              </div>
+              <BillSubRow label={c.billCacheRead} tokens={billing.sessionCacheReadTokens ?? 0} amount={formatMoney(billing.sessionCacheHitCost ?? 0, 2)} color={BILL_COLORS.hit} />
+              <BillSubRow label={c.billCacheMiss} tokens={(billing.sessionInputTokens ?? 0) - (billing.sessionCacheReadTokens ?? 0)} amount={formatMoney(billing.sessionMissCost ?? 0, 2)} color={BILL_COLORS.miss} />
+              <BillSubRow label={c.billOutput} tokens={billing.sessionOutputTokens ?? 0} amount={formatMoney(billing.sessionOutputCost ?? 0, 2)} color={BILL_COLORS.output} />
+              {(billing.sessionFullMissSteps ?? 0) > 0 && (
+                <div style={rowStyle}>
+                  <dt style={{ ...rowLabelStyle, color: '#f43f5e' }}>{c.billFullMiss}</dt>
+                  <dd style={{ ...rowValueStyle, margin: 0 }}>{billing.sessionFullMissSteps}</dd>
+                </div>
+              )}
             </dl>
           )}
           {percent >= 85 && <div style={warnStyle}>{c.warning}</div>}
           <div style={footStyle}>
             {c.window}: {hasReading ? (window_ as number).toLocaleString() : c.unset}
-            {billing?.available === true ? ` · ${billing.modelMatched === false ? c.billEstimate : c.billPriced}` : ''}
+            {billing?.available === true
+              ? ` · ${billing.tier === 'peak' ? c.billPeak : c.billOffPeak} · ${billing.modelMatched === false ? c.billEstimate : c.billPriced}`
+              : ''}
           </div>
         </div>
       )}

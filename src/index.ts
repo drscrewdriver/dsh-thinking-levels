@@ -37,6 +37,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Volatile } from '@deepseek-ai/cosmokit'
 import z from '@deepseek-ai/schemastery'
 import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
+import { buildBillingDefinition } from './billing-projection.ts'
 import { recentToolCalls } from './session-events.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
@@ -453,6 +454,19 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // layered over the entry base) wins when installed.
   let source: () => ThinkingLevelsConfig = () => config
   installLegacySection(ctx, config, { setSource: (next) => { source = next } })
+
+  // Cache-billing projection (0.1.7-alpha+ hosts): soft-coupled runtime inject
+  // ONLY — a top-level export inject would make the whole plugin refuse to
+  // load where the sessionProjections service is absent (<=0.1.6), killing the
+  // takeover on old lines for one optional surface. Where absent, the callback
+  // never fires and the ring's billing section stays hidden.
+  ;(ctx as unknown as {
+    inject?: (deps: string[], cb: (scope: {
+      sessionProjections?: { register: (definition: unknown) => void }
+    }) => void) => void
+  }).inject?.(['sessionProjections'], (scope) => {
+    scope.sessionProjections?.register(buildBillingDefinition())
+  })
   const current: () => LiveConfig = () => resolveLiveConfig(source())
   ctx.on('loader/volatile-update', () => {
     assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
