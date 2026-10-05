@@ -394,6 +394,48 @@ function capabilityResolver(ctx: Context): {
   }
 }
 
+interface LegacySettingsSctx {
+  settings: {
+    register?: (
+      ns: string,
+      schema: unknown,
+      options?: { base?: unknown },
+    ) => { get(): unknown; watch?(callback: () => void): () => void }
+    describe?: unknown
+  }
+  effect(cleanup: () => (() => void) | void, label?: string): void
+}
+
+/** The registered settings namespace of the ≤0.1.6 era. */
+const THINKING_LEVELS_SETTINGS_NAMESPACE = 'thinking-levels'
+
+/**
+ * Legacy (≤0.1.6) settings registration: on hosts whose settings service
+ * carries the imperative face (`register` present, `describe` absent), install
+ * this plugin's section so its config is runtime-editable and the live values
+ * feed `current()`. On 0.1.7+ the composition entry IS the section (the
+ * `.volatile()` fields arrive as live refs) and `register` no longer exists —
+ * the install is a no-op there. Shape-detected, never version-guessed.
+ */
+function installLegacySection(
+  ctx: Context,
+  config: ThinkingLevelsConfig,
+  hooks: { setSource: (source: () => ThinkingLevelsConfig) => void },
+): void {
+  const inject = (ctx as unknown as { inject?: (deps: string[], fn: (sctx: LegacySettingsSctx) => void) => void }).inject
+  if (typeof inject !== 'function') return
+  inject.call(ctx, ['settings'], (sctx) => {
+    const settings = sctx.settings
+    if (typeof settings?.register !== 'function' || typeof settings.describe === 'function') return
+    const scope = settings.register(THINKING_LEVELS_SETTINGS_NAMESPACE, Config, { base: config })
+    hooks.setSource(() => scope.get() as ThinkingLevelsConfig)
+    sctx.effect(() => () => {
+      hooks.setSource(() => config)
+    })
+    scope.watch?.(() => {})
+  })
+}
+
 /**
  * Plugin body.
  * @param ctx - host context carrying the agent-event dispatch.
@@ -405,11 +447,13 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // UNSUPPORTED_REASONING_EFFORT per request.
   assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
 
-  // Runtime-adjustable configuration: the `.volatile()` fields arrive as live
-  // refs (DSH 0.1.7+) and are re-read per request, so a committed settings
-  // change needs no re-registration; `loader/volatile-update` re-validates the
-  // committed level eagerly instead of failing on the next model request.
-  const current: () => LiveConfig = () => resolveLiveConfig(config)
+  // Runtime-adjustable configuration: volatile refs on 0.1.7+, the registered
+  // section before that — both re-read per request, so a committed settings
+  // change needs no re-registration. The ≤0.1.6 registered section (user edits
+  // layered over the entry base) wins when installed.
+  let source: () => ThinkingLevelsConfig = () => config
+  installLegacySection(ctx, config, { setSource: (next) => { source = next } })
+  const current: () => LiveConfig = () => resolveLiveConfig(source())
   ctx.on('loader/volatile-update', () => {
     assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
     // A flipped takeover switch mirrors immediately (identity-gated).
