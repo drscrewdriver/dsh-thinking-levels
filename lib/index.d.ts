@@ -67,6 +67,13 @@ export interface ThinkingLevelsConfig {
     allowDowngrade: boolean | Volatile<boolean>;
     /** Scheduler preference: allow lifting above the `high` hub to `max`. */
     allowUpgrade: boolean | Volatile<boolean>;
+    /**
+     * Master takeover switch: mirrored into the openai-completions transport's
+     * own section (`llm-openai-completions.enabled`) when it flips. The
+     * transport's dispatch judgment stays single-source in ITS section; this
+     * flag is the control-layer UI for it.
+     */
+    takeover: boolean | Volatile<boolean>;
     /** Configurer-confirmed capability overrides, keyed `provider/model`. */
     models: Record<string, ModelCapabilityOverride>;
 }
@@ -82,6 +89,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    takeover: z<boolean, boolean, "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -98,6 +106,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    takeover: z<boolean, boolean, "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;

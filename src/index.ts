@@ -301,24 +301,19 @@ interface SettingsWriteLike {
   update?: (ns: string, patch: unknown) => Promise<unknown>
 }
 
-/** One takeover readout: the taken-over routes plus the llm-pi-ai section they were computed against. */
-interface TakeoverReadout {
-  routes: string[] | null
-  piAi: PiAiSection | undefined
-}
-
 /**
  * One `describe()` pass, two namespaces: the taken-over routes (transport
- * section judgment) and the llm-pi-ai section itself. `describe()` replaces
- * the dead `settings?.get?.()` soft reads — `SettingsForms` has no `get`.
+ * section judgment) and the llm-pi-ai section for the posture lookup.
+ * `describe()` replaces the dead `settings?.get?.()` soft reads —
+ * `SettingsForms` has no `get`.
  */
-function takeoverReadout(ctx: Context): TakeoverReadout {
+function takeoverReadout(ctx: Context): { routes: string[] | null; piAi: PiAiSection | undefined } {
   const descriptors = describeSettings(ctx)
   const section = readSectionOf(descriptors, TAKEOVER_NAMESPACE)?.value as
     | { enabled?: unknown; providers?: unknown }
     | undefined
   const piAi = readSectionOf<PiAiSection>(descriptors, PI_AI_NAMESPACE)?.value
-  return { routes: takeoverRoutesOf(section, piAi), piAi }
+  return { routes: takeoverRoutesOf(section), piAi }
 }
 
 /**

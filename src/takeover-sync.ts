@@ -252,7 +252,7 @@ export function withOfficialCompatFixes(
  * @returns the minimal patch, or `undefined` when no write is due.
  */
 export function takeoverPatch(
-  section: { enabled?: unknown } | undefined,
+  section: { enabled?: unknown; providers?: unknown } | undefined,
   flag: boolean,
 ): { enabled: boolean } | undefined {
   if (section === undefined) return undefined
@@ -261,27 +261,20 @@ export function takeoverPatch(
 }
 
 /**
- * The routes the openai-completions transport currently takes over, from its
- * live settings section plus the llm-pi-ai data plane. The section's
- * `enabled` flag is the single source of truth (the transport's own switch);
- * the judgment unions the section's MANUAL `providers` list with the routes
- * auto-identified from llm-pi-ai (custom openai-completions gateway AND
- * thinking declared) — the same union the transport itself applies at
- * dispatch, so this plugin's gating cannot drift from the actual takeover.
+ * The routes the openai-completions transport currently takes over: pure
+ * manual membership (`enabled && route ∈ providers`). The capability card's
+ * per-route takeover checkbox is the single per-route truth and dispatch uses
+ * the same set, so this gating reads exactly what the transport serves.
  * @param section - the live llm-openai-completions section, if composed.
- * @param piAi - the live llm-pi-ai section, if composed.
  * @returns the taken-over route ids, `[]` when the transport is disabled, or
  *   `null` when the transport is not composed (namespace absent — every route
  *   keeps pi-ai's native reasoning semantics).
  */
 export function takeoverRoutesOf(
   section: { enabled?: unknown; providers?: unknown } | undefined,
-  piAi: PiAiSection | undefined,
 ): string[] | null {
   if (section === undefined) return null
   if (section.enabled !== true) return []
-  const manual = Array.isArray(section.providers)
-    ? section.providers.filter((id): id is string => typeof id === 'string')
-    : []
-  return [...new Set([...manual, ...identifyTakeoverProviders(piAi)])]
+  if (!Array.isArray(section.providers)) return []
+  return section.providers.filter((id): id is string => typeof id === 'string')
 }
