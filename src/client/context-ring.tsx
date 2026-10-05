@@ -95,6 +95,12 @@ export interface CacheBillingLike {
 export interface ContextRingProps {
   /** The session id of the slot's owning conversation (standard seat). */
   sessionId?: string
+  /**
+   * Capacity fallback from the model catalog: when the contextPressure
+   * projection carries no contextWindow (some sessions never see the
+   * request/context event), the declared window of the ACTIVE model fills in.
+   */
+  contextWindowFallback?: number
 }
 
 /* ── inline copy: zh default, en elsewhere ──────────────────────────────── */
@@ -397,7 +403,7 @@ function BreakdownRow({ label, value, color }: { label: string; value: number; c
  * The ring entry: pressure arc trigger + the check popover. Renders nothing
  * without a projection seat or before the session has any reading.
  */
-export function ContextRing(_props: ContextRingProps): JSX.Element | null {
+export function ContextRing(props: ContextRingProps): JSX.Element | null {
   // Two distinct invisible cases, handled differently: a host WITHOUT the
   // projection hook seat (≤0.1.6 lines — the data hook never mounts) hides the
   // ring, the retired pill's discipline — a permanently dead control helps
@@ -417,7 +423,11 @@ export function ContextRing(_props: ContextRingProps): JSX.Element | null {
   const used = typeof pressure?.projectedTokens === 'number'
     ? pressure.projectedTokens
     : typeof pressure?.pressureTokens === 'number' ? pressure.pressureTokens : undefined
-  const window_ = typeof pressure?.contextWindow === 'number' ? pressure.contextWindow : undefined
+  const window_ = typeof pressure?.contextWindow === 'number' && pressure.contextWindow > 0
+    ? pressure.contextWindow
+    : typeof props.contextWindowFallback === 'number' && props.contextWindowFallback > 0
+      ? props.contextWindowFallback
+      : undefined
   const hasReading = used !== undefined && window_ !== undefined && window_ > 0
 
   const c = copy()

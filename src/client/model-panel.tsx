@@ -485,13 +485,19 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
     for (const group of state.groups) {
       if (group.id !== state.current.provider) continue
       const model = group.models.find(candidate => candidate.id === state.current?.model)
-      if (model !== undefined) return { model, name: model.name }
+      if (model !== undefined) return { model, name: model.name, provider: group.id }
     }
     return undefined
   }, [state])
 
   const providers = useMemo(() => providersOf(piSnapshot), [piSnapshot])
   const dsSection = useMemo(() => deepseekSectionOf(dsSnapshot), [dsSnapshot])
+
+  /** The active model's declared capacity — the ring's window fallback. */
+  const activeWindow = useMemo(() => {
+    if (current === undefined) return undefined
+    return windowOf(current.provider, current.model.id ?? current.model.name ?? '')
+  }, [current, providers, dsSection]) as number | undefined
 
   /** The effective window of one model line, resolved against its family. */
   const windowOf = (provider: string, model: string): number | undefined => {
@@ -633,7 +639,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
           model selector. Lives inside the seat this panel owns, so the
           position is exact; on hosts without the projection seat it renders
           nothing. */}
-      <ContextRing />
+      {/* The context-capacity check ring: user-placed to the RIGHT of the
+          model selector. Lives inside the seat this panel owns, so the
+          position is exact. Capacity falls back to the ACTIVE model's
+          declared window when the pressure projection carries none. */}
+      <ContextRing contextWindowFallback={activeWindow} />
       {open
         ? (
           <>
