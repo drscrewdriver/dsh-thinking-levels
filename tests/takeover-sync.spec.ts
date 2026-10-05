@@ -3,7 +3,7 @@ import {
   declaresThinking,
   identifyTakeoverProviders,
   isCustomOpenAiGateway,
-  takeoverProvidersOf,
+  takeoverRoutesOf,
   withOfficialCompatFixes,
   type PiAiSection,
 } from '../src/takeover-sync.ts'
@@ -173,21 +173,32 @@ describe('withOfficialCompatFixes', () => {
   })
 })
 
-describe('takeoverProvidersOf', () => {
-  it('returns the enabled provider list', () => {
-    expect(takeoverProvidersOf({ enabled: true, providers: ['local35b', 'other'] }))
-      .toEqual(['local35b', 'other'])
+describe('takeoverRoutesOf', () => {
+  const piAi: PiAiSection = { providers: { ...customThinkingProvider } }
+
+  it('unions the manual list with the routes identified from llm-pi-ai', () => {
+    expect(takeoverRoutesOf({ enabled: true, providers: ['manual-route'] }, piAi))
+      .toEqual(['manual-route', 'local35b'])
   })
 
-  it('returns an empty list when disabled', () => {
-    expect(takeoverProvidersOf({ enabled: false, providers: ['local35b'] })).toEqual([])
+  it('returns only the identified routes when the manual list is empty', () => {
+    expect(takeoverRoutesOf({ enabled: true, providers: [] }, piAi)).toEqual(['local35b'])
+    expect(takeoverRoutesOf({ enabled: true }, piAi)).toEqual(['local35b'])
   })
 
-  it('returns null when the namespace is unregistered (adapter plugin absent)', () => {
-    expect(takeoverProvidersOf(undefined)).toBeNull()
+  it('deduplicates a manual entry that is also identified', () => {
+    expect(takeoverRoutesOf({ enabled: true, providers: ['local35b'] }, piAi)).toEqual(['local35b'])
   })
 
-  it('filters non-string provider entries', () => {
-    expect(takeoverProvidersOf({ enabled: true, providers: ['a', 3, null] })).toEqual(['a'])
+  it('returns an empty list when the transport is disabled', () => {
+    expect(takeoverRoutesOf({ enabled: false, providers: ['local35b'] }, piAi)).toEqual([])
+  })
+
+  it('returns null when the transport is not composed (namespace absent)', () => {
+    expect(takeoverRoutesOf(undefined, piAi)).toBeNull()
+  })
+
+  it('filters non-string manual entries and works without an llm-pi-ai section', () => {
+    expect(takeoverRoutesOf({ enabled: true, providers: ['a', 3, null] }, undefined)).toEqual(['a'])
   })
 })
