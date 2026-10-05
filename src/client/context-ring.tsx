@@ -50,7 +50,7 @@ export interface ContextBreakdownLike {
  * store. Absent on harnesses without the projection module — the component
  * then renders nothing.
  */
-type ProjectionHook = <T>(key: string) => T | undefined
+export type ProjectionHook = <T>(key: string) => T | undefined
 
 /** The cache-billing projection slice (better-er/dsh-cache-billing, optional). */
 export interface CacheBillingLike {

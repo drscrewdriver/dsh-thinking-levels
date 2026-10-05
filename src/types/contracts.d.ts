@@ -111,12 +111,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * waist, which only fires where the host provides it).
      */
     'settings.plugin.item': { kind: 'keyed'; scope: 'root' }
-    /**
-     * The composer trailing dock (0.2.0 conversation skeleton): the host
-     * renders this seat as the shipped ContextMeter's sibling at the far
-     * right of the tool row — the context ring's seat in the merged client.
-     */
-    'conversation.composer.dock': { kind: 'list'; scope: 'session' }
   }
 
   /** Locale namespaces merged by client plugins. */

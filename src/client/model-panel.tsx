@@ -40,6 +40,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { SettingsScope } from './scope-face.ts'
+import { ContextRing, type ProjectionHook } from './context-ring.tsx'
 import { EffortSlider } from './effort-slider.tsx'
 import { orderEffortsForSlider } from '../thinking-level.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
@@ -87,6 +88,8 @@ export interface ModelPanelInjected {
 export interface ModelPanelProps extends ModelPanelInjected {
   /** The session id of the slot's owning conversation (standard seat). */
   sessionId: string
+  /** The session projection seat (0.2.0+ standard prop); absent on old lines. */
+  useProjection?: ProjectionHook
   /** Locale copy thunk. */
   t: (key: string) => string
 }
@@ -428,7 +431,7 @@ function stopIndexOf(value: number | undefined): number {
  * (the "max context window" editor moved into each line).
  * @param props - injected directory + config forms, session seat, copy.
  */
-export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPanelProps): JSX.Element {
+export function ModelPanel({ directory, piAiScope, deepseekScope, useProjection, t }: ModelPanelProps): JSX.Element {
   const state = useSyncExternalStore(
     listener => directory?.store.subscribe(listener) ?? (() => {}),
     () => directory?.store.getSnapshot() ?? UNAVAILABLE_STATE,
@@ -628,6 +631,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
         {effortLabel !== undefined && <span style={triggerEffortStyle}>{effortLabel}</span>}
         <span style={chevronStyle}>{open ? '▲' : '▼'}</span>
       </button>
+      {/* The context-capacity check ring: user-placed to the RIGHT of the
+          model selector. Lives inside the seat this panel owns, so the
+          position is exact; on hosts without the projection seat it renders
+          nothing. */}
+      <ContextRing useProjection={useProjection} />
       {open
         ? (
           <>
