@@ -366,10 +366,11 @@ export function ProjectionDataHook(props: { useProjection?: ProjectionHook }): J
   const breakdown = props.useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
   const billing = props.useProjection?.('tlCacheBilling') as CacheBillingLike | undefined
   useEffect(() => {
-    // The seat marker rides the first publish: the ring re-renders on every
-    // publish, so a marker arriving after the ring's first render still
-    // flips it from hidden to visible.
     publish({ seatMounted: true, pressure, breakdown, billing })
+  })
+  useEffect(() => {
+    const span = document.querySelector('[data-dsh-thinking-levels="projection-hook"]')
+    if (span) span.setAttribute('data-seat', String(seatMountedDiagnostic))
   })
   return <span data-dsh-thinking-levels="projection-hook" style={{ display: 'none' }} />
 }
@@ -414,6 +415,7 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
   // indistinguishable from a dead registration, which cost a debug round-trip
   // once already.
   const live = useSyncExternalStore(subscribeStore, getStore)
+  const seatMountedDiagnostic = live.seatMounted === true
   const hasSeat = live.seatMounted === true
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
