@@ -26,7 +26,7 @@
  * with token-based inline styling; copy is inline zh/en by document language
  * (the plugin's locale dictionaries stay untouched).
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 
 /** The pressure projection slice — the token-meter wire view's own fields. */
@@ -68,12 +68,10 @@ export interface CacheBillingLike {
   modelMatched?: boolean
 }
 
-/** Full props: the session seats the harness injects into this entry. */
+/** Full props of the ring entry (all optional — data comes from the store). */
 export interface ContextRingProps {
   /** The session id of the slot's owning conversation (standard seat). */
   sessionId?: string
-  /** The session projection seat (0.2.0+); absent on a harness without it. */
-  useProjection?: ProjectionHook
 }
 
 /* ── inline copy: zh default, en elsewhere ──────────────────────────────── */
@@ -263,6 +261,53 @@ function formatMoney(amount: number, digits: number): string {
   return `¥${amount.toFixed(digits)}`
 }
 
+/**
+ * The module-level projection store. The ring renders inside the model seat,
+ * whose entry props do NOT carry the projection hook — the hook lives on a
+ * zero-size data hook mounted at `conversation.input.right` (the seat where
+ * better-er/dsh-cache-billing proved the hook injection), which mirrors every
+ * push into this store. The ring subscribes like any external store.
+ */
+interface ProjectionSnapshot {
+  pressure?: ContextPressureLike
+  breakdown?: ContextBreakdownLike
+  billing?: CacheBillingLike
+}
+
+const store: ProjectionSnapshot = {}
+const listeners = new Set<() => void>()
+/** Whether a projection-seat hook has mounted anywhere (0.2.0+ only). */
+let seatMounted = false
+
+function publish(patch: Partial<ProjectionSnapshot>): void {
+  Object.assign(store, patch)
+  for (const listener of listeners) listener()
+}
+
+function subscribeStore(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
+
+function getStore(): ProjectionSnapshot {
+  return store
+}
+
+/**
+ * The zero-size data hook: props delivered by the slot renderer carry the
+ * session projection hook; every push lands in the module store.
+ */
+export function ProjectionDataHook(props: { useProjection?: ProjectionHook }): JSX.Element {
+  const pressure = props.useProjection?.('contextPressure') as ContextPressureLike | undefined
+  const breakdown = props.useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
+  const billing = props.useProjection?.('cacheBilling') as CacheBillingLike | undefined
+  seatMounted = true
+  useEffect(() => {
+    publish({ pressure, breakdown, billing })
+  })
+  return <span data-dsh-thinking-levels="projection-hook" style={{ display: 'none' }} />
+}
+
 /** The SVG ring: one background track + one pressure arc. */
 function Ring({ percent, color }: { percent: number; color: string }): JSX.Element {
   const r = (RING_SIZE - RING_STROKE) / 2
@@ -294,44 +339,21 @@ function BreakdownRow({ label, value, color }: { label: string; value: number; c
  * The ring entry: pressure arc trigger + the check popover. Renders nothing
  * without a projection seat or before the session has any reading.
  */
-export function ContextRing(props: ContextRingProps): JSX.Element | null {
-  const { useProjection } = props
-  const pressure = useProjection?.('contextPressure') as ContextPressureLike | undefined
-  const breakdown = useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
-  // The billing section appears only when dsh-cache-billing is composed (its
-  // projection unit feeds the numbers) — absent projection, absent section.
-  const billing = useProjection?.('cacheBilling') as CacheBillingLike | undefined
+export function ContextRing(_props: ContextRingProps): JSX.Element | null {
+  // Two distinct invisible cases, handled differently: a host WITHOUT the
+  // projection hook seat (≤0.1.6 lines — the data hook never mounts) hides the
+  // ring, the retired pill's discipline — a permanently dead control helps
+  // nobody there. A host WITH the hook but no reading yet (fresh session)
+  // renders the dimmed unset state — fail-visible, because a hidden control is
+  // indistinguishable from a dead registration, which cost a debug round-trip
+  // once already.
+  const hasSeat = seatMounted
+  const live = useSyncExternalStore(subscribeStore, getStore)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
-
-  // Outside click / Escape closes the popover (the shipped meter's behavior).
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: PointerEvent): void => {
-      if (rootRef.current !== null && event.target instanceof Node && !rootRef.current.contains(event.target)) {
-        setOpen(false)
-      }
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointerDown, true)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-
-  // Two distinct invisible cases, handled differently: a host WITHOUT the
-  // projection seat (≤0.1.6 lines — the seat props simply lack useProjection)
-  // hides the ring, the retired pill's discipline — a permanently dead control
-  // helps nobody there. A host WITH the seat but no reading yet (fresh
-  // session) renders the dimmed unset state — fail-visible, because a hidden
-  // control is indistinguishable from a dead registration, which cost a debug
-  // round-trip once already.
-  const hasSeat = typeof useProjection === 'function'
-  if (!hasSeat) return null
+  const pressure = live.pressure
+  const breakdown = live.breakdown
+  const billing = live.billing
   // The official meter's own occupancy mapping (contextOccupancy): the
   // projected estimate wins, the raw pressure sample is the floor.
   const used = typeof pressure?.projectedTokens === 'number'

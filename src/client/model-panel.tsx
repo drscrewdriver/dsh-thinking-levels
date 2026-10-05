@@ -88,8 +88,6 @@ export interface ModelPanelInjected {
 export interface ModelPanelProps extends ModelPanelInjected {
   /** The session id of the slot's owning conversation (standard seat). */
   sessionId: string
-  /** The session projection seat (0.2.0+ standard prop); absent on old lines. */
-  useProjection?: ProjectionHook
   /** Locale copy thunk. */
   t: (key: string) => string
 }
@@ -431,7 +429,7 @@ function stopIndexOf(value: number | undefined): number {
  * (the "max context window" editor moved into each line).
  * @param props - injected directory + config forms, session seat, copy.
  */
-export function ModelPanel({ directory, piAiScope, deepseekScope, useProjection, t }: ModelPanelProps): JSX.Element {
+export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPanelProps): JSX.Element {
   const state = useSyncExternalStore(
     listener => directory?.store.subscribe(listener) ?? (() => {}),
     () => directory?.store.getSnapshot() ?? UNAVAILABLE_STATE,
@@ -635,7 +633,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, useProjection,
           model selector. Lives inside the seat this panel owns, so the
           position is exact; on hosts without the projection seat it renders
           nothing. */}
-      <ContextRing useProjection={useProjection} />
+      <ContextRing />
       {open
         ? (
           <>
