@@ -338,11 +338,13 @@ interface ProjectionSnapshot {
   billing?: CacheBillingLike
 }
 
-const store: ProjectionSnapshot = {}
+let store: ProjectionSnapshot = {}
 const listeners = new Set<() => void>()
 
+/** Immutable replacement — useSyncExternalStore compares snapshots by
+ * reference, so in-place mutation would never re-render subscribers. */
 function publish(patch: Partial<ProjectionSnapshot>): void {
-  Object.assign(store, patch)
+  store = { ...store, ...patch }
   for (const listener of listeners) listener()
 }
 
