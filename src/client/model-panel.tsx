@@ -40,6 +40,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { SettingsScope } from './scope-face.ts'
+import { ContextRing, type ProjectionHook } from './context-ring.tsx'
 import { EffortSlider } from './effort-slider.tsx'
 import { orderEffortsForSlider } from '../thinking-level.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
@@ -492,6 +493,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   const providers = useMemo(() => providersOf(piSnapshot), [piSnapshot])
   const dsSection = useMemo(() => deepseekSectionOf(dsSnapshot), [dsSnapshot])
 
+  /** The active model's declared capacity — the ring's window fallback. */
+  const activeWindow = useMemo(() => {
+    if (current === undefined) return undefined
+    return windowOf(current.provider, current.model.id ?? current.model.name ?? '')
+  }, [current, providers, dsSection]) as number | undefined
 
   /** The effective window of one model line, resolved against its family. */
   const windowOf = (provider: string, model: string): number | undefined => {
@@ -633,6 +639,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
           model selector. Lives inside the seat this panel owns, so the
           position is exact; on hosts without the projection seat it renders
           nothing. */}
+      {/* The context-capacity check ring: user-placed to the RIGHT of the
+          model selector. Lives inside the seat this panel owns, so the
+          position is exact. Capacity falls back to the ACTIVE model's
+          declared window when the pressure projection carries none. */}
+      <ContextRing contextWindowFallback={activeWindow} />
       {open
         ? (
           <>

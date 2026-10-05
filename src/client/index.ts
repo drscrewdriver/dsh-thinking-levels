@@ -29,6 +29,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, de, en, es, fr, it, ja, ko, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
+import { ProjectionDataHook } from './context-ring.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 import { ThinkingLevelsCard } from './card.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
@@ -272,6 +273,16 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     // the slot's injected props; hosts without it render nothing (the ring is
     // a 0.2.0 feature — on the ≤0.1.6 lines the seat props lack the hook).
   }
+
+  // Projection data hook (conversation.input.right): this seat's entries DO
+  // receive the session projection hook (better-er/dsh-cache-billing proved
+  // the injection there); the model seat does not. The zero-size hook mirrors
+  // every push into the module store the ring reads.
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'projection-data-hook',
+    order: 9,
+  }, ProjectionDataHook))
 
   // Generation waist (registered last — the callbacks reach the definitions
   // above): whichever settings channel the host provides becomes the one scope

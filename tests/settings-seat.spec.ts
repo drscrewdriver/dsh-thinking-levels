@@ -95,22 +95,28 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
 
   it('registers the composer model panel, the family top-level section and the plugins-page config card', () => {
     const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.model', 'settings.section', 'plugins.bundle.config'])
-    expect(registrations).toHaveLength(3)
+    expect(declared).toEqual(['conversation.input.model', 'conversation.input.right', 'settings.section', 'plugins.bundle.config'])
+    expect(registrations).toHaveLength(4)
     expect(registrations[0]!.slot).toBe('conversation.input.model')
-    expect(registrations[1]!.slot).toBe('settings.section')
-    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
+    expect(registrations[1]!.slot).toBe('conversation.input.right')
+    expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[2]!.slot).toBe('settings.section')
+    expect(registrations[3]!.slot).toBe('plugins.bundle.config')
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
     const { declared, registrations } = collectRegistrations(false)
-    expect(declared).toEqual(['settings.section', 'plugins.bundle.config'])
+    expect(declared).toEqual(['conversation.input.right', 'settings.section', 'plugins.bundle.config'])
     // The model panel is skipped, but the modern surface (family section,
     // plugins-page card, and the context-check ring riding its seat) still
     // registers — none of them depend on modelDirectories.
-    expect(registrations).toHaveLength(2)
-    expect(registrations[0]!.slot).toBe('settings.section')
-    expect(registrations[1]!.slot).toBe('plugins.bundle.config')
+    expect(registrations).toHaveLength(3)
+    expect(registrations[0]!.slot).toBe('conversation.input.right')
+    expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[1]!.slot).toBe('settings.section')
+    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
+    // The projection hook rides the right seat on every generation; only the
+    // ring (0.2.0 projection consumers) gates on the data being present.
   })
 
   it('never mints the removed settings surfaces (the item card)', () => {
