@@ -103,6 +103,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * the model panel's per-model lines.)
      */
     'conversation.input.right': { kind: 'list'; scope: 'session' }
+    /**
+     * The ≤0.1.6 per-plugin settings card seat (removed in the 0.1.7
+     * declarative migration). Declared so the merged client can register its
+     * legacy card on the old lines; on 0.1.7+ the seat does not exist and the
+     * registration path never runs (the legacy card rides the settingsScope
+     * waist, which only fires where the host provides it).
+     */
+    'settings.plugin.item': { kind: 'keyed'; scope: 'root' }
   }
 
   /** Locale namespaces merged by client plugins. */

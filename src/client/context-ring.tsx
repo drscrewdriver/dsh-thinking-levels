@@ -278,11 +278,15 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
     }
   }, [open])
 
-  // Fail-VISIBLE, deliberately unlike the retired pill: a hidden control is
-  // indistinguishable from a dead registration, which cost a debug round-trip
-  // once already. Without a projection seat or a reading, the ring renders
-  // dimmed at 0% with the caption saying why, instead of disappearing.
+  // Two distinct invisible cases, handled differently: a host WITHOUT the
+  // projection seat (≤0.1.6 lines — the seat props simply lack useProjection)
+  // hides the ring, the retired pill's discipline — a permanently dead control
+  // helps nobody there. A host WITH the seat but no reading yet (fresh
+  // session) renders the dimmed unset state — fail-visible, because a hidden
+  // control is indistinguishable from a dead registration, which cost a debug
+  // round-trip once already.
   const hasSeat = typeof useProjection === 'function'
+  if (!hasSeat) return null
   // The official meter's own occupancy mapping (contextOccupancy): the
   // projected estimate wins, the raw pressure sample is the floor.
   const used = typeof pressure?.projectedTokens === 'number'

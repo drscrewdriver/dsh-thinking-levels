@@ -53,12 +53,19 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
           }),
         }
       : undefined,
-    // Cordis inject: the panel registration resolves `modelDirectories`
-    // deferred (a synchronous property read races the service start). The
-    // stub fires the callback immediately with the stub service face.
-    inject: (deps: readonly string[], cb: (scope: { modelDirectories: unknown }) => void) => {
-      const directories = ctx.modelDirectories
-      cb({ modelDirectories: directories })
+    // Cordis inject: deferred registrations resolve through this stub, which
+    // serves whatever the (0.1.7+ generation) host has — modelDirectories and
+    // configForms present, settingsScope deliberately absent (that waist path
+    // must not register the legacy card here).
+    inject: (deps: readonly string[], cb: (scope: Record<string, unknown>) => void) => {
+      const scope: Record<string, unknown> = {}
+      for (const dep of deps) {
+        if (dep === 'modelDirectories') scope[dep] = ctx.modelDirectories
+        else if (dep === 'configForms') scope[dep] = { get: ctx.configForms.get }
+        else if (dep === 'sessions') scope[dep] = {}
+        else if (dep === 'remote' || dep === 'remote.session') scope[dep] = {}
+      }
+      cb(scope)
       return () => {}
     },
     slots: {
@@ -83,7 +90,7 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
 
 describe('config-form contract (declarative settings, family shared tab)', () => {
   it('declares the services apply consumes (cordis waits; no lazy-get race)', () => {
-    expect(inject).toEqual(['slots', 'locale', 'configForms', 'modelDirectories'])
+    expect(inject).toEqual(['slots', 'locale'])
   })
 
   it('registers the composer model panel, the family top-level section and the plugins-page config card', () => {
@@ -102,8 +109,9 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
     const { declared, registrations } = collectRegistrations(false)
     expect(declared).toEqual(['settings.section', 'plugins.bundle.config', 'conversation.input.right'])
-    // The model panel is skipped, but the context-check ring still rides its
-    // seat — it does not depend on modelDirectories.
+    // The model panel is skipped, but the modern surface (family section,
+    // plugins-page card, and the context-check ring riding its seat) still
+    // registers — none of them depend on modelDirectories.
     expect(registrations).toHaveLength(3)
     expect(registrations[0]!.slot).toBe('settings.section')
     expect(registrations[1]!.slot).toBe('plugins.bundle.config')

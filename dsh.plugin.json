@@ -4,7 +4,7 @@
   "main": "./lib/index.js",
   "description": "thinking-level (reasoning_effort) control — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry.",
   "engines": {
-    "dsh": ">=0.2.0-rc.1 <0.2.1-0"
+    "dsh": "0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2"
   },
   "contributes": {
     "tools": [],

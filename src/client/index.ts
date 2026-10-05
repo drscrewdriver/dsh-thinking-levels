@@ -31,6 +31,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, de, en, es, fr, it, ja, ko, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
+import { ThinkingLevelsCard } from './card.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -59,15 +60,32 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Services required by the browser half. */
-export const inject = ['slots', 'locale', 'configForms', 'modelDirectories']
+/** Services required by the browser half (the common floor across all host
+ * generations). Generation-specific services resolve through separate deferred
+ * injects below: a cordis inject naming an absent service would pend forever,
+ * so `configForms` (0.1.7+), `settingsScope` (≤0.1.6) and `modelDirectories`
+ * each get their own inject that simply never fires where the service is
+ * missing — shape-detected availability, never version-guessed.
+ */
+export const inject = ['slots', 'locale']
 
 /**
  * Client plugin body: dictionaries plus the composer quick-control slot.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const t = ctx.locale.bind(NS)
+  // `locale.bind` is a 0.1.7+ face; the only apply-scope use is the family
+  // section's nav label (registered in the configForms path below), so the
+  // fallback never renders anywhere.
+  const locale = ctx.locale as { bind?: (ns: string) => (key: string) => string }
+  const t = typeof locale.bind === 'function' ? locale.bind(NS) : (key: string) => key
+  // The one scope factory, set by whichever generation's settings channel the
+  // host provides (see the waist injects at the end of apply).
+  let scopeOf: ((ns: string) => unknown) | undefined
+  const scopeInject = (ctx as unknown as {
+    inject: (deps: string[], cb: (scope: Record<string, unknown>) => void) => void
+  }).inject
+
   // `register(ns, dicts)` is typed to the built-in locale ids (`zh` / `en`
   // only); the shipped `ja` / `ko` / `fr` / `de` / `it` / `ru` / `es`
   // dictionaries go through the single-locale overload, so they are installed
@@ -143,8 +161,10 @@ export function apply(ctx: ClientContext): void {
           }
           return {
             directory,
-            piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
-            deepseekScope: ctx.configForms.get<unknown>('llm-deepseek'),
+            // Resolved through the generation waist; by the time a session
+            // renders, both deferred injects have long settled.
+            piAiScope: scopeOf?.('llm-pi-ai') as never,
+            deepseekScope: scopeOf?.('llm-deepseek') as never,
           }
         },
       }, ModelPanel)
@@ -171,9 +191,9 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
   let tabsRevision = -1
   let tabs: readonly FamilyTabEntry[] = []
   const sectionInjected = (): FamilySectionInjected => ({
-    scope: ctx.configForms.get<ThinkingLevelsConfig>('dsh-thinking-levels'),
-    piAiScope: ctx.configForms.get<unknown>('llm-pi-ai'),
-    ocScope: ctx.configForms.get<unknown>('llm-openai-completions'),
+    scope: scopeOf!('thinking-levels') as never,
+    piAiScope: scopeOf!('llm-pi-ai') as never,
+    ocScope: scopeOf!('llm-openai-completions') as never,
     hooks: {
       tabs: {
         getSnapshot: () => {
@@ -204,43 +224,78 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     },
   })
 
-  ctx.slots.inject('settings.section', function* () {
-    yield ctx.slots.register({
-      name: 'settings.section',
-      id: 'dsh-family',
-      order: 40,
-      label: () => t('family.title'),
+  /** ≤0.1.6 surface: the per-plugin settings card (the 0.1.7 migration's casualty). */
+  function registerLegacyCard(): void {
+    if (scopeOf === undefined) return
+    ctx.slots.inject('settings.plugin.item', function* () {
+      yield ctx.slots.register({
+        name: 'settings.plugin.item',
+        id: NS,
+        key: NS,
+        locale: NS,
+        inject: () => ({
+          scope: scopeOf!('thinking-levels') as never,
+          piAiScope: scopeOf!('llm-pi-ai') as never,
+        }),
+      }, ThinkingLevelsCard)
+    })
+  }
+
+  /** 0.1.7+/0.2.0 surfaces: family section, plugins-page card, context ring. */
+  function registerModernSurface(): void {
+    if (scopeOf === undefined) return
+    ctx.slots.inject('settings.section', function* () {
+      yield ctx.slots.register({
+        name: 'settings.section',
+        id: 'dsh-family',
+        order: 40,
+        label: () => t('family.title'),
+        locale: NS,
+        inject: sectionInjected,
+        children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
+      }, FamilySettingsSection)
+    })
+
+    // Plugins-page configuration card (DSH 0.2.0): same component and same
+    // inject factory as the family section above, so both surfaces stay one
+    // source of truth. On 0.1.7 hosts the slot is never declared and this
+    // inject idles harmlessly.
+    ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+      name: 'plugins.bundle.config',
+      key: 'dsh-thinking-levels',
       locale: NS,
       inject: sectionInjected,
-      children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
-    }, FamilySettingsSection)
+    }, FamilySettingsSection))
+
+    // Context-capacity check ring (conversation.input.right): restores the
+    // CHECK the model-seat takeover removed. The projection seat arrives via
+    // the slot's injected props; hosts without it render nothing (the ring is
+    // a 0.2.0 feature — on the ≤0.1.6 lines the seat props lack the hook).
+    ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+      name: 'conversation.input.right',
+      id: 'context-check-ring',
+      order: 5,
+    }, ContextRing))
+  }
+
+  // Generation waist (registered last — the callbacks reach the definitions
+  // above): whichever settings channel the host provides becomes the one scope
+  // factory. Faces are structurally identical (getSnapshot / subscribe / set /
+  // unset) — 0.1.7's ConfigForm handle mirrors the ≤0.1.6 settingsScope
+  // field-for-field. A host missing a generation's service never fires that
+  // callback, so exactly one path registers its surface.
+  scopeInject.call(ctx, ['configForms'], (scope) => {
+    const forms = scope.configForms as { get: <T>(entryId: string) => T } | undefined
+    if (forms === undefined) return
+    scopeOf = (<T,>(ns: string) => forms.get<T>(ns)) as typeof scopeOf
+    registerModernSurface()
   })
-
-  // Plugins-page configuration card (DSH 0.2.0): the Plugins page renders no
-  // volatile config form on its own — the bundle's detail page mounts the
-  // `plugins.bundle.config` keyed slot, dispatched by the package name, and
-  // without a registration here the page shows no configuration card at all.
-  // SAME component and SAME inject factory as the family section above, so
-  // both surfaces stay one source of truth. On 0.1.7 hosts the slot is never
-  // declared and this inject idles harmlessly (an undischarged inject never
-  // blocks the client half — same story as the `dsh-family.tab` note above).
-  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-    name: 'plugins.bundle.config',
-    key: 'dsh-thinking-levels',
-    locale: NS,
-    inject: sectionInjected,
-  }, FamilySettingsSection))
-
-  // Context-capacity check ring (conversation.input.right): the model-seat
-  // takeover removed the shipped meter's trigger with the seat it lived on;
-  // this restores the CHECK (pressure arc + used/window/breakdown popover)
-  // next to where the shipped meter sat. The projection seats arrive via the
-  // slot's injected props (`useProjection` — the same feed the shipped meter
-  // consumes); a harness without them renders nothing (retired pill's
-  // discipline). Layout language follows better-er/dsh-cache-billing.
-  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
-    name: 'conversation.input.right',
-    id: 'context-check-ring',
-    order: 5,
-  }, ContextRing))
+  scopeInject.call(ctx, ['settingsScope'], (scope) => {
+    const settingsScope = scope.settingsScope as
+      | { bind: <T>(spec: { namespace: string }) => T }
+      | undefined
+    if (settingsScope === undefined) return
+    scopeOf = (<T,>(ns: string) => settingsScope.bind<T>({ namespace: ns })) as typeof scopeOf
+    registerLegacyCard()
+  })
 }

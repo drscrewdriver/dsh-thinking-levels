@@ -354,7 +354,10 @@ const errorBannerStyle: CSSProperties = {
 /** The user-layer `providers` value of the llm-pi-ai namespace, when present. */
 function providersOf(snapshot: unknown): Record<string, unknown> {
   if (typeof snapshot !== 'object' || snapshot === null) return {}
+  // 0.1.7+ snapshots carry the user layer; ≤0.1.6 settingsScope snapshots
+  // carry the merged section as `value` — read whichever the host provides.
   const user = (snapshot as { user?: unknown }).user
+    ?? (snapshot as { value?: unknown }).value
   if (typeof user !== 'object' || user === null || Array.isArray(user)) return {}
   const providers = (user as Record<string, unknown>)['providers']
   return typeof providers === 'object' && providers !== null && !Array.isArray(providers)
