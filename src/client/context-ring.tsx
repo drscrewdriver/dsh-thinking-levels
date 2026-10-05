@@ -29,11 +29,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 
-/** The pressure projection slice (fields defensively optional). */
+/** The pressure projection slice — the token-meter wire view's own fields. */
 export interface ContextPressureLike {
-  usedTokens?: number
+  /** Post-usage pressure: the last usage sample's prompt-side token count. */
+  pressureTokens?: number
+  /** The request-projected estimate (pressure + uncommitted surface). */
+  projectedTokens?: number
   contextWindow?: number
-  percent?: number
 }
 
 /** The breakdown projection slice (shipped meter's three-way split). */
@@ -281,15 +283,17 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
   // once already. Without a projection seat or a reading, the ring renders
   // dimmed at 0% with the caption saying why, instead of disappearing.
   const hasSeat = typeof useProjection === 'function'
-  const used = typeof pressure?.usedTokens === 'number' ? pressure.usedTokens : undefined
+  // The official meter's own occupancy mapping (contextOccupancy): the
+  // projected estimate wins, the raw pressure sample is the floor.
+  const used = typeof pressure?.projectedTokens === 'number'
+    ? pressure.projectedTokens
+    : typeof pressure?.pressureTokens === 'number' ? pressure.pressureTokens : undefined
   const window_ = typeof pressure?.contextWindow === 'number' ? pressure.contextWindow : undefined
   const hasReading = used !== undefined && window_ !== undefined && window_ > 0
 
   const c = copy()
   const percent = hasReading
-    ? (typeof pressure?.percent === 'number'
-      ? pressure.percent
-      : Math.min(100, Math.round(((used as number) / (window_ as number)) * 100)))
+    ? Math.min(100, Math.round(((used as number) / (window_ as number)) * 100))
     : 0
   const color = pressureColor(percent)
   const remaining = hasReading ? Math.max(0, (window_ as number) - (used as number)) : 0
