@@ -32,7 +32,15 @@
  */
 /** The settings namespace holding the provider/model configs (llm-pi-ai). */
 export declare const PI_AI_NAMESPACE = "llm-pi-ai";
-/** The settings namespace of the retired short-circuit adapter, still READ to gate posture. */
+/**
+ * The transport's composition entry id changed shape across its packaging
+ * history: the shipped cordis.patch.yml inserts `dsh-llm-openai-completions`
+ * since the 0.4.0 fragment, while earlier manual installs used the short form.
+ * Readers settle on whichever namespace the host's describe document carries —
+ * never version-guessed, always shape-detected.
+ */
+export declare const TAKEOVER_NAMESPACE_CANDIDATES: readonly ["dsh-llm-openai-completions", "llm-openai-completions"];
+/** @deprecated short-form candidate kept for takeovers of legacy installs; prefer {@link TAKEOVER_NAMESPACE_CANDIDATES}. */
 export declare const TAKEOVER_NAMESPACE = "llm-openai-completions";
 /** One model row of the llm-pi-ai section (minimal face). */
 export interface PiAiModelRow {

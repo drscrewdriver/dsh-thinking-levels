@@ -42,13 +42,13 @@ import { recentToolCalls } from './session-events.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
-  TAKEOVER_NAMESPACE,
+  TAKEOVER_NAMESPACE_CANDIDATES,
   takeoverPatch,
   takeoverRoutesOf,
   withOfficialCompatFixes,
   type PiAiSection,
 } from './takeover-sync.ts'
-import { describeSettings, readSection, readSectionOf } from './settings-read.ts'
+import { describeSettings, readSection, readSectionOf, resolveNamespaceOf } from './settings-read.ts'
 
 /** One configurer-confirmed capability override for a `provider/model` key. */
 export interface ModelCapabilityOverride {
@@ -310,9 +310,12 @@ interface SettingsWriteLike {
  */
 function takeoverReadout(ctx: Context): { routes: string[] | null; piAi: PiAiSection | undefined } {
   const descriptors = describeSettings(ctx)
-  const section = readSectionOf(descriptors, TAKEOVER_NAMESPACE)?.value as
-    | { enabled?: unknown; providers?: unknown }
-    | undefined
+  // The transport's composition entry id changed shape across its packaging
+  // history — settle on whichever namespace the describe document carries.
+  const section = resolveNamespaceOf<{ enabled?: unknown; providers?: unknown }>(
+    descriptors,
+    TAKEOVER_NAMESPACE_CANDIDATES,
+  )?.value
   const piAi = readSectionOf<PiAiSection>(descriptors, PI_AI_NAMESPACE)?.value
   return { routes: takeoverRoutesOf(section), piAi }
 }
@@ -517,11 +520,18 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // the transport section survives until the switch is actually flipped again.
   const syncTakeover = (): void => {
     syncTail = syncTail.then(async () => {
-      const patch = takeoverPatch(readSection<{ enabled?: unknown }>(ctx, TAKEOVER_NAMESPACE)?.value, current().takeover)
-      if (patch === undefined) return
+      // Resolve the transport's LIVE namespace from the describe document
+      // (the entry id changed shape across its packaging history) — the read
+      // and the mirror write land on the same settled id.
+      const transport = resolveNamespaceOf<{ enabled?: unknown }>(
+        describeSettings(ctx),
+        TAKEOVER_NAMESPACE_CANDIDATES,
+      )
+      const patch = takeoverPatch(transport?.value, current().takeover)
+      if (patch === undefined || transport === undefined) return
       const settings = ctx.get('settings') as SettingsWriteLike | undefined
-      await settings?.update?.(TAKEOVER_NAMESPACE, patch)
-      ctx.logger?.info?.('[thinking-levels] takeover switch %s written to %s.enabled', String(current().takeover), TAKEOVER_NAMESPACE)
+      await settings?.update?.(transport.ns, patch)
+      ctx.logger?.info?.('[thinking-levels] takeover switch %s written to %s.enabled', String(current().takeover), transport.ns)
     }).catch((error) => {
       ctx.logger?.warn?.('[thinking-levels] takeover mirror write rejected (schema gate); kept previous section', error)
     })

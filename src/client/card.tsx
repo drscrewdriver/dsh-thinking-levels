@@ -22,7 +22,7 @@
  * `useSyncExternalStore`, and the controls are plain HTML so the client bundle
  * needs no CSS modules and no primitives value import.
  */
-import { useState, useSyncExternalStore } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScope } from './scope-face.ts'
@@ -383,6 +383,23 @@ function ChevronIcon({ open }: { open: boolean }): JSX.Element {
  * @param readonly - whether writes are forbidden.
  * @returns the capabilities block, or a placeholder when nothing is configured.
  */
+/**
+ * The absent-transport snapshot: a module-level CONSTANT. `useSyncExternalStore`
+ * requires getSnapshot to return a STABLE value — an inline fallback literal is
+ * a new object on every call, and React spins an infinite update loop (#185)
+ * the moment this block renders with no transport handle (the ready branch's
+ * first-ever mount crash).
+ */
+const OC_ABSENT_SNAPSHOT = Object.freeze({
+  status: 'unavailable' as const,
+  value: undefined,
+  revision: undefined,
+  writable: false,
+  base: undefined,
+  user: undefined,
+  mode: 'memory' as const,
+})
+
 function ModelCapabilities(props: {
   scope: SettingsScope<unknown>
   ocScope?: SettingsScope<unknown>
@@ -390,17 +407,23 @@ function ModelCapabilities(props: {
   readonly: boolean
 }): JSX.Element {
   const { scope, ocScope, t, readonly } = props
-  const snapshot = useSyncExternalStore(
-    (listener) => scope.subscribe(listener),
-    () => scope.getSnapshot(),
-  )
+  // Stable subscription identities: inline lambdas make React resubscribe on
+  // every render, and the host controller folds a fresh decoded snapshot into
+  // its store on every subscribe — each resubscription would then look like a
+  // store change and re-render forever.
+  const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
+  const getSnapshot = useCallback(() => scope.getSnapshot(), [scope])
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot)
   // The transport's live section: drives the per-route takeover checkbox.
-  const ocSnapshot = useSyncExternalStore(
-    (listener) => ocScope?.subscribe(listener) ?? (() => {}),
-    () => ocScope !== undefined
-      ? ocScope.getSnapshot()
-      : { status: 'unavailable', value: undefined, revision: undefined, writable: false, base: undefined, user: undefined, mode: 'memory' },
+  const ocSubscribe = useCallback(
+    (listener: () => void) => ocScope?.subscribe(listener) ?? (() => {}),
+    [ocScope],
   )
+  const ocGetSnapshot = useCallback(
+    () => (ocScope !== undefined ? ocScope.getSnapshot() : OC_ABSENT_SNAPSHOT),
+    [ocScope],
+  )
+  const ocSnapshot = useSyncExternalStore(ocSubscribe, ocGetSnapshot)
   const ocSection = (ocSnapshot.status === 'ready' && typeof ocSnapshot.value === 'object' && ocSnapshot.value !== null
     ? ocSnapshot.value
     : {}) as { enabled?: unknown; providers?: unknown }
@@ -1032,10 +1055,12 @@ function ModelCapabilities(props: {
  */
 export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLevelsCardProps): JSX.Element {
   const [open, setOpen] = useState(true)
-  const snapshot = useSyncExternalStore(
-    (listener) => scope.subscribe(listener),
-    () => scope.getSnapshot(),
-  )
+  // Stable subscription identities (see ModelCapabilities): the host controller
+  // folds a fresh snapshot on every subscribe, so per-render inline lambdas
+  // would resubscribe→fold→re-render forever.
+  const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
+  const getSnapshot = useCallback(() => scope.getSnapshot(), [scope])
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot)
   const unavailable = snapshot.status === 'unavailable'
   const readonly = unavailable || !snapshot.writable
   // configForms serves the STORED doc: volatile fields arrive as plain values

@@ -70,6 +70,33 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'locale']
 
 /**
+ * The openai-completions transport's settings namespace, resolved per render:
+ * its composition entry id changed shape across packaging history
+ * (`dsh-llm-openai-completions` in the 0.4.0 fragment; earlier manual installs
+ * used the short form), so both candidates are probed and the one the host's
+ * describe document actually carries wins. A handle for an absent namespace
+ * reports `unavailable` forever, which the capability card treats as "transport
+ * absent" — that degradation is only honest when BOTH candidates are absent.
+ */
+const OC_NAMESPACE_PREFERRED = 'dsh-llm-openai-completions'
+const OC_NAMESPACE_LEGACY = 'llm-openai-completions'
+
+interface ScopeStatusFace {
+  getSnapshot?: () => { status?: 'loading' | 'ready' | 'unavailable' }
+}
+
+function ocTransportScopeOf(scopeOf: (ns: string) => unknown): unknown {
+  const preferredScope = scopeOf(OC_NAMESPACE_PREFERRED) as ScopeStatusFace | undefined
+  const status = typeof preferredScope?.getSnapshot === 'function'
+    ? preferredScope.getSnapshot().status
+    : undefined
+  // `loading` means the mirror is still folding — the preferred face may still
+  // turn ready, so keep it rather than degrading to the legacy name.
+  if (status === 'unavailable') return scopeOf(OC_NAMESPACE_LEGACY)
+  return preferredScope
+}
+
+/**
  * Client plugin body: dictionaries plus the composer quick-control slot.
  * @param ctx - client root context.
  */
@@ -191,9 +218,17 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
   let tabsRevision = -1
   let tabs: readonly FamilyTabEntry[] = []
   const sectionInjected = (): FamilySectionInjected => ({
-    scope: scopeOf!('thinking-levels') as never,
+    // The settings namespace IS the composition entry id — the include row id
+    // the shipped cordis.patch.yml inserts (`dsh-thinking-levels`), NOT this
+    // plugin's locale NS. The host keys configForms by that id; a handle for
+    // any other string reports `unavailable` forever.
+    scope: scopeOf!('dsh-thinking-levels') as never,
     piAiScope: scopeOf!('llm-pi-ai') as never,
-    ocScope: scopeOf!('llm-openai-completions') as never,
+    // The transport's entry id changed shape across its packaging history
+    // (`dsh-llm-openai-completions` in the 0.4.0 fragment; earlier manual
+    // installs used the short form): settle on whichever namespace the host's
+    // describe document actually carries.
+    ocScope: ocTransportScopeOf(scopeOf!) as never,
     hooks: {
       tabs: {
         getSnapshot: () => {
@@ -224,7 +259,11 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     },
   })
 
-  /** ≤0.1.6 surface: the per-plugin settings card (the 0.1.7 migration's casualty). */
+/** ≤0.1.6 surface: the per-plugin settings card (the 0.1.7 migration's casualty).
+ * The legacy scope namespace is this plugin's OWN registered settings section
+ * (`thinking-levels`) — a self-registered name on hosts without declarative
+ * settings, not a composition entry id, so it deliberately differs from the
+ * `dsh-thinking-levels` entry id the 0.1.7+ surfaces read. */
   function registerLegacyCard(): void {
     if (scopeOf === undefined) return
     ctx.slots.inject('settings.plugin.item', function* () {

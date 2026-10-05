@@ -40,3 +40,14 @@ export declare function describeSettings(ctx: Context): SettingsDescriptorLike[]
 export declare function readSection<T = unknown>(ctx: Context, ns: string): SectionReadout<T> | undefined;
 /** Pick one namespace out of a `describe()` pass (undefined when absent). */
 export declare function readSectionOf<T = unknown>(descriptors: SettingsDescriptorLike[] | undefined, ns: string): SectionReadout<T> | undefined;
+/**
+ * Pick the first candidate namespace a `describe()` pass actually carries.
+ * Composition entry ids shifted shape across a plugin's own packaging history
+ * (e.g. the openai-completions transport's `dsh-llm-openai-completions` since
+ * its 0.4.0 fragment vs the short form earlier manual installs used), so
+ * cross-plugin readers resolve the LIVE id instead of hardcoding one — the
+ * winner is shape-detected from the document, never version-guessed.
+ */
+export declare function resolveNamespaceOf<T = unknown>(descriptors: SettingsDescriptorLike[] | undefined, candidates: readonly string[]): (SectionReadout<T> & {
+    ns: string;
+}) | undefined;
