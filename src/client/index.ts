@@ -21,6 +21,7 @@
  * purity).
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { ContextRing } from './context-ring.tsx'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // DSH 0.1.5 moved the `ctx.slots` Context augmentation here (it used to live in
@@ -228,4 +229,17 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     locale: NS,
     inject: sectionInjected,
   }, FamilySettingsSection))
+
+  // Context-capacity check ring (conversation.input.right): the model-seat
+  // takeover removed the shipped meter's trigger with the seat it lived on;
+  // this restores the CHECK (pressure arc + used/window/breakdown popover)
+  // next to where the shipped meter sat. The projection seats arrive via the
+  // slot's injected props (`useProjection` — the same feed the shipped meter
+  // consumes); a harness without them renders nothing (retired pill's
+  // discipline). Layout language follows better-er/dsh-cache-billing.
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'context-check-ring',
+    order: 5,
+  }, ContextRing))
 }
