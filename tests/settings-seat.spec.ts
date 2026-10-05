@@ -86,19 +86,21 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(inject).toEqual(['slots', 'locale', 'configForms', 'modelDirectories'])
   })
 
-  it('registers the composer model panel and the family top-level section', () => {
+  it('registers the composer model panel, the family top-level section and the plugins-page config card', () => {
     const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.model', 'settings.section'])
-    expect(registrations).toHaveLength(2)
+    expect(declared).toEqual(['conversation.input.model', 'settings.section', 'plugins.bundle.config'])
+    expect(registrations).toHaveLength(3)
     expect(registrations[0]!.slot).toBe('conversation.input.model')
     expect(registrations[1]!.slot).toBe('settings.section')
+    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
     const { declared, registrations } = collectRegistrations(false)
-    expect(declared).toEqual(['settings.section'])
-    expect(registrations).toHaveLength(1)
+    expect(declared).toEqual(['settings.section', 'plugins.bundle.config'])
+    expect(registrations).toHaveLength(2)
     expect(registrations[0]!.slot).toBe('settings.section')
+    expect(registrations[1]!.slot).toBe('plugins.bundle.config')
   })
 
   it('never mints the removed settings surfaces (the item card)', () => {

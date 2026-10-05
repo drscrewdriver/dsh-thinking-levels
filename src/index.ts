@@ -42,10 +42,11 @@ import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
   TAKEOVER_NAMESPACE,
-  takeoverProvidersOf,
+  takeoverRoutesOf,
   withOfficialCompatFixes,
   type PiAiSection,
 } from './takeover-sync.ts'
+import { describeSettings, readSection, readSectionOf } from './settings-read.ts'
 
 /** One configurer-confirmed capability override for a `provider/model` key. */
 export interface ModelCapabilityOverride {
@@ -283,56 +284,62 @@ interface LlmServiceLike {
   }>
 }
 
-/** Minimal face of the settings service's cross-namespace read (typed locally). */
-interface SettingsReadLike {
-  get?: (ns: string) => unknown
+/** Minimal face of the settings service's write channel (typed locally). */
+interface SettingsWriteLike {
+  update?: (ns: string, patch: unknown) => Promise<unknown>
+}
+
+/** One takeover readout: the taken-over routes plus the llm-pi-ai section they were computed against. */
+interface TakeoverReadout {
+  routes: string[] | null
+  piAi: PiAiSection | undefined
 }
 
 /**
- * The providers currently taken over by dsh-llm-openai-completions, read
- * lazily from the live `llm-openai-completions` namespace. `null` when the
- * namespace is unregistered (adapter plugin absent). Toggle folding and effort
- * injection apply only to routes inside this list; everything else keeps
- * pi-ai's native reasoning semantics.
+ * One `describe()` pass, two namespaces: the taken-over routes (transport
+ * section judgment) and the llm-pi-ai section itself. `describe()` replaces
+ * the dead `settings?.get?.()` soft reads — `SettingsForms` has no `get`.
  */
-function takeoverOf(ctx: Context): string[] | null {
-  const settings = ctx.get('settings') as SettingsReadLike | undefined
-  const section = settings?.get?.(TAKEOVER_NAMESPACE) as
+function takeoverReadout(ctx: Context): TakeoverReadout {
+  const descriptors = describeSettings(ctx)
+  const section = readSectionOf(descriptors, TAKEOVER_NAMESPACE)?.value as
     | { enabled?: unknown; providers?: unknown }
     | undefined
-  return takeoverProvidersOf(section)
+  const piAi = readSectionOf<PiAiSection>(descriptors, PI_AI_NAMESPACE)?.value
+  return { routes: takeoverRoutesOf(section, piAi), piAi }
 }
 
 /**
- * The llm-pi-ai posture of one model, read from the live settings namespace
+ * The llm-pi-ai posture of one model, from the live llm-pi-ai section
  * (the capability card writes `reasoningEfforts` and `compat` there). Absent
  * when the route/model is not configured.
  *
  * A model is toggle-only (Off/On, no effort levels) only when BOTH the model
  * declares a thinking toggle (reasoningEfforts table, no
  * supportsReasoningEffort) AND the route is taken over by the
- * openai-completions adapter (it is in the `llm-openai-completions` list).
- * A route OUTSIDE the takeover list is served by pi-ai with its native
- * reasoning semantics — off/high stay visible and pi-ai validates the effort —
- * so it is NOT folded into a toggle here.
+ * openai-completions transport (it is in the takeover judgment). A route
+ * OUTSIDE the takeover judgment is served by pi-ai with its native
+ * reasoning semantics — off/high stay visible and pi-ai validates the
+ * effort — so it is NOT folded into a toggle here.
  */
 function piAiPosture(
-  ctx: Context,
+  piAi: PiAiSection | undefined,
   provider: string,
   model: string,
   takeover: string[] | null,
 ): { thinkingOn: boolean; supportsEffort: boolean } | undefined {
-  const settings = ctx.get('settings') as SettingsReadLike | undefined
-  const section = settings?.get?.('llm-pi-ai') as { providers?: Record<string, { models?: Array<Record<string, unknown>> }> } | undefined
-  const entry = section?.providers?.[provider]?.models?.find(candidate => candidate['id'] === model)
+  const rows = Array.isArray(piAi?.providers?.[provider]?.models)
+    ? piAi.providers![provider]!.models as Array<Record<string, unknown>>
+    : []
+  const entry = rows.find(candidate => candidate['id'] === model)
   if (entry === undefined) return undefined
   const efforts = entry['reasoningEfforts']
   const compat = entry['compat']
   const thinkingOn = typeof efforts === 'object' && efforts !== null && !Array.isArray(efforts)
   const supportsEffort = typeof compat === 'object' && compat !== null
     && (compat as Record<string, unknown>)['supportsReasoningEffort'] === true
-  // Toggle folding is a takeover-list concern: only the openai-completions
-  // adapter's routes get the Off/On treatment. pi-ai-served routes keep their
+  // Toggle folding is a takeover-judgment concern: only the openai-completions
+  // transport's routes get the Off/On treatment. pi-ai-served routes keep their
   // native effort levels (off/high visible).
   const toggled = takeover !== null && takeover.includes(provider)
   return { thinkingOn: thinkingOn && toggled, supportsEffort }
@@ -360,7 +367,8 @@ function capabilityResolver(ctx: Context): {
       try {
         const info = await llm?.resolveModelInfo?.(provider, model)
         const efforts = info?.reasoning?.efforts?.map(effort => effort.id) ?? []
-        const posture = piAiPosture(ctx, provider, model, takeoverOf(ctx))
+        const readout = takeoverReadout(ctx)
+        const posture = piAiPosture(readout.piAi, provider, model, readout.routes)
         capability = {
           supportsReasoning: reasoningEffortSupported(info?.reasoning),
           efforts,
@@ -418,11 +426,10 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   let syncTail: Promise<unknown> = Promise.resolve()
   const syncDeveloperRole = (): void => {
     syncTail = syncTail.then(async () => {
-      const settings = ctx.get('settings') as {
-        get?: (ns: string) => unknown
-        update?: (ns: string, patch: unknown) => Promise<unknown>
-      } | undefined
-      const piAi = settings?.get?.(PI_AI_NAMESPACE) as PiAiSection | undefined
+      const settings = ctx.get('settings') as SettingsWriteLike | undefined
+      // describe() is the only read channel on 0.1.7+ (SettingsForms has no
+      // `get`); the section value is the schema-projected live config.
+      const piAi = readSection<PiAiSection>(ctx, PI_AI_NAMESPACE)?.value
       const next = withOfficialCompatFixes(piAi)
       if (next === undefined || next === piAi) return
       await settings?.update?.(PI_AI_NAMESPACE, { providers: next.providers })
@@ -516,10 +523,12 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // Read the live llm-pi-ai config for the thinking/effort posture the card
   // wrote there: a model with `reasoningEfforts` but without effort support
   // (Qwen3.6) is collapsed to an On/Off toggle in the selector — but ONLY when
-  // the route is taken over by the openai-completions adapter. A pi-ai-served
+  // the route is taken over by the openai-completions transport. A pi-ai-served
   // route (e.g. mimo via xiaomi) keeps its native off/high levels.
-  const piAiFor = (provider: string, model: string): { thinkingOn: boolean; supportsEffort: boolean } | undefined =>
-    piAiPosture(ctx, provider, model, takeoverOf(ctx))
+  const piAiFor = (provider: string, model: string): { thinkingOn: boolean; supportsEffort: boolean } | undefined => {
+    const readout = takeoverReadout(ctx)
+    return piAiPosture(readout.piAi, provider, model, readout.routes)
+  }
   advertiseModelCapability(llm, overrideFor, piAiFor)
   const onAny = ctx.on as unknown as (event: string, listener: (...args: never[]) => unknown) => void
   onAny('llm/adapters-updated', () => {
@@ -529,5 +538,11 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       overrideFor,
       piAiFor,
     )
+  })
+  // A settings commit can flip the takeover judgment (the transport's enabled
+  // flag or the llm-pi-ai routes): drop the cached capability snapshots so
+  // toggle folding follows the new posture on the next request.
+  onAny('settings/document-updated', () => {
+    capability.clear()
   })
 }

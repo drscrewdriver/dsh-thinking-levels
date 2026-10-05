@@ -8,6 +8,51 @@ All notable changes to `dsh-thinking-levels` are documented here.
 
 ## [Unreleased]
 
+### Fixed — settings read channel + takeover gating — 3.5.0
+
+- **The cross-namespace settings reads were silently dead on every supported
+  host; they now work.** DSH 0.1.7+ replaced the settings service with
+  `SettingsForms`, which has no `get(ns)` — the compat bridge's
+  `settings?.get?.('llm-pi-ai')` (and the takeover gating's
+  `settings?.get?.('llm-openai-completions')`) therefore always returned
+  `undefined` and degraded quietly. The new `settings-read` module reads
+  through `describe()`, the actual read channel on 0.1.7+ hosts, so the
+  official-compat bridge (`supportsDeveloperRole` / toggle `thinkingFormat`)
+  actually writes again and the takeover gating sees the live transport
+  section.
+- **The takeover gating now matches the revived transport's judgment.**
+  `takeoverRoutesOf(section, piAi)` computes the taken-over routes as
+  `enabled && (manual providers ∪ auto-identified)` — the same union
+  dsh-llm-openai-completions 0.3.0 applies at dispatch — instead of the
+  section's bare `providers` list. The capability cache is dropped on every
+  `settings/document-updated`, so toggle folding follows a flipped transport
+  switch without waiting for an adapter-registry change.
+- No new configuration fields; the takeover switch lives in
+  dsh-llm-openai-completions' own settings section (its `enabled` flag).
+
+### Added — effort slider (whale-girl runner thumb) — 3.4.5
+
+- **The model panel's per-line effort `<select>` became a segment slider.** Click a line's
+  effort chip and a full-width slider expands under that line: the stop count adapts to the
+  model's advertised efforts, `auto` is pinned leftmost (then `off`/`on`, the strength
+  gradient, unknown gateway wire values last), the thumb follows the pointer continuously
+  and snaps on release (one route write per gesture), ←/→/Home/End step stop-by-stop, and
+  the old "Provider default" reset survives as the ↺ button of the slider row.
+- **Whale-girl runner thumb on DeepSeek lines.** Official DeepSeek routes and gateway
+  models whose id/name says deepseek run an 8-frame side-run strip as the thumb (ping-pong
+  loop, 720 ms per direction at rest / 420 ms while dragging, frozen under
+  `prefers-reduced-motion`); every other model keeps a plain white knob. Community
+  whale-girl artwork sourced from HanaAyane/dsh-reasoning-effort
+  (`assets/chibi-runner-strip.png`); regenerate the inlined asset via
+  `python tools/whale-mascot.py`.
+- **Pure slider helpers** exported from `thinking-level`: `orderEffortsForSlider`
+  (stable auto-leftmost ordering, unknown ids kept last in arrival order) and
+  `nearestEffortStopIndex` (exact match, rank-nearest fallback with ties toward the
+  stronger level), with unit coverage.
+- **Test repair (pre-existing):** `settings-seat.spec.ts` still expected the two-slot
+  surface and had been failing since the `plugins.bundle.config` card landed; the
+  registration expectations now cover it.
+
 ### Fixed — duplicate Plugins settings entry — 2.0.0-beta.4
 
 - **Removed the `settings.plugins.tab` registration.** The 0.1.5 compat work assumed DSH 0.1.5

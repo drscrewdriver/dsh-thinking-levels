@@ -239,21 +239,27 @@ export function withOfficialCompatFixes(
 }
 
 /**
- * The providers the openai-completions adapter is currently set up to take
- * over, from the live `llm-openai-completions` settings namespace. Used to
- * gate thinking-levels' own behavior: a route OUTSIDE the takeover list is
- * served by pi-ai with its native reasoning semantics (off/high visible,
- * pi-ai validates and serializes the effort) and must not be folded into an
- * Off/On toggle or have efforts injected by this plugin.
- * @param section - the live llm-openai-completions section, if registered.
- * @returns the provider ids the adapter will serve, or `null` when the
- *   namespace is unregistered (adapter plugin absent).
+ * The routes the openai-completions transport currently takes over, from its
+ * live settings section plus the llm-pi-ai data plane. The section's
+ * `enabled` flag is the single source of truth (the transport's own switch);
+ * the judgment unions the section's MANUAL `providers` list with the routes
+ * auto-identified from llm-pi-ai (custom openai-completions gateway AND
+ * thinking declared) — the same union the transport itself applies at
+ * dispatch, so this plugin's gating cannot drift from the actual takeover.
+ * @param section - the live llm-openai-completions section, if composed.
+ * @param piAi - the live llm-pi-ai section, if composed.
+ * @returns the taken-over route ids, `[]` when the transport is disabled, or
+ *   `null` when the transport is not composed (namespace absent — every route
+ *   keeps pi-ai's native reasoning semantics).
  */
-export function takeoverProvidersOf(
+export function takeoverRoutesOf(
   section: { enabled?: unknown; providers?: unknown } | undefined,
+  piAi: PiAiSection | undefined,
 ): string[] | null {
   if (section === undefined) return null
   if (section.enabled !== true) return []
-  if (!Array.isArray(section.providers)) return []
-  return section.providers.filter((id): id is string => typeof id === 'string')
+  const manual = Array.isArray(section.providers)
+    ? section.providers.filter((id): id is string => typeof id === 'string')
+    : []
+  return [...new Set([...manual, ...identifyTakeoverProviders(piAi)])]
 }

@@ -78,6 +78,7 @@ export const zh = {
   'model.panel.unavailable': '当前会话的模型目录不可用',
   'input.effort.title': '思考强度',
   'input.effort.default': '提供方默认',
+  'input.effort.reset': '恢复提供方默认',
   'card.capabilities.failed': '保存失败：配置被拒绝或冲突，请检查值。',
 } satisfies Record<string, string>
 
@@ -156,6 +157,7 @@ export const en: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'The model directory is unavailable for this session',
   'input.effort.title': 'Reasoning effort',
   'input.effort.default': 'Provider default',
+  'input.effort.reset': 'Restore provider default',
   'card.capabilities.failed': 'Save failed: the value was rejected or conflicted. Check it.',
 }
 
@@ -234,6 +236,7 @@ export const ja: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'このセッションのモデルディレクトリは利用できません',
   'input.effort.title': '思考レベル',
   'input.effort.default': 'プロバイダーの既定',
+  'input.effort.reset': 'プロバイダーの既定に戻す',
   'card.capabilities.failed': '保存に失敗しました：値が拒否されたか競合しています。確認してください。',
 }
 
@@ -312,6 +315,7 @@ export const ko: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': '이 세션의 모델 디렉터리를 사용할 수 없습니다',
   'input.effort.title': '추론 강도',
   'input.effort.default': '공급자 기본값',
+  'input.effort.reset': '공급자 기본값으로 복원',
   'card.capabilities.failed': '저장 실패: 값이 거부되었거나 충돌합니다. 확인하세요.',
 }
 
@@ -390,6 +394,7 @@ export const fr: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'Le répertoire de modèles est indisponible pour cette session',
   'input.effort.title': 'Effort de raisonnement',
   'input.effort.default': 'Valeur par défaut du fournisseur',
+  'input.effort.reset': 'Restaurer la valeur par défaut du fournisseur',
   'card.capabilities.failed': 'Échec de l\'enregistrement : la valeur a été rejetée ou est en conflit. Vérifiez-la.',
 }
 
@@ -468,6 +473,7 @@ export const de: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'Das Modellverzeichnis ist für diese Sitzung nicht verfügbar',
   'input.effort.title': 'Schlussfolgerungsaufwand',
   'input.effort.default': 'Anbieterstandard',
+  'input.effort.reset': 'Auf Anbieterstandard zurücksetzen',
   'card.capabilities.failed': 'Speichern fehlgeschlagen: Der Wert wurde abgelehnt oder steht in Konflikt. Bitte überprüfen.',
 }
 
@@ -546,6 +552,7 @@ export const it: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'La directory dei modelli non è disponibile per questa sessione',
   'input.effort.title': 'Sforzo di ragionamento',
   'input.effort.default': 'Predefinito del provider',
+  'input.effort.reset': 'Ripristina il predefinito del provider',
   'card.capabilities.failed': 'Salvataggio non riuscito: il valore è stato rifiutato o è in conflitto. Verifica.',
 }
 
@@ -624,6 +631,7 @@ export const ru: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'Каталог моделей недоступен для этой сессии',
   'input.effort.title': 'Усилие рассуждения',
   'input.effort.default': 'Значение провайдера по умолчанию',
+  'input.effort.reset': 'Вернуть значение провайдера по умолчанию',
   'card.capabilities.failed': 'Ошибка сохранения: значение отклонено или конфликтует. Проверьте его.',
 }
 
@@ -702,6 +710,7 @@ export const es: Record<keyof typeof zh, string> = {
   'model.panel.unavailable': 'El directorio de modelos no está disponible para esta sesión',
   'input.effort.title': 'Esfuerzo de razonamiento',
   'input.effort.default': 'Predeterminado del proveedor',
+  'input.effort.reset': 'Restaurar el valor predeterminado del proveedor',
   'card.capabilities.failed': 'Error al guardar: el valor fue rechazado o está en conflicto. Verifícalo.',
 }
 
