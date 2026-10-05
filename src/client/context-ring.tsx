@@ -269,6 +269,8 @@ function formatMoney(amount: number, digits: number): string {
  * push into this store. The ring subscribes like any external store.
  */
 interface ProjectionSnapshot {
+  /** Set once the data hook mounts anywhere — the 0.2.0+ seat marker. */
+  seatMounted?: boolean
   pressure?: ContextPressureLike
   breakdown?: ContextBreakdownLike
   billing?: CacheBillingLike
@@ -276,8 +278,6 @@ interface ProjectionSnapshot {
 
 const store: ProjectionSnapshot = {}
 const listeners = new Set<() => void>()
-/** Whether a projection-seat hook has mounted anywhere (0.2.0+ only). */
-let seatMounted = false
 
 function publish(patch: Partial<ProjectionSnapshot>): void {
   Object.assign(store, patch)
@@ -301,9 +301,11 @@ export function ProjectionDataHook(props: { useProjection?: ProjectionHook }): J
   const pressure = props.useProjection?.('contextPressure') as ContextPressureLike | undefined
   const breakdown = props.useProjection?.('contextBreakdown') as ContextBreakdownLike | undefined
   const billing = props.useProjection?.('cacheBilling') as CacheBillingLike | undefined
-  seatMounted = true
   useEffect(() => {
-    publish({ pressure, breakdown, billing })
+    // The seat marker rides the first publish: the ring re-renders on every
+    // publish, so a marker arriving after the ring's first render still
+    // flips it from hidden to visible.
+    publish({ seatMounted: true, pressure, breakdown, billing })
   })
   return <span data-dsh-thinking-levels="projection-hook" style={{ display: 'none' }} />
 }
@@ -347,8 +349,8 @@ export function ContextRing(_props: ContextRingProps): JSX.Element | null {
   // renders the dimmed unset state — fail-visible, because a hidden control is
   // indistinguishable from a dead registration, which cost a debug round-trip
   // once already.
-  const hasSeat = seatMounted
   const live = useSyncExternalStore(subscribeStore, getStore)
+  const hasSeat = live.seatMounted === true
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const pressure = live.pressure
