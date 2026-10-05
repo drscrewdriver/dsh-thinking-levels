@@ -257,3 +257,19 @@ export function takeoverProvidersOf(
   if (!Array.isArray(section.providers)) return []
   return section.providers.filter((id): id is string => typeof id === 'string')
 }
+
+/**
+ * The settings patch to sync this plugin's takeover switch into the
+ * transport's own section, or `undefined` when nothing may be written:
+ * the transport is not composed (no section to drive), or the section
+ * already agrees (identity). Only `enabled` is ever written here — the
+ * user's manual `providers` list is untouched.
+ */
+export function takeoverPatch(
+  section: { enabled?: unknown } | undefined,
+  flag: boolean,
+): { enabled: boolean } | undefined {
+  if (section === undefined) return undefined
+  if (section.enabled === flag) return undefined
+  return { enabled: flag }
+}

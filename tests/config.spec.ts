@@ -11,7 +11,7 @@ describe('plugin config schema', () => {
 
   it('accepts the nine levels and the scheduler toggles at both surfaces', () => {
     const parsed = Config(asConfig({ enabled: false, level: 'medium', allowDowngrade: false, allowUpgrade: true }))
-    expect(parsed).toEqual({ enabled: false, level: 'medium', allowDowngrade: false, allowUpgrade: true, models: {} })
+    expect(parsed).toEqual({ enabled: false, level: 'medium', allowDowngrade: false, allowUpgrade: true, takeover: false, models: {} })
   })
 
   it('accepts configurer-confirmed model capability overrides with extended levels', () => {
