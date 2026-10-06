@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "4.2.0-beta.10",
+  "version": "4.2.0-beta.12",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",

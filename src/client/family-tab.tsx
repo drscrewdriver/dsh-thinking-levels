@@ -74,7 +74,7 @@ interface FamilyHooksFace {
 }
 
 export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.Element {
-  const { t, renderSlot, scope, piAiScope } = props
+  const { t, renderSlot, scope, piAiScope, ocScope } = props
   const { useTabs } = props as unknown as FamilyHooksFace
   const contributors = useTabs(value => value)
   const [activeId, setActiveId] = useState<string>(OWN_TAB_ID)
@@ -112,7 +112,7 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
       </div>
       <div role="tabpanel">
         {active === OWN_TAB_ID
-          ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} />
+          ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} ocScope={ocScope} />
           : renderSlot?.('dsh-family.tab', {}, { only: active, fallback: null })}
       </div>
     </div>

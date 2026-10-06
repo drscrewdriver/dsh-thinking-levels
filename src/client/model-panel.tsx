@@ -493,13 +493,11 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   const providers = useMemo(() => providersOf(piSnapshot), [piSnapshot])
   const dsSection = useMemo(() => deepseekSectionOf(dsSnapshot), [dsSnapshot])
 
-  /** The active model's declared capacity — the ring's window fallback. */
-  const activeWindow = useMemo(() => {
-    if (current === undefined) return undefined
-    return windowOf(current.provider, current.model.id ?? current.model.name ?? '')
-  }, [current, providers, dsSection]) as number | undefined
-
-  /** The effective window of one model line, resolved against its family. */
+  /** The effective window of one model line, resolved against its family.
+   * Declared BEFORE activeWindow: the ring's window-fallback memo calls this
+   * in its factory, and a const arrow below the first caller would be a
+   * temporal-dead-zone ReferenceError on every mount with a selected model
+   * (the seat then abdicates and the shipped selector takes over). */
   const windowOf = (provider: string, model: string): number | undefined => {
     if (provider === DEEPSEEK_PROVIDER) {
       const models = dsSection.models ?? []
@@ -509,6 +507,12 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
     const entry = piModelEntry(providers, provider, model)
     return entry === undefined ? undefined : contextWindowOf(entry)
   }
+
+  /** The active model's declared capacity — the ring's window fallback. */
+  const activeWindow = useMemo(() => {
+    if (current === undefined) return undefined
+    return windowOf(current.provider, current.model.id ?? current.model.name ?? '')
+  }, [current, providers, dsSection]) as number | undefined
 
   /** Whether one model line has a config write target. */
   const writableLine = (provider: string, model: string): boolean => {
