@@ -112,8 +112,22 @@ function tlSettingsScopeOf(scopeOf: (ns: string) => unknown): unknown {
   const status = typeof modern?.getSnapshot === 'function'
     ? modern.getSnapshot().status
     : undefined
-  if (status === 'unavailable') return scopeOf(TL_NAMESPACE_LEGACY)
+  if (status === 'unavailable') {
+    logOwnScopeOnce(false, status)
+    return scopeOf(TL_NAMESPACE_LEGACY)
+  }
+  logOwnScopeOnce(true, status)
   return modern
+}
+
+/** One-shot generation probe line (client mirror of the server's
+ * installSection-style log): which own-settings namespace the family section
+ * settled on, and why. Never repeats — render-time callers hit this often. */
+let ownScopeLogged = false
+function logOwnScopeOnce(modern: boolean, status: unknown): void {
+  if (ownScopeLogged) return
+  ownScopeLogged = true
+  console.info(`[dsh-thinking-levels] own-scope ns = ${modern ? TL_NAMESPACE_MODERN : TL_NAMESPACE_LEGACY} (modern status=${String(status)})`)
 }
 
 /**

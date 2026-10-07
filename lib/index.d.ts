@@ -119,6 +119,48 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
         contextWindow: z<number, number, "plain">;
     }>>, string>, "defined">;
 }>>, "plain">;
+/**
+ * Legacy (≤0.1.6) settings schema: the same fields WITHOUT the `.volatile()`
+ * ref wrappers. The imperative `settings.register` resolver reads schemas
+ * literally and rejects the 0.1.7 ref descriptors ("$.enabled expected
+ * boolean but got [object Object]", live on cell 0.1.5) — the 3.x compat
+ * branches shipped exactly this plain shape.
+ */
+export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
+    enabled: z<boolean, boolean, "defined">;
+    level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
+    allowDowngrade: z<boolean, boolean, "defined">;
+    allowUpgrade: z<boolean, boolean, "defined">;
+    takeover: z<boolean, boolean, "defined">;
+    models: z<import("@deepseek-ai/cosmokit").Dict<{
+        vision?: boolean | null | undefined;
+        thinking?: boolean | null | undefined;
+        efforts?: false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[] | null | undefined;
+        contextWindow?: number | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        vision: z<boolean, boolean, "plain">;
+        thinking: z<boolean, boolean, "plain">;
+        efforts: z<false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], "plain">;
+        contextWindow: z<number, number, "plain">;
+    }>>, string>, "defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    enabled: z<boolean, boolean, "defined">;
+    level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
+    allowDowngrade: z<boolean, boolean, "defined">;
+    allowUpgrade: z<boolean, boolean, "defined">;
+    takeover: z<boolean, boolean, "defined">;
+    models: z<import("@deepseek-ai/cosmokit").Dict<{
+        vision?: boolean | null | undefined;
+        thinking?: boolean | null | undefined;
+        efforts?: false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[] | null | undefined;
+        contextWindow?: number | null | undefined;
+    } & import("@deepseek-ai/cosmokit").Dict, string>, import("@deepseek-ai/cosmokit").Dict<Schemastery.ObjectT<NoInfer<{
+        vision: z<boolean, boolean, "plain">;
+        thinking: z<boolean, boolean, "plain">;
+        efforts: z<false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], false | ("off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")[], "plain">;
+        contextWindow: z<number, number, "plain">;
+    }>>, string>, "defined">;
+}>>, "plain">;
 /** Settings defaults, kept in lockstep with the schema defaults above. */
 export declare const DEFAULT_CONFIG: ThinkingLevelsConfig;
 /**

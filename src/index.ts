@@ -94,6 +94,16 @@ export interface ThinkingLevelsConfig {
 
 const effortId = z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
+/** Per-model capability overrides — shared verbatim by both schema faces
+ * below (the two must never drift). */
+const modelsSchema = z.dict(z.object({
+  // schemastery fields are optional unless marked `.required()`.
+  vision: z.boolean(),
+  thinking: z.boolean(),
+  efforts: z.union([z.const(false), z.array(effortId)]),
+  contextWindow: z.number().step(1).min(CONTEXT_WINDOW_MIN).max(CONTEXT_WINDOW_MAX),
+})).default({})
+
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
  * time (cordis.yml `config:` of the plugin row). The same schema doubles as
@@ -107,13 +117,23 @@ export const Config = z.object({
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
   takeover: z.boolean().default(false).volatile(),
-  models: z.dict(z.object({
-    // schemastery fields are optional unless marked `.required()`.
-    vision: z.boolean(),
-    thinking: z.boolean(),
-    efforts: z.union([z.const(false), z.array(effortId)]),
-    contextWindow: z.number().step(1).min(CONTEXT_WINDOW_MIN).max(CONTEXT_WINDOW_MAX),
-  })).default({}),
+  models: modelsSchema,
+})
+
+/**
+ * Legacy (≤0.1.6) settings schema: the same fields WITHOUT the `.volatile()`
+ * ref wrappers. The imperative `settings.register` resolver reads schemas
+ * literally and rejects the 0.1.7 ref descriptors ("$.enabled expected
+ * boolean but got [object Object]", live on cell 0.1.5) — the 3.x compat
+ * branches shipped exactly this plain shape.
+ */
+export const LegacyConfig = z.object({
+  enabled: z.boolean().default(true),
+  level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto'),
+  allowDowngrade: z.boolean().default(true),
+  allowUpgrade: z.boolean().default(false),
+  takeover: z.boolean().default(false),
+  models: modelsSchema,
 })
 
 /** Settings defaults, kept in lockstep with the schema defaults above. */
@@ -429,7 +449,10 @@ export function installLegacySection(
   const inject = (ctx as unknown as { inject?: (deps: string[], fn: (sctx: LegacySettingsSctx) => void) => void }).inject
   if (typeof inject !== 'function') return
   inject.call(ctx, ['settings'], (sctx) => {
-    const settings = sctx.settings
+    const settings = sctx.settings as
+      | { register?: unknown; describe?: unknown; installSection?: unknown }
+      | undefined
+    console.log(`[dsh-thinking-levels] settings service face: register=${typeof settings?.register} installSection=${typeof settings?.installSection} describe=${typeof settings?.describe}`)
     // `register`'s presence IS the imperative face (≤0.1.6). `describe` must
     // NOT be read as a declarative-generation marker: the webServer mirror
     // carries describe/mutate on EVERY generation (三代腰 finding —
@@ -438,12 +461,34 @@ export function installLegacySection(
     // unregistered and every settingsScope.bind('thinking-levels') read
     // `unavailable` forever.
     if (typeof settings?.register !== 'function') return
-    const scope = settings.register(THINKING_LEVELS_SETTINGS_NAMESPACE, Config, { base: config })
-    hooks.setSource(() => scope.get() as ThinkingLevelsConfig)
-    sctx.effect(() => () => {
-      hooks.setSource(() => config)
-    })
-    scope.watch?.(() => {})
+    try {
+      // The loader hands `apply` its config through the entry schema — the
+      // volatile-shaped `Config` on EVERY generation — so the runtime values
+      // sit behind live refs even on hosts taking the imperative register
+      // path. Flatten to plain values for the legacy resolver's base layer
+      // ("$.enabled expected boolean but got [object Object]", live on cell
+      // 0.1.5, was the ref riding in as the base).
+      const plainBase = {
+        enabled: readVolatile(config.enabled, true),
+        level: readVolatile(config.level, 'auto'),
+        allowDowngrade: readVolatile(config.allowDowngrade, true),
+        allowUpgrade: readVolatile(config.allowUpgrade, false),
+        takeover: readVolatile(config.takeover, false),
+        models: config.models,
+      }
+      const scope = settings.register(THINKING_LEVELS_SETTINGS_NAMESPACE, LegacyConfig, { base: plainBase }) as {
+        get(): unknown
+        watch?(cb: () => void): void
+      }
+      console.log('[dsh-thinking-levels] settings via settings.register (≤0.1.6 imperative face)')
+      hooks.setSource(() => scope.get() as ThinkingLevelsConfig)
+      sctx.effect(() => () => {
+        hooks.setSource(() => config)
+      })
+      scope.watch?.(() => {})
+    } catch (error) {
+      console.log(`[dsh-thinking-levels] settings.register FAILED: ${error instanceof Error ? error.message : String(error)}`)
+    }
   })
 }
 
