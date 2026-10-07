@@ -11,6 +11,30 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.2.0-beta.26] — 2026-10-08
+
+### Added — cross-version family section (beta.18 → beta.26)
+
+- **Server-side legacy settings section (`installLegacySection`).** The family
+  section (起子插件设置) now registers the `thinking-levels` namespace server-side
+  so it renders with real data on hosts ≤0.1.7, across the three generation
+  shapes (module-level `installSettingsSection`, instance `installSection`,
+  loader-volatile on rc.1+), with a plain non-volatile `LegacyConfig` schema and
+  a flattened plain base (volatile nodes and live refs are both rejected by the
+  legacy register — three stacked bugs fixed across beta.18 → beta.22).
+- **Family section election hardening (beta.26).** The `settings.section`
+  factory stands down when a `dsh-family` entry is already seated (host-native
+  surface or a rival): exactly one owner regardless of registration order.
+  Pairs with dsh-session-guard 4.1.11's deferred yield-election — ≤0.1.7 shells
+  give every same-id section its own nav row, so double registration meant a
+  double 起子插件设置 row.
+- **UI fixes (beta.23 → beta.25).** The family tab strip stays on a single row
+  (horizontal scroll; 8 contributor tabs no longer orphan the last one onto a
+  second line); settings controls follow the shell dark theme (semi-transparent
+  surface instead of hardcoded white, `colorScheme` from a one-shot body
+  luminance probe); the children declaration tolerates a conflict by landing
+  without it; life-cycle debug logs kept in production.
+
 ## [Unreleased]
 
 ### Added — effort slider (whale-girl runner thumb) — 4.1.0
