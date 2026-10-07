@@ -7,6 +7,33 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.26] — 2026-10-08
+
+### Neu — familienübergreifender Abschnitt über Hostgenerationen (beta.18 → beta.26)
+
+- **Serverseitiger Legacy-Einstellungsabschnitt (`installLegacySection`).** Der
+  Familienabschnitt (起子插件设置) registriert den Namespace `thinking-levels`
+  jetzt serverseitig und rendert damit auf Hosts ≤0.1.7 mit echten Daten — über
+  alle drei Generierungsformen hinweg (modulweites `installSettingsSection`,
+  instanzbasiertes `installSection`, loader-volatile ab rc.1+), mit einem
+  schlichten nicht-volatilen `LegacyConfig`-Schema und einer geglätteten
+  Plain-Base (volatile Knoten wie Live-Refs weist das Legacy-Register zurück —
+  drei gestapelte Bugs, behoben beta.18 → beta.22).
+- **Verhärtete Familienwahl (beta.26).** Die `settings.section`-Factory tritt
+  zurück, sobald ein `dsh-family`-Eintrag bereits sitzt (host-nativer Fläche
+  oder einem Rivalen): genau ein Eigentümer, unabhängig von der
+  Registrierungsreihenfolge. Paart mit der verzögerten Yield-Wahl von
+  dsh-session-guard 4.1.11 — ≤0.1.7-Shells geben jedem Abschnitt mit gleicher
+  ID eine eigene Navigationszeile, Doppelregistrierung bedeutete also eine
+  doppelte 起子插件设置-Zeile.
+- **UI-Fixes (beta.23 → beta.25).** Der Familien-Tab-Streifen bleibt einzeilig
+  (horizontaler Bildlauf; 8 Beitragstabs lassen den letzten nicht mehr allein
+  in eine zweite Zeile wandern); die Einstellungssteuerelemente folgen dem
+  dunklen Shell-Design (halbdurchlässige Fläche statt hartcodiertem Weiß,
+  `colorScheme` aus einer einmaligen Helligkeitsmessung des Body); die
+  children-Deklaration duldet einen Konflikt und landet ohne sie;
+  Lebenszyklus-Debug-Logs bleiben in Produktion.
+
 ## [Unreleased]
 
 ### Neu — Anstrengungs-Slider (Wal-Mädchen-Läufer-Daumen) — 4.1.0

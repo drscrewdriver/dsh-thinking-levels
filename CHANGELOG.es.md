@@ -7,6 +7,35 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.26] — 2026-10-08
+
+### Añadido — sección familiar entre versiones (beta.18 → beta.26)
+
+- **Sección de ajustes legacy del lado del servidor (`installLegacySection`).**
+  La sección familiar (起子插件设置) ahora registra el espacio de nombres
+  `thinking-levels` en el servidor, de modo que se renderiza con datos reales
+  en hosts ≤0.1.7, a través de las tres formas generacionales
+  (`installSettingsSection` a nivel de módulo, `installSection` por instancia,
+  loader-volatile en rc.1+), con un esquema `LegacyConfig` plano no volátil y
+  una base plana aplanada (los nodos volátiles y las referencias vivas son
+  rechazados por el registro legacy — tres errores apilados corregidos entre
+  beta.18 y beta.22).
+- **Blindaje de la elección de la sección familiar (beta.26).** La fábrica de
+  `settings.section` se retira cuando ya hay un asiento de `dsh-family`
+  (superficie nativa del host o un rival): exactamente un propietario sin
+  importar el orden de registro. Acompaña a la elección diferida de cesión de
+  dsh-session-guard 4.1.11 — los shells ≤0.1.7 dan a cada sección con el mismo
+  id su propia fila de navegación, así que el doble registro significaba una
+  doble fila de 起子插件设置.
+- **Correcciones de UI (beta.23 → beta.25).** La tira de pestañas familiar se
+  mantiene en una sola fila (desplazamiento horizontal; 8 pestañas de
+  contribuidores ya no dejan huérfana la última en una segunda línea); los
+  controles de ajustes siguen el tema oscuro del shell (superficie
+  semitransparente en lugar de blanco fijo, `colorScheme` a partir de una
+  única sonda de luminancia del body); la declaración de children tolera un
+  conflicto aterrizando sin ella; los registros de depuración del ciclo de
+  vida se mantienen en producción.
+
 ## [Unreleased]
 
 ### Añadido — deslizador de nivel de razonamiento (pulgar ballena corredora) — 4.1.0

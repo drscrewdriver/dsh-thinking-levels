@@ -7,6 +7,33 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.26] — 2026-10-08
+
+### Aggiunto — sezione famiglia cross-versione (beta.18 → beta.26)
+
+- **Sezione impostazioni legacy lato server (`installLegacySection`).** La
+  sezione famiglia (起子插件设置) ora registra il namespace `thinking-levels`
+  lato server e si rende quindi con dati reali sugli host ≤0.1.7, attraverso
+  le tre forme generazionali (`installSettingsSection` a livello modulo,
+  `installSection` per istanza, loader-volatile da rc.1+), con uno schema
+  `LegacyConfig` semplice non volatile e una base piatta appiattita (i nodi
+  volatile come i riferimenti vivi sono rifiutati dal registro legacy — tre
+  bug impilati corretti tra beta.18 e beta.22).
+- **Indurimento dell'elezione della sezione famiglia (beta.26).** La factory
+  `settings.section` si ritira quando una voce `dsh-family` è già seduta
+  (superficie nativa dell'host o un rivale): esattamente un proprietario,
+  indipendentemente dall'ordine di registrazione. In coppia con l'elezione di
+  cessione differita di dsh-session-guard 4.1.11 — le shell ≤0.1.7 danno a
+  ogni sezione con lo stesso id la propria riga di navigazione, così la doppia
+  registrazione significava una doppia riga 起子插件设置.
+- **Correzioni UI (beta.23 → beta.25).** La striscia di tab della famiglia
+  resta su una singola riga (scorrimento orizzontale; 8 tab contributore non
+  lasciano più orfana l'ultima su una seconda riga); i controlli delle
+  impostazioni seguono il tema scuro della shell (superficie semitrasparente
+  al posto del bianco cablato, `colorScheme` da una sonda di luminanza
+  una-tantum del body); la dichiarazione children tollera un conflitto
+  atterrando senza; i log di debug del ciclo di vita restano in produzione.
+
 ## [Unreleased]
 
 ### Aggiunto — slider del livello di ragionamento (pollice balena-runner) — 4.1.0
