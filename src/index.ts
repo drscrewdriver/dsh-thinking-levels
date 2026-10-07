@@ -421,7 +421,7 @@ const THINKING_LEVELS_SETTINGS_NAMESPACE = 'thinking-levels'
  * `.volatile()` fields arrive as live refs) and `register` no longer exists —
  * the install is a no-op there. Shape-detected, never version-guessed.
  */
-function installLegacySection(
+export function installLegacySection(
   ctx: Context,
   config: ThinkingLevelsConfig,
   hooks: { setSource: (source: () => ThinkingLevelsConfig) => void },
@@ -430,7 +430,14 @@ function installLegacySection(
   if (typeof inject !== 'function') return
   inject.call(ctx, ['settings'], (sctx) => {
     const settings = sctx.settings
-    if (typeof settings?.register !== 'function' || typeof settings.describe === 'function') return
+    // `register`'s presence IS the imperative face (≤0.1.6). `describe` must
+    // NOT be read as a declarative-generation marker: the webServer mirror
+    // carries describe/mutate on EVERY generation (三代腰 finding —
+    // mutate/describe 四代全在), so the old `describe → skip` clause silently
+    // disabled this install on 0.1.2/0.1.5 too, leaving the namespace
+    // unregistered and every settingsScope.bind('thinking-levels') read
+    // `unavailable` forever.
+    if (typeof settings?.register !== 'function') return
     const scope = settings.register(THINKING_LEVELS_SETTINGS_NAMESPACE, Config, { base: config })
     hooks.setSource(() => scope.get() as ThinkingLevelsConfig)
     sctx.effect(() => () => {

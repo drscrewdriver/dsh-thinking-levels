@@ -139,6 +139,17 @@ declare module '@deepseek-ai/cordis' {
  */
 export declare function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T): T;
 /**
+ * Legacy (≤0.1.6) settings registration: on hosts whose settings service
+ * carries the imperative face (`register` present, `describe` absent), install
+ * this plugin's section so its config is runtime-editable and the live values
+ * feed `current()`. On 0.1.7+ the composition entry IS the section (the
+ * `.volatile()` fields arrive as live refs) and `register` no longer exists —
+ * the install is a no-op there. Shape-detected, never version-guessed.
+ */
+export declare function installLegacySection(ctx: Context, config: ThinkingLevelsConfig, hooks: {
+    setSource: (source: () => ThinkingLevelsConfig) => void;
+}): void;
+/**
  * Plugin body.
  * @param ctx - host context carrying the agent-event dispatch.
  * @param config - resolved plugin configuration.

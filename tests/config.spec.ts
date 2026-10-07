@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Config, DEFAULT_CONFIG, readVolatile } from '../src/index.ts'
+import { Config, DEFAULT_CONFIG, installLegacySection, readVolatile } from '../src/index.ts'
 
 /** Partial configs ride the wire untrusted; type level only sees full ones. */
 const asConfig = (patch: Record<string, unknown>) => patch as never
@@ -69,5 +69,52 @@ describe('plugin config schema', () => {
   it('keeps contextWindow absent when not declared', () => {
     const parsed = Config(asConfig({ models: { 'p/m': { vision: true } } }))
     expect(parsed.models['p/m']).toEqual({ vision: true })
+  })
+})
+
+describe('legacy settings install predicate (≤0.1.6 imperative face)', () => {
+  /** Minimal ctx stub: captures inject deps, invokes the callback with the given scope object. */
+  function stubCtx(settingsService: unknown): { ctx: unknown; registered: string[]; deps: string[][] } {
+    const registered: string[] = []
+    const deps: string[][] = []
+    const ctx = {
+      inject(d: string[], fn: (sctx: { settings: unknown; effect: (b: () => unknown) => void }) => void) {
+        deps.push(d)
+        fn({ settings: settingsService, effect: () => {} })
+      },
+    }
+    return { ctx, registered, deps }
+  }
+  const registerReturn = { get: () => ({ level: 'auto' }), watch: () => {} }
+
+  it('installs when `register` exists EVEN THOUGH describe rides the same service (0.1.2/0.1.5 shape)', () => {
+    const { ctx, registered, deps } = stubCtx({
+      register: (ns: string) => { registered.push(ns); return registerReturn },
+      describe: () => ({}),
+      installSection: () => {},
+    })
+    installLegacySection(ctx as never, DEFAULT_CONFIG, { setSource: () => {} })
+    expect(deps).toEqual([['settings']])
+    expect(registered).toEqual(['thinking-levels'])
+  })
+
+  it('installs on the bare imperative face (0.1.0/0.1.1 shape)', () => {
+    const { ctx, registered } = stubCtx({
+      register: (ns: string) => { registered.push(ns); return registerReturn },
+    })
+    installLegacySection(ctx as never, DEFAULT_CONFIG, { setSource: () => {} })
+    expect(registered).toEqual(['thinking-levels'])
+  })
+
+  it('skips when the imperative face is absent (0.1.7+ declarative generation)', () => {
+    const { ctx, registered } = stubCtx({ describe: () => ({}), update: () => {} })
+    installLegacySection(ctx as never, DEFAULT_CONFIG, { setSource: () => {} })
+    expect(registered).toEqual([])
+  })
+
+  it('skips when the settings service is missing entirely', () => {
+    const { ctx, registered } = stubCtx(undefined)
+    installLegacySection(ctx as never, DEFAULT_CONFIG, { setSource: () => {} })
+    expect(registered).toEqual([])
   })
 })
