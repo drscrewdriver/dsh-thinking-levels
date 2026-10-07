@@ -360,19 +360,37 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
    * placeholder render proved the 0.1.5 shell consumes client-contributed
    * section bodies), so the settingsScope waist below calls this too — its
    * `plugins.bundle.config` inject idles harmlessly where the slot is never
-   * declared (0.1.7 and older). */
+   * declared (0.1.7 and older).
+   *
+   * Election note: session-guard's takeover registers the same id at
+   * priority 10 (this entry stays at the default 0 = always the head when
+   * present, `lowest renders`). Whichever of the two registers first claims
+   * the `dsh-family.tab` children declaration; a conflicting declaration
+   * throws, so the retry lands this entry WITHOUT children — the ledger is
+   * global either way, and the head renders it the same. */
   function registerModernSurface(): void {
     if (scopeOf === undefined) return
     ctx.slots.inject('settings.section', function* () {
-      yield ctx.slots.register({
+      console.log('[dsh-thinking-levels] settings.section factory fired (declared)')
+      const base = {
         name: 'settings.section',
         id: 'dsh-family',
         order: 40,
         label: () => t('family.title'),
         locale: NS,
         inject: sectionInjected,
-        children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
-      }, FamilySettingsSection)
+      }
+      try {
+        yield ctx.slots.register({
+          ...base,
+          children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
+        }, FamilySettingsSection)
+      } catch {
+        // The children table was claimed by the takeover shadow (or a rival):
+        // this entry is the priority-0 head either way — the declared ledger
+        // is the same slot key, so the section body reads it identically.
+        yield ctx.slots.register(base, FamilySettingsSection)
+      }
     })
 
     // Plugins-page configuration card (DSH 0.2.0): same component and same

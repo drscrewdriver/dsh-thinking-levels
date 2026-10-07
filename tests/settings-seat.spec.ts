@@ -37,6 +37,7 @@ function collectRegistrations(
   withDirectories = true,
   generation: 'configForms' | 'settingsScope' = 'configForms',
   nsStatus: Record<string, string> = {},
+  opts: { throwOnChildren?: boolean } = {},
 ): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>> } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
@@ -100,6 +101,9 @@ function collectRegistrations(
         return () => {}
       },
       register: (options: Record<string, unknown>, component: unknown) => {
+        if (opts.throwOnChildren && options['children'] !== undefined) {
+          throw new Error('slot "dsh-family.tab" is already declared (by an entry in "settings.section")')
+        }
         registrations.push({ slot: String(options['name']), options, component })
         return () => {}
       },
@@ -239,5 +243,21 @@ describe('settingsScope generation (route A: family section on ≤0.1.6 hosts)',
     const render = face['renderContributor'] as (id: string) => unknown
     expect(render('nope')).toBeNull()
     expect(render('boom')).toBeNull()
+  })
+})
+
+describe('family section children-declaration conflict (takeover shadow race)', () => {
+  it('lands the p0 head without children when the takeover shadow claimed the declaration first', () => {
+    const { registrations } = collectRegistrations(true, 'settingsScope', {}, { throwOnChildren: true })
+    const section = registrations.find(r => r.slot === 'settings.section')
+    expect(section).toBeDefined()
+    expect(section!.options['id']).toBe('dsh-family')
+    expect(section!.options['children']).toBeUndefined()
+  })
+
+  it('keeps the children declaration when nothing conflicts', () => {
+    const { registrations } = collectRegistrations(true, 'settingsScope')
+    const section = registrations.find(r => r.slot === 'settings.section')
+    expect(section!.options['children']).toEqual({ 'dsh-family.tab': { kind: 'list', scope: 'root' } })
   })
 })
