@@ -20,6 +20,8 @@
  * cordis services (`configForms`) and slot registration only (client bundle
  * purity).
  */
+import { createElement } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -32,7 +34,6 @@ import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { ProjectionDataHook } from './context-ring.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 import { ThinkingLevelsCard } from './card.tsx'
-import type { ThinkingLevelsConfig } from '../index.ts'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 
@@ -94,6 +95,37 @@ function ocTransportScopeOf(scopeOf: (ns: string) => unknown): unknown {
   // turn ready, so keep it rather than degrading to the legacy name.
   if (status === 'unavailable') return scopeOf(OC_NAMESPACE_LEGACY)
   return preferredScope
+}
+
+const TL_NAMESPACE_MODERN = 'dsh-thinking-levels'
+const TL_NAMESPACE_LEGACY = 'thinking-levels'
+
+/**
+ * The plugin's own settings scope, generation-probed like the transport above:
+ * 0.1.7+ keys configForms by the composition entry id (`dsh-thinking-levels`),
+ * while ≤0.1.6 hosts register the settings section under `thinking-levels` —
+ * the same namespace the legacy card reads. A handle for an absent namespace
+ * reports `unavailable` forever, which is the probe signal.
+ */
+function tlSettingsScopeOf(scopeOf: (ns: string) => unknown): unknown {
+  const modern = scopeOf(TL_NAMESPACE_MODERN) as ScopeStatusFace | undefined
+  const status = typeof modern?.getSnapshot === 'function'
+    ? modern.getSnapshot().status
+    : undefined
+  if (status === 'unavailable') return scopeOf(TL_NAMESPACE_LEGACY)
+  return modern
+}
+
+/**
+ * Raw ledger record: ui-slots keeps `component` and the per-entry `inject` on
+ * the entry objects of `ctx.slots.entries(key)` on every host line (the
+ * public SlotMap typing narrows to options only, so the direct-mount face
+ * widens the shape locally).
+ */
+interface FamilyLedgerEntry {
+  options: { id?: string; locale?: string }
+  component?: ComponentType<Record<string, unknown>>
+  inject?: () => unknown
 }
 
 /**
@@ -217,18 +249,46 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
   let tabsVersion = -1
   let tabsRevision = -1
   let tabs: readonly FamilyTabEntry[] = []
+
+  // Direct-mount face for contributor tabs on hosts whose settings shell does
+  // not deliver renderSlot (≤0.1.6): the raw ledger records carry the
+  // contributor's component and inject face on every line, so the section can
+  // mount the active tab itself. Every failure mode (entry gone mid-render, a
+  // throwing inject, a host without the raw view) degrades to an empty panel —
+  // never a thrown render.
+  const renderContributor = (id: string): ReactNode => {
+    try {
+      const entry = (ctx.slots.entries('dsh-family.tab') as readonly FamilyLedgerEntry[])
+        .find(candidate => candidate.options.id === id)
+      if (entry === undefined || entry.component === undefined) return null
+      const injected = typeof entry.inject === 'function'
+        ? entry.inject() as Record<string, unknown> | undefined
+        : undefined
+      return createElement(entry.component, (injected ?? {}) as Record<string, unknown>)
+    } catch {
+      return null
+    }
+  }
+
   const sectionInjected = (): FamilySectionInjected => ({
     // The settings namespace IS the composition entry id — the include row id
     // the shipped cordis.patch.yml inserts (`dsh-thinking-levels`), NOT this
     // plugin's locale NS. The host keys configForms by that id; a handle for
-    // any other string reports `unavailable` forever.
-    scope: scopeOf!('dsh-thinking-levels') as never,
+    // any other string reports `unavailable` forever. Generation-probed: ≤0.1.6
+    // hosts register the section as `thinking-levels` (see tlSettingsScopeOf).
+    scope: tlSettingsScopeOf(scopeOf!) as never,
     piAiScope: scopeOf!('llm-pi-ai') as never,
     // The transport's entry id changed shape across its packaging history
     // (`dsh-llm-openai-completions` in the 0.4.0 fragment; earlier manual
     // installs used the short form): settle on whichever namespace the host's
     // describe document actually carries.
     ocScope: ocTransportScopeOf(scopeOf!) as never,
+    // ≤0.1.6 stand-ins for owner props the settings shell there doesn't
+    // deliver (see family-tab.tsx): the apply-time EAGER binder stands in for
+    // the host's PropsLocale `t`, and the direct-mount face stands in for
+    // renderSlot. Both are ignored on shells that provide the real props.
+    tFallback: t,
+    renderContributor,
     hooks: {
       tabs: {
         getSnapshot: () => {
@@ -280,7 +340,13 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     })
   }
 
-  /** 0.1.7+/0.2.0 surfaces: family section, plugins-page card, context ring. */
+  /** 0.1.7+/0.2.0 surfaces: family section, plugins-page card, context ring.
+   * Generation-neutral in practice (route A, 2026-10): the `settings.section`
+   * entry and its children declaration exist on every host line (the perm-gate
+   * placeholder render proved the 0.1.5 shell consumes client-contributed
+   * section bodies), so the settingsScope waist below calls this too — its
+   * `plugins.bundle.config` inject idles harmlessly where the slot is never
+   * declared (0.1.7 and older). */
   function registerModernSurface(): void {
     if (scopeOf === undefined) return
     ctx.slots.inject('settings.section', function* () {
@@ -341,5 +407,12 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     if (settingsScope === undefined) return
     scopeOf = (<T,>(ns: string) => settingsScope.bind<T>({ namespace: ns })) as typeof scopeOf
     registerLegacyCard()
+    // Route A (family-tab ledger, 2026-10): the family section body used to be
+    // configForms-only, leaving ≤0.1.6 hosts with session-guard's nav-level
+    // takeover and an EMPTY section body. The section entry itself is
+    // generation-neutral — the component self-degrades where the shell omits
+    // the owner props (tFallback / hooks-compartment polling / direct-mount
+    // contributor render).
+    registerModernSurface()
   })
 }

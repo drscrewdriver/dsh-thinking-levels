@@ -29,20 +29,37 @@ interface CapturedRegistration {
 
 /** Drive apply against a stub host and capture every slot registration.
  * @param withDirectories - whether the stub host provides `modelDirectories`;
- * without it the model-panel registration must be skipped (graceful path). */
-function collectRegistrations(withDirectories = true): { declared: string[]; registrations: CapturedRegistration[]; forms: string[] } {
+ * without it the model-panel registration must be skipped (graceful path).
+ * @param generation - which durable-settings channel the stub host carries:
+ * `configForms` (0.1.7+) or `settingsScope` (≤0.1.6). The two are mutually
+ * exclusive on real hosts, and exactly one waist path may fire. */
+function collectRegistrations(
+  withDirectories = true,
+  generation: 'configForms' | 'settingsScope' = 'configForms',
+  nsStatus: Record<string, string> = {},
+): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>> } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
   const forms: string[] = []
+  const ledger: Array<Record<string, unknown>> = []
+  const bindSettingsScope = <T,>(spec: { namespace: string }): T => {
+    const ns = spec.namespace
+    return { namespace: ns, getSnapshot: () => ({ status: nsStatus[ns] ?? 'ready' }) } as unknown as T
+  }
   const ctx = {
     effect: (build: () => unknown) => { void build(); return () => {} },
     locale: { register: () => () => {}, bind: () => (key: string) => key },
-    configForms: {
-      get: <T,>(entryId: string) => {
-        forms.push(entryId)
-        return { entryId } as unknown as T
-      },
-    },
+    configForms: generation === 'configForms'
+      ? {
+          get: <T,>(entryId: string) => {
+            forms.push(entryId)
+            return { entryId } as unknown as T
+          },
+        }
+      : undefined,
+    settingsScope: generation === 'settingsScope'
+      ? { bind: bindSettingsScope }
+      : undefined,
     modelDirectories: withDirectories
       ? {
           directoryFor: (sessionId: string) => ({
@@ -61,7 +78,8 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
       const scope: Record<string, unknown> = {}
       for (const dep of deps) {
         if (dep === 'modelDirectories') scope[dep] = ctx.modelDirectories
-        else if (dep === 'configForms') scope[dep] = { get: ctx.configForms.get }
+        else if (dep === 'configForms' && ctx.configForms) scope[dep] = { get: ctx.configForms.get }
+        else if (dep === 'settingsScope' && ctx.settingsScope) scope[dep] = ctx.settingsScope
         else if (dep === 'sessions') scope[dep] = {}
         else if (dep === 'remote' || dep === 'remote.session') scope[dep] = {}
       }
@@ -69,6 +87,9 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
       return () => {}
     },
     slots: {
+      entries: (slot: string) => (slot === 'dsh-family.tab' ? ledger : []),
+      getVersion: () => 0,
+      subscribe: () => () => {},
       inject: (slot: string, factory: () => (() => void) | Generator<() => void>) => {
         declared.push(slot)
         const result = factory()
@@ -85,7 +106,7 @@ function collectRegistrations(withDirectories = true): { declared: string[]; reg
     },
   }
   apply(ctx as never)
-  return { declared, registrations, forms }
+  return { declared, registrations, forms, ledger }
 }
 
 describe('config-form contract (declarative settings, family shared tab)', () => {
@@ -145,5 +166,78 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(forms).toEqual(['llm-pi-ai', 'llm-deepseek'])
     expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'piAiScope'])
     expect(face['directory']).toMatchObject({ sessionId: 'session-1' })
+  })
+})
+
+describe('settingsScope generation (route A: family section on ≤0.1.6 hosts)', () => {
+  it('registers the legacy item card AND the family section on ≤0.1.6 hosts', () => {
+    const { declared, registrations } = collectRegistrations(true, 'settingsScope')
+    expect(declared).toContain('settings.plugin.item')
+    expect(declared).toContain('settings.section')
+    const item = registrations.find(r => r.slot === 'settings.plugin.item')
+    expect(item?.options).toMatchObject({ key: 'thinking-levels', locale: 'thinking-levels' })
+    const section = registrations.find(r => r.slot === 'settings.section')
+    expect(section?.options).toMatchObject({ id: 'dsh-family' })
+  })
+
+  it('leaves the item card unregistered on the configForms generation', () => {
+    const { declared } = collectRegistrations(true, 'configForms')
+    expect(declared).not.toContain('settings.plugin.item')
+  })
+
+  it('the section inject face carries the ≤0.1.6 degradation faces on BOTH generations', () => {
+    for (const generation of ['configForms', 'settingsScope'] as const) {
+      const { registrations } = collectRegistrations(true, generation)
+      const section = registrations.find(r => r.slot === 'settings.section')!
+      const face = (section.options['inject'] as () => Record<string, unknown>)()
+      expect(typeof face['tFallback']).toBe('function')
+      expect(typeof face['renderContributor']).toBe('function')
+      // The stub handles carry their namespace under different keys per
+      // generation (`configForms.get` → entryId, `settingsScope.bind` →
+      // namespace); what matters is that BOTH resolve the modern entry id.
+      if (generation === 'settingsScope') {
+        expect(face['scope']).toMatchObject({ namespace: 'dsh-thinking-levels' })
+      } else {
+        expect(face['scope']).toMatchObject({ entryId: 'dsh-thinking-levels' })
+      }
+    }
+  })
+
+  it('probes the own-settings namespace down to the legacy name when the modern id is unavailable', () => {
+    const { registrations } = collectRegistrations(true, 'settingsScope', { 'dsh-thinking-levels': 'unavailable' })
+    const section = registrations.find(r => r.slot === 'settings.section')!
+    const face = (section.options['inject'] as () => Record<string, unknown>)()
+    expect(face['scope']).toMatchObject({ namespace: 'thinking-levels' })
+  })
+
+  it('renderContributor mounts the matching ledger entry from the raw records', () => {
+    const captured = collectRegistrations(true, 'settingsScope')
+    const StubContributor = (): null => null
+    captured.ledger.push({
+      options: { id: 'input-traffic', locale: 'input-traffic' },
+      component: StubContributor,
+      inject: () => ({ scope: { marker: 'it-scope' } }),
+    })
+    const section = captured.registrations.find(r => r.slot === 'settings.section')!
+    const face = (section.options['inject'] as () => Record<string, unknown>)()
+    const el = (face['renderContributor'] as (id: string) => { type: unknown; props: Record<string, unknown> } | null)('input-traffic')
+    expect(el).not.toBeNull()
+    expect(el!.type).toBe(StubContributor)
+    expect(el!.props).toEqual({ scope: { marker: 'it-scope' } })
+  })
+
+  it('renderContributor degrades to null for unknown ids and throwing injects', () => {
+    const captured = collectRegistrations(true, 'settingsScope')
+    const ThrowingContributor = (): null => null
+    captured.ledger.push({
+      options: { id: 'boom' },
+      component: ThrowingContributor,
+      inject: () => { throw new Error('boom') },
+    })
+    const section = captured.registrations.find(r => r.slot === 'settings.section')!
+    const face = (section.options['inject'] as () => Record<string, unknown>)()
+    const render = face['renderContributor'] as (id: string) => unknown
+    expect(render('nope')).toBeNull()
+    expect(render('boom')).toBeNull()
   })
 })

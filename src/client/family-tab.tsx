@@ -16,8 +16,8 @@
  * contributor's inject simply idles (an undischarged wait never blocks the
  * client half), so plugins stay fully functional without their card.
  */
-import { useState } from 'react'
-import type { JSX } from 'react'
+import { useEffect, useState } from 'react'
+import type { JSX, ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { ThinkingLevelsCard, type ThinkingLevelsCardInjected } from './card.tsx'
 
@@ -45,6 +45,13 @@ export interface FamilySectionInjected extends ThinkingLevelsCardInjected {
     /** Ordered projection of the contributor ledger (locale-aware). */
     tabs: HostObservable<readonly FamilyTabEntry[]>
   }
+  /** Apply-time EAGER locale binder — the ≤0.1.6 stand-in for the host's
+   * PropsLocale delivery (0.1.7+ shells pass `t` and this is ignored). */
+  tFallback?: (key: string) => string
+  /** Direct-mount face for contributor tabs where the shell delivers no
+   * renderSlot (≤0.1.6): mounts the active ledger entry's own component from
+   * the raw `ctx.slots.entries` records. Null on any failure. */
+  renderContributor?: (id: string) => ReactNode
 }
 
 /**
@@ -68,15 +75,44 @@ export type FamilySettingsSectionProps =
 /** This plugin's own tab, always first: the thinking-levels card itself. */
 const OWN_TAB_ID = 'thinking-levels'
 
-/** The hooks-compartment selector hook face (bound `use<Name>` hook). */
+const NO_TABS: readonly FamilyTabEntry[] = []
+
+/** The hooks-compartment selector hook face (bound `use<Name>` hook) —
+ * delivered by 0.1.7+ shells only; optional for the ≤0.1.6 degraded read. */
 interface FamilyHooksFace {
-  useTabs: <S>(selector: (value: readonly FamilyTabEntry[]) => S) => S
+  useTabs?: <S>(selector: (value: readonly FamilyTabEntry[]) => S) => S
+}
+
+/**
+ * Contributor ledger reader across shell generations. 0.1.7+ shells deliver
+ * the hooks compartment (`useTabs`); ≤0.1.6 shells deliver none, so the same
+ * projected observable (`hooks.tabs`, injected by the section factory) is read
+ * through React's own subscription instead. The face choice is fixed per host
+ * (a shell never grows hooks mid-session), so the hook order stays stable per
+ * component instance even though the two paths differ.
+ */
+function useContributorTabs(
+  hooksFace: FamilyHooksFace,
+  hooksTabs?: HostObservable<readonly FamilyTabEntry[]>,
+): readonly FamilyTabEntry[] {
+  const [polled, setPolled] = useState<readonly FamilyTabEntry[]>(
+    () => hooksTabs?.getSnapshot() ?? NO_TABS,
+  )
+  useEffect(() => {
+    if (hooksFace.useTabs !== undefined || hooksTabs === undefined) return
+    return hooksTabs.subscribe(() => setPolled(hooksTabs.getSnapshot()))
+  }, [hooksFace, hooksTabs])
+  if (hooksFace.useTabs !== undefined) return hooksFace.useTabs(value => value)
+  return polled
 }
 
 export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.Element {
-  const { t, renderSlot, scope, piAiScope, ocScope } = props
-  const { useTabs } = props as unknown as FamilyHooksFace
-  const contributors = useTabs(value => value)
+  const { t: tHost, renderSlot, scope, piAiScope, ocScope } = props
+  // Locale: the host's PropsLocale delivery when present (0.1.7+), the injected
+  // EAGER binder when not (≤0.1.6), identity as the last resort — a thrown
+  // translate kills the whole section render.
+  const t = tHost ?? props.tFallback ?? ((key: string) => key)
+  const contributors = useContributorTabs(props as unknown as FamilyHooksFace, props.hooks?.tabs)
   const [activeId, setActiveId] = useState<string>(OWN_TAB_ID)
   const rows = [
     { id: OWN_TAB_ID, order: Number.NEGATIVE_INFINITY, label: t('card.title') },
@@ -113,7 +149,9 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
       <div role="tabpanel">
         {active === OWN_TAB_ID
           ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} ocScope={ocScope} />
-          : renderSlot?.('dsh-family.tab', {}, { only: active, fallback: null })}
+          : renderSlot
+            ? renderSlot('dsh-family.tab', {}, { only: active, fallback: null })
+            : props.renderContributor?.(active) ?? null}
       </div>
     </div>
   )
