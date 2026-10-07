@@ -362,16 +362,22 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
    * `plugins.bundle.config` inject idles harmlessly where the slot is never
    * declared (0.1.7 and older).
    *
-   * Election note: session-guard's takeover registers the same id at
-   * priority 10 (this entry stays at the default 0 = always the head when
-   * present, `lowest renders`). Whichever of the two registers first claims
-   * the `dsh-family.tab` children declaration; a conflicting declaration
-   * throws, so the retry lands this entry WITHOUT children — the ledger is
-   * global either way, and the head renders it the same. */
+   * Election note (2026-10-08 T20-a revision): the old "priority-0 head +
+   * priority-10 shadow" assumption is dead — ≤0.1.7 shells list EVERY same-id
+   * entry as its own nav row, so TL + guard double registration showed TWO
+   * 起子插件设置 rows on all five farm cells. Guard now defers FAMILY_YIELD_MS
+   * after the declaration and stands down when this entry is already seated;
+   * symmetric guard here: if a dsh-family entry is somehow already in the
+   * ledger when our factory fires (host-native surface, future rival), we
+   * stand down too — exactly one owner, whichever path seated first. */
   function registerModernSurface(): void {
     if (scopeOf === undefined) return
     ctx.slots.inject('settings.section', function* () {
       console.log('[dsh-thinking-levels] settings.section factory fired (declared)')
+      if (ctx.slots.entries('settings.section').some(e => e.options.id === 'dsh-family')) {
+        console.log('[dsh-thinking-levels] settings.section: dsh-family already seated — stand down')
+        return
+      }
       const base = {
         name: 'settings.section',
         id: 'dsh-family',
