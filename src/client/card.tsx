@@ -299,6 +299,36 @@ function takeoverActiveOf(section: { enabled?: unknown; providers?: unknown }, p
   return Array.isArray(section.providers) && (section.providers as unknown[]).includes(providerId)
 }
 
+/**
+ * The transport's `extraInputs` dict ('provider/model' → modality list), from
+ * its own section. The host llm-pi-ai schema caps a model row's `input` enum
+ * at text|image, so video/audio declarations for omni models live here —
+ * the taken-over transport unions them into the model's effective input.
+ */
+function extraInputsOf(section: { extraInputs?: unknown }): Record<string, string[]> {
+  if (typeof section.extraInputs !== 'object' || section.extraInputs === null || Array.isArray(section.extraInputs)) return {}
+  const out: Record<string, string[]> = {}
+  for (const [key, value] of Object.entries(section.extraInputs as Record<string, unknown>)) {
+    if (Array.isArray(value)) out[key] = value.filter((m): m is string => typeof m === 'string')
+  }
+  return out
+}
+
+/**
+ * One settings write with a single self-heal retry. A false return means the
+ * host refused the optimistic lock — and the client has ALREADY completed its
+ * recover() (a fresh describe folded into the mirror) by the time resolve
+ * lands, so an immediate second attempt carries a fresh revision: the machine
+ * equivalent of the user's proven "click it twice" workaround.
+ */
+async function setWithRetry(scope: SettingsScope<unknown>, field: string, value: unknown): Promise<{ ok: boolean; retried: boolean }> {
+  const ok1 = await scope.set(field, value).catch(() => false)
+  if (ok1) return { ok: true, retried: false }
+  await new Promise((resolve) => setTimeout(resolve, 350))
+  const ok2 = await scope.set(field, value).catch(() => false)
+  return { ok: ok2, retried: true }
+}
+
 /** One flattened capability entry: a provider's model at an array index. */
 interface CapabilityEntry {
   providerId: string
@@ -403,10 +433,12 @@ const OC_ABSENT_SNAPSHOT = Object.freeze({
 function ModelCapabilities(props: {
   scope: SettingsScope<unknown>
   ocScope?: SettingsScope<unknown>
+  /** The plugin's OWN settings scope (TL namespace): hosts the takeover master switch write. */
+  tlScope?: SettingsScope<unknown>
   t: (key: string) => string
   readonly: boolean
 }): JSX.Element {
-  const { scope, ocScope, t, readonly } = props
+  const { scope, ocScope, tlScope, t, readonly } = props
   // Stable subscription identities: inline lambdas make React resubscribe on
   // every render, and the host controller folds a fresh decoded snapshot into
   // its store on every subscribe — each resubscription would then look like a
@@ -426,33 +458,51 @@ function ModelCapabilities(props: {
   const ocSnapshot = useSyncExternalStore(ocSubscribe, ocGetSnapshot)
   const ocSection = (ocSnapshot.status === 'ready' && typeof ocSnapshot.value === 'object' && ocSnapshot.value !== null
     ? ocSnapshot.value
-    : {}) as { enabled?: unknown; providers?: unknown }
+    : {}) as { enabled?: unknown; providers?: unknown; extraInputs?: unknown }
   const ocWritable = ocSnapshot.status === 'ready' && ocSnapshot.writable && !readonly
+  // Optimistic overlay (plan tl-write-immediacy §B): pending values shadow the
+  // snapshots until their write settles. resolve(true) implies the client has
+  // already accepted the new mirror view, so clearing the pending entry then
+  // is gap-free; resolve(false) rolls the overlay back AND surfaces the error
+  // banner. Optimistic writes deliberately do NOT touch `busy` — a 350ms
+  // grey-out would defeat the instant-flip this overlay exists for.
+  const [pendingOc, setPendingOc] = useState<Partial<{ enabled: boolean; providers: string[]; extraInputs: Record<string, string[]> }>>({})
+  const [pendingPi, setPendingPi] = useState<Record<string, unknown> | undefined>(undefined)
+  const [writeError, setWriteError] = useState<string | null>(null)
+  const viewOc = { ...ocSection, ...pendingOc } as { enabled?: unknown; providers?: unknown; extraInputs?: unknown }
   const unavailable = snapshot.status === 'unavailable'
   const providers = snapshot.status === 'ready' ? providersOf(snapshot) : {}
+  // H1: the overlay must sit at the SOURCE of the model-row derivation chain —
+  // thinking / vision / effort / context all flow from entriesOf(...).
+  const viewProviders = { ...providers, ...pendingPi }
   // Every llm-pi-ai provider is listed with its models — no list gating: the
   // official compat surface (dsh ≥ rc.8) means pi-ai serves every route
   // natively, so each model is editable right here.
-  const allEntries = entriesOf(providers)
+  const allEntries = entriesOf(viewProviders)
 
   // UI-only state: provider/model expansion, the wire drafts, and the query.
   const [query, setQuery] = useState('')
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({})
   const [expandedModels, setExpandedModels] = useState<Record<string, boolean>>({})
   const [drafts, setDrafts] = useState<Record<string, Record<string, string | null>>>({})
-  const [busy, setBusy] = useState(false)
+  // `busy` has no writer by design (see the optimistic-write note above) —
+  // every write path is optimistic with its own inline rollback, so the
+  // disabled states below are currently pure `readonly` mirrors.
+  const [busy] = useState(false)
   const [contextRaw, setContextRaw] = useState<Record<string, string>>({})
   const [contextError, setContextError] = useState<Record<string, string>>({})
 
   const entryKey = (entry: CapabilityEntry): string => `${entry.providerId}\u0000${entry.index}`
 
-  /** Commit one patch over the user-layer providers. */
+  /** Commit one patch over the user-layer providers (optimistic + self-heal retry). */
   const commitProviders = (mutate: (current: Record<string, unknown>) => Record<string, unknown>): void => {
     if (snapshot.status !== 'ready' || readonly) return
-    setBusy(true)
-    void scope.set('providers', mutate(structuredClone(providers)))
-      .then(() => { setBusy(false) })
-      .catch(() => { setBusy(false) })
+    const next = mutate(structuredClone(viewProviders))
+    setPendingPi(next)
+    void setWithRetry(scope, 'providers', next).then(({ ok }) => {
+      setPendingPi(undefined)
+      if (!ok) setWriteError(t('card.writeError'))
+    })
   }
 
   /** Toggle the route-level official compat flag: unchecked = inherit (unset). */
@@ -471,18 +521,79 @@ function ModelCapabilities(props: {
     })
   }
 
-  /** Toggle the per-route third-party takeover: writes the transport's own section only. */
+  /**
+   * Toggle the per-route third-party takeover. Ownership split (plan §D): this
+   * checkbox writes MEMBERSHIP only — `OC.enabled`'s sole writer is the host
+   * mirror of TL's `takeover` master. Checking a route while the master is off
+   * lights the master through ONE TL-namespace write instead of the old direct
+   * OC.enabled write that used to fight the mirror and bounce the checkbox.
+   */
   const toggleTakeover = (providerId: string, next: boolean): void => {
     if (ocScope === undefined || !ocWritable) return
-    const currentProviders = Array.isArray(ocSection.providers)
-      ? (ocSection.providers as unknown[]).filter((id): id is string => typeof id === 'string')
+    const currentProviders = Array.isArray(viewOc.providers)
+      ? (viewOc.providers as unknown[]).filter((id): id is string => typeof id === 'string')
       : []
     const providers = next
       ? [...new Set([...currentProviders, providerId])]
       : currentProviders.filter((id) => id !== providerId)
-    const enabled = next ? true : ocSection.enabled === true
-    ocScope.set('providers', providers).catch(() => {})
-    if (ocSection.enabled !== enabled) ocScope.set('enabled', enabled).catch(() => {})
+    setPendingOc((cur) => ({ ...cur, providers }))
+    // Master-off detection reads TL's OWN snapshot, never viewOc.enabled: the
+    // enabled field folds lazily (host mirror timing) and reads stale-true
+    // right after a master-off click, which would skip the auto-light. The
+    // TL snapshot folds on the master write itself, so it is always fresh.
+    const tlTakeoverNow = (tlScope?.getSnapshot().value as { takeover?: unknown } | undefined)?.takeover === true
+    if (next && !tlTakeoverNow && tlScope !== undefined) {
+      // Light the master AND carry OC.enabled with it in-session: the host
+      // mirror only reconciles at boot reliably, so the card writes both sides
+      // of the lighting (same value — no fight with the mirror is possible).
+      void setWithRetry(tlScope, 'takeover', true).then(({ ok }) => {
+        if (!ok) setWriteError(t('card.writeError'))
+      })
+      void setWithRetry(ocScope, 'enabled', true).then(({ ok }) => {
+        if (!ok) setWriteError(t('card.writeError'))
+      })
+    }
+    void setWithRetry(ocScope, 'providers', providers).then(({ ok }) => {
+      setPendingOc((cur) => {
+        const rest = { ...cur }
+        delete rest['providers']
+        return rest
+      })
+      if (!ok) {
+        setPendingOc((cur) => ({ ...cur, providers: currentProviders }))
+        setWriteError(t('card.writeError'))
+      }
+    })
+  }
+
+  /** The model's extra input modalities declared on the transport ('provider/model' key). */
+  const modelExtrasOf = (providerId: string, modelId: string): string[] =>
+    extraInputsOf(viewOc)[`${providerId}/${modelId}`] ?? []
+
+  /** Toggle one model's video/audio declaration on the transport's extraInputs.
+   *  The host pi-ai schema caps model-row `input` at text|image, so omni
+   *  modalities live here — effective only while the route is taken over. */
+  const toggleModelModality = (providerId: string, modelId: string, modality: 'video' | 'audio', next: boolean): void => {
+    if (ocScope === undefined || !ocWritable) return
+    const current = extraInputsOf(viewOc)
+    const modelKey = `${providerId}/${modelId}`
+    const entry = Array.isArray(current[modelKey]) ? [...current[modelKey]] : []
+    const nextEntry = next ? [...new Set([...entry, modality])] : entry.filter((m) => m !== modality)
+    const nextDict: Record<string, string[]> = { ...current }
+    if (nextEntry.length > 0) nextDict[modelKey] = nextEntry
+    else delete nextDict[modelKey]
+    setPendingOc((cur) => ({ ...cur, extraInputs: nextDict }))
+    void setWithRetry(ocScope, 'extraInputs', nextDict).then(({ ok }) => {
+      setPendingOc((cur) => {
+        const rest = { ...cur }
+        delete rest['extraInputs']
+        return rest
+      })
+      if (!ok) {
+        setPendingOc((cur) => ({ ...cur, extraInputs: current }))
+        setWriteError(t('card.writeError'))
+      }
+    })
   }
 
   /** Patch one model row of one provider. */
@@ -710,6 +821,9 @@ function ModelCapabilities(props: {
     <div style={sectionStyle}>
       <p style={fieldLabelStyle}>{t('card.capabilities')}</p>
       <p style={hintStyle}>{t('card.capabilities.hint')}</p>
+      {writeError !== null && (
+        <p style={{ margin: '0 0 4px', fontSize: '12px', lineHeight: '18px', color: 'var(--dsw-alias-danger, #e5484d)' }} role="status">⚠ {writeError}</p>
+      )}
 
       {/* Search + one-click presets */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 2px' }}>
@@ -781,7 +895,7 @@ function ModelCapabilities(props: {
                 >
                   <input
                     type="checkbox"
-                    checked={takeoverActiveOf(ocSection, providerId)}
+                    checked={takeoverActiveOf(viewOc, providerId)}
                     disabled={readonly || busy || !ocWritable}
                     onChange={(event) => toggleTakeover(providerId, event.currentTarget.checked)}
                   />
@@ -826,6 +940,8 @@ function ModelCapabilities(props: {
                         <p style={modelIdStyle}>{entry.modelId}</p>
                         <span style={badgeStyle} title="text">{meta.text ? 'T' : '–'}</span>
                         <span style={badgeStyle} title="image">{meta.image ? 'IMG' : '–'}</span>
+                        {modelExtrasOf(entry.providerId, entry.modelId).includes('video') && <span style={badgeStyle} title="video (extraInputs)">VID</span>}
+                        {modelExtrasOf(entry.providerId, entry.modelId).includes('audio') && <span style={badgeStyle} title="audio (extraInputs)">AUD</span>}
                         {meta.context !== null && <span style={badgeStyle}>{meta.context}</span>}
                         {thinking && !supportsEffort && <span style={badgeStyle}>On/Off</span>}
                       </div>
@@ -857,6 +973,23 @@ function ModelCapabilities(props: {
                                 />
                                 <span>{t('card.capabilities.vision')}</span>
                               </label>
+                              {/* Video/audio declarations live on the taken-over transport
+                                  (extraInputs): the host model-row input enum caps at text|image. */}
+                              {(['video', 'audio'] as const).map(modality => (
+                                <label
+                                  key={modality}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: takeoverActiveOf(viewOc, entry.providerId) ? undefined : 'var(--dsw-alias-label-disabled, var(--dsw-alias-label-caption))' }}
+                                  title={t('card.capabilities.mediaHint')}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={modelExtrasOf(entry.providerId, entry.modelId).includes(modality)}
+                                    disabled={readonly || busy || !ocWritable || !takeoverActiveOf(viewOc, entry.providerId)}
+                                    onChange={(event) => toggleModelModality(entry.providerId, entry.modelId, modality, event.currentTarget.checked)}
+                                  />
+                                  <span>{t(`card.capabilities.${modality}`)}</span>
+                                </label>
+                              ))}
                             </div>
                             {/* Layer 2 — only for thinking models: does it take reasoning_effort levels? */}
                             {thinking
@@ -1071,8 +1204,35 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
     level: EffortId
     allowDowngrade: boolean
     allowUpgrade: boolean
+    takeover: boolean
   }>
-  const level = EFFORT_OPTIONS.includes(value.level as EffortId) ? value.level as EffortId : 'auto'
+  // Optimistic overlay for this card's own writes (plan §E): same contract as
+  // the capability card's overlay — clear on resolve(true), roll back + banner
+  // on resolve(false).
+  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean }>>({})
+  const [writeErrorTl, setWriteErrorTl] = useState<string | null>(null)
+  const viewValue = { ...value, ...pendingTl }
+  const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
+  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover', v: unknown): void => {
+    setPendingTl((cur) => ({ ...cur, [field]: v as never }))
+    void setWithRetry(scope, field, v).then(({ ok }) => {
+      setPendingTl((cur) => {
+        const rest = { ...cur }
+        delete rest[field]
+        return rest
+      })
+      if (!ok) setWriteErrorTl(t('card.writeError'))
+    })
+    // The takeover master carries OC.enabled with it in-session (same value):
+    // the host mirror reconciles at boot, but an in-session flip must take
+    // effect immediately — writing the same value the mirror would write can
+    // never fight it.
+    if (field === 'takeover' && typeof v === 'boolean' && ocScope !== undefined) {
+      void setWithRetry(ocScope, 'enabled', v).then(({ ok }) => {
+        if (!ok) setWriteErrorTl(t('card.writeError'))
+      })
+    }
+  }
 
   return (
     <div style={{
@@ -1135,7 +1295,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                       value={level}
                       disabled={readonly}
                       style={controlStyle}
-                      onChange={(event) => { void scope.set('level', event.currentTarget.value as EffortId) }}
+                      onChange={(event) => { writeTl('level', event.currentTarget.value as EffortId) }}
                     >
                       {EFFORT_OPTIONS.map((option) => (
                         <option key={option} value={option}>{t(`card.level.${option}`)}</option>
@@ -1147,9 +1307,24 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                     <input
                       id="plugin-config-thinking-levels-enabled"
                       type="checkbox"
-                      checked={value.enabled ?? true}
+                      checked={viewValue.enabled ?? true}
                       disabled={readonly}
-                      onChange={(event) => { void scope.set('enabled', event.currentTarget.checked) }}
+                      onChange={(event) => { writeTl('enabled', event.currentTarget.checked) }}
+                    />
+                  </div>
+                  <div style={rowStyle}>
+                    <label
+                      htmlFor="plugin-config-thinking-levels-takeover"
+                      style={labelStyle}
+                      title={t('card.masterTakeoverHint')}
+                    >{t('card.masterTakeover')}</label>
+                    <input
+                      id="plugin-config-thinking-levels-takeover"
+                      type="checkbox"
+                      checked={viewValue.takeover ?? false}
+                      disabled={readonly}
+                      title={t('card.masterTakeoverHint')}
+                      onChange={(event) => { writeTl('takeover', event.currentTarget.checked) }}
                     />
                   </div>
                   <div style={rowStyle}>
@@ -1157,9 +1332,9 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                     <input
                       id="plugin-config-thinking-levels-downgrade"
                       type="checkbox"
-                      checked={value.allowDowngrade ?? true}
-                      disabled={readonly || value.level !== 'auto'}
-                      onChange={(event) => { void scope.set('allowDowngrade', event.currentTarget.checked) }}
+                      checked={viewValue.allowDowngrade ?? true}
+                      disabled={readonly || viewValue.level !== 'auto'}
+                      onChange={(event) => { writeTl('allowDowngrade', event.currentTarget.checked) }}
                     />
                   </div>
                   <div style={rowStyle}>
@@ -1167,14 +1342,17 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                     <input
                       id="plugin-config-thinking-levels-upgrade"
                       type="checkbox"
-                      checked={value.allowUpgrade ?? false}
-                      disabled={readonly || value.level !== 'auto'}
-                      onChange={(event) => { void scope.set('allowUpgrade', event.currentTarget.checked) }}
+                      checked={viewValue.allowUpgrade ?? false}
+                      disabled={readonly || viewValue.level !== 'auto'}
+                      onChange={(event) => { writeTl('allowUpgrade', event.currentTarget.checked) }}
                     />
                   </div>
+                  {writeErrorTl !== null && (
+                    <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-danger, #e5484d)' }} role="status">⚠ {writeErrorTl}</p>
+                  )}
                   {!snapshot.writable
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
-                  <ModelCapabilities scope={piAiScope} ocScope={ocScope} t={t} readonly={readonly} />
+                  <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
                 </>
               )}
           </div>

@@ -230,6 +230,9 @@ export function buildBillingDefinition() {
     totals: { ...EMPTY_TOTALS },
   })
 
+  // Wire-format reducer: events arrive untyped off the transport mirror and
+  // every field access below already narrows defensively.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apply = (state: State, event: any): State => {
     // 当前请求的 provider/model 跟踪
     if (event.type === 'request/header') {
@@ -247,6 +250,7 @@ export function buildBillingDefinition() {
     // usage 双源采样
     let turn: unknown
     let step: unknown
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wire-format usage sample, normalized a few lines down
     let usage: any
     let sourceModel: string | undefined
     let sourceProvider: string | undefined

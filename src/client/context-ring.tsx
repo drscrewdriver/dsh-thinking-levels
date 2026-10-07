@@ -446,6 +446,13 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
       { label: c.messages, value: breakdown.messageTokens, color: BREAKDOWN_COLORS.messages },
     ]
 
+  // Hosts without the projection hook seat (≤0.1.6) can never produce a
+  // reading — hide the control entirely rather than show a permanently dead
+  // dial (the discipline in the comment at hasSeat). A host with the seat
+  // flips `seatMounted` during the hook's own mount, so the gap is one store
+  // tick before the first real re-render.
+  if (!hasSeat) return null
+
   return (
     <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex' }}>
       <button

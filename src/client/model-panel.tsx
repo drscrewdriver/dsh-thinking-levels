@@ -40,7 +40,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { SettingsScope } from './scope-face.ts'
-import { ContextRing, type ProjectionHook } from './context-ring.tsx'
+import { ContextRing } from './context-ring.tsx'
 import { EffortSlider } from './effort-slider.tsx'
 import { orderEffortsForSlider } from '../thinking-level.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
