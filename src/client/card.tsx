@@ -89,9 +89,24 @@ const rowStyle: CSSProperties = {
 
 const labelStyle: CSSProperties = { margin: 0, color: 'var(--dsw-alias-label-primary)' }
 
+/** Native form controls (the select's dropdown popup) follow `color-scheme`,
+ * which the ≤0.1.6 shells never set — derive it from the body luminance once
+ * at bundle eval so dark-theme hosts get dark popups without a media query
+ * (the app theme isn't the OS theme, so prefers-color-scheme would lie). */
+const controlColorScheme: 'dark' | 'light' = (() => {
+  try {
+    const rgb = getComputedStyle(document.body).backgroundColor.match(/\d+/g) ?? ['255', '255', '255']
+    const [r, g, b] = rgb.map(Number)
+    return (r * 299 + g * 587 + b * 114) / 1000 < 128 ? 'dark' : 'light'
+  } catch { return 'light' }
+})()
+
 const controlStyle: CSSProperties = {
-  background: 'var(--dsw-alias-bg-surface, #fff)',
-  color: 'var(--dsw-alias-label-primary)',
+  // Translucent fallback: the alias tokens don't exist on the ≤0.1.6 shells,
+  // and the old `#fff` fallback painted white controls onto dark dialogs.
+  background: 'var(--dsw-alias-bg-surface, rgba(127,127,127,0.12))',
+  color: 'var(--dsw-alias-label-primary, inherit)',
+  colorScheme: controlColorScheme,
   border: '1px solid var(--dsw-alias-border-l2)',
   borderRadius: '4px',
   padding: '3px 8px',
