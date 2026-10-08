@@ -11,6 +11,15 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### 수정
+
+- **패밀리 탭 행이 컨테이너 폭에서 줄바꿈**: tablist의 `flexWrap: 'nowrap'` +
+  `overflowX: 'auto'`(063d9fd의 단일 행 스트립 설계)를 `wrap`으로 바꾸고 버튼에서
+  `flex: 0 0 auto` 제거. contributor 탭이 7개 이상이어도 가로 스크롤바 대신 다음
+  행으로 흐릅니다(≤0.1.7 전 세대).
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### 추가 — 크로스 버전 패밀리 섹션 (beta.18 → beta.26)

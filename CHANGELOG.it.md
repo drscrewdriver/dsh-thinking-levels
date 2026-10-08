@@ -7,6 +7,16 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### Corretto
+
+- **La riga di tab della famiglia va a capo** alla larghezza del contenitore
+  invece di traboccare in una barra di scorrimento orizzontale: `flexWrap:
+  'nowrap'` + `overflowX: 'auto'` (063d9fd) sostituiti con `wrap`, e `flex: 0 0
+  auto` rimosso dai pulsanti. Con 7+ tab contributor la riga scorre sulle righe
+  successive (tutte le generazioni ≤0.1.7).
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### Aggiunto — sezione famiglia cross-versione (beta.18 → beta.26)

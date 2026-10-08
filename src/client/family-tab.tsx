@@ -122,7 +122,7 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
 
   return (
     <div style={{ display: 'grid', gap: '12px' }}>
-      <div role="tablist" aria-label={t('family.title')} style={{ display: 'flex', flexWrap: 'nowrap', overflowX: 'auto', gap: '4px' }}>
+      <div role="tablist" aria-label={t('family.title')} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
         {rows.map(row => (
           <button
             key={row.id}
@@ -134,7 +134,6 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
               appearance: 'none',
               font: 'inherit',
               cursor: 'pointer',
-              flex: '0 0 auto',
               whiteSpace: 'nowrap',
               border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))',
               background: row.id === active ? 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.08))' : 'none',

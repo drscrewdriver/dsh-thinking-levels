@@ -7,6 +7,17 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### Corregido
+
+- **La fila de pestañas de familia salta de línea** al ancho del contenedor en
+  lugar de desbordarse en una barra de desplazamiento horizontal:
+  `flexWrap: 'nowrap'` + `overflowX: 'auto'` (063d9fd) se sustituyen por
+  `wrap`, y se elimina `flex: 0 0 auto` de los botones. Con 7+ pestañas
+  contribuidoras, la fila fluye a las siguientes líneas (todas las
+  generaciones ≤0.1.7).
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### Añadido — sección familiar entre versiones (beta.18 → beta.26)

@@ -7,6 +7,16 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### Corrigé
+
+- **La rangée d'onglets famille revient à la ligne** à la largeur du
+  conteneur au lieu de déborder en barre de défilement horizontale :
+  `flexWrap: 'nowrap'` + `overflowX: 'auto'` (063d9fd) remplacés par `wrap`,
+  et `flex: 0 0 auto` retiré des boutons. Avec 7+ onglets contributeurs, la
+  rangée coule sur les lignes suivantes (toutes générations ≤0.1.7).
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### Ajouté — section famille multi-versions (beta.18 → beta.26)

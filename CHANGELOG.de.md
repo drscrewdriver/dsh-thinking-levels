@@ -7,6 +7,16 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### Behoben
+
+- **Familien-Tab-Leiste bricht am Container-Width um** statt in eine
+  horizontale Scrollleiste zu überlaufen: `flexWrap: 'nowrap'` + `overflowX:
+  'auto'` (063d9fd) durch einfaches `wrap` ersetzt, `flex: 0 0 auto` der
+  Buttons entfernt. Bei 7+ Contributor-Tabs fließt die Leiste in folgende
+  Zeilen (alle Generationen ≤0.1.7).
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### Neu — familienübergreifender Abschnitt über Hostgenerationen (beta.18 → beta.26)

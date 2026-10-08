@@ -11,6 +11,18 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.2.0-beta.27] — 2026-10-08
+
+### Fixed
+
+- **Family tab strip wraps at container width** instead of overflowing into a
+  horizontal scrollbar: the tablist drops `flexWrap: 'nowrap'` + `overflowX:
+  'auto'` (the single-row-strip design from 063d9fd) for plain `wrap`, and the
+  buttons lose their `flex: 0 0 auto`. With seven+ contributor tabs (thinking
+  levels, session guard, search index, CDP, MCP registry, steward, input
+  traffic — perm-gate and context-compression joining in compat releases) the
+  strip now flows onto following rows on every host generation ≤0.1.7.
+
 ## [4.2.0-beta.26] — 2026-10-08
 
 ### Added — cross-version family section (beta.18 → beta.26)
