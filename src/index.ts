@@ -520,7 +520,27 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       sessionProjections?: { register: (definition: unknown) => void }
     }) => void) => void
   }).inject?.(['sessionProjections'], (scope) => {
-    scope.sessionProjections?.register(buildBillingDefinition())
+    const def = buildBillingDefinition() as {
+      key: string
+      stateVersion: number
+      init: () => unknown
+      apply: (state: unknown, event: unknown) => unknown
+      stateSchema?: unknown
+      wire?: { viewSchema?: unknown; view?: unknown }
+      schema?: unknown
+      view?: unknown
+    }
+    // 0.1.0-rc.8 是唯一的旧平面契约 registry（snapshot 走 def.schema.parse(def.view(state))，
+    // 0.1.1+ 全线是 stateSchema/wire 新契约）。旧 registry 对缺 schema 的单元直接
+    // 「Cannot read properties of undefined (reading 'parse')」——一颗单元毒化全部
+    // 冷会话历史加载（2026-10-08 五格实证）。镜像 wire 形状为平面键，两代 registry
+    // 各取所需；新契约线多出的两个键无人消费，行为不变。
+    const wire = (def as { wire?: { viewSchema?: unknown; view?: unknown } }).wire
+    if (wire && def.schema === undefined) {
+      def.schema = wire.viewSchema
+      def.view = wire.view
+    }
+    scope.sessionProjections?.register(def)
   })
   const current: () => LiveConfig = () => resolveLiveConfig(source())
   ctx.on('loader/volatile-update', () => {

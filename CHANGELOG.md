@@ -343,4 +343,19 @@ All notable changes to `dsh-thinking-levels` are documented here.
 
 ### Added
 
-- Initial release: `agent/request` injection of a fixed reasoning effort.
+- Initial release: `agent/request` injection of a fixed reasoning effort.## 4.2.0-beta.29 - 2026-10-08
+
+### Fixed
+
+- **0.1.0-rc.8 cold-session history killer**: the host's `sessionProjections`
+  registry on 0.1.0-rc.8 is the ONLY flat-contract line (`def.schema.parse(
+  def.view(state))`); every newer line (0.1.1+) consumes the `stateSchema`/
+  `wire` shape the billing unit registers. On 0.1.0 the unit arrived with
+  `schema === undefined`, so EVERY cold-session history read threw
+  "Cannot read properties of undefined (reading 'parse')" — one schema-less
+  unit poisoned the whole workspace's history (2026-10-08 five-cell
+  reproduction). The registration now mirrors `wire.viewSchema`/`wire.view`
+  into the flat `schema`/`view` keys; both registry generations take what
+  they expect and newer lines are unaffected.
+
+
