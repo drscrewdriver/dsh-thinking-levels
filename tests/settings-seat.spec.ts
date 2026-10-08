@@ -174,12 +174,13 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
 })
 
 describe('settingsScope generation (route A: family section on ≤0.1.6 hosts)', () => {
-  it('registers the legacy item card AND the family section on ≤0.1.6 hosts', () => {
+  it('registers ONLY the family section on ≤0.1.6 hosts (item card retired 2026-10-08)', () => {
     const { declared, registrations } = collectRegistrations(true, 'settingsScope')
-    expect(declared).toContain('settings.plugin.item')
+    // The legacy plugins-page item card duplicated the family-tab card — the
+    // family insection tab is the single settings surface on every generation.
+    expect(declared).not.toContain('settings.plugin.item')
+    expect(registrations.find(r => r.slot === 'settings.plugin.item')).toBeUndefined()
     expect(declared).toContain('settings.section')
-    const item = registrations.find(r => r.slot === 'settings.plugin.item')
-    expect(item?.options).toMatchObject({ key: 'thinking-levels', locale: 'thinking-levels' })
     const section = registrations.find(r => r.slot === 'settings.section')
     expect(section?.options).toMatchObject({ id: 'dsh-family' })
   })

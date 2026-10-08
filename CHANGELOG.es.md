@@ -7,6 +7,10 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.0-beta.28] — 2026-10-08
+
+### Eliminado
+
 ## [4.2.0-beta.27] — 2026-10-08
 
 ### Corregido

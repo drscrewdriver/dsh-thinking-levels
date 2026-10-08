@@ -11,6 +11,10 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.2.0-beta.28] — 2026-10-08
+
+### Removed
+
 ## [4.2.0-beta.27] — 2026-10-08
 
 ### Fixed
