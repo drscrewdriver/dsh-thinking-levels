@@ -7,9 +7,26 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.1] — 2026-10-12
+
+### Cambiado — promoción a estable (sin cambios de código desde 4.2.0-beta.29)
+
+- **La línea 4.2.0-beta pasa a estable.** Incluye el arco beta.18 → beta.29:
+  sección family entre versiones, ajuste de la barra de pestañas, retiro de la
+  tarjeta legacy de la página de plugins, corrección cold-session 0.1.0-rc.8.
+  `engines.dsh` mantiene la enumeración completa de las 11 líneas del host; el
+  canal npm `latest` ahora apunta a una versión estable multilínea.
+- **Deriva de los dos manifiestos corregida:** `dsh.plugin.json` seguía en
+  `4.2.0-beta.28` (olvidado en el bump beta.29); ambos manifiestos leen 4.2.1.
+
 ## [4.2.0-beta.28] — 2026-10-08
 
 ### Eliminado
+
+- **Retirada la tarjeta de elemento legacy de la página de plugins
+  (`settings.plugin.item`).** Duplicaba la tarjeta de la pestaña family en la
+  página de plugins ≤0.1.5; la pestaña family 起子插件设置 es ahora la única
+  superficie de ajustes en cada generación del host.
 
 ## [4.2.0-beta.27] — 2026-10-08
 

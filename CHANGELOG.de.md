@@ -7,9 +7,26 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.2.1] — 2026-10-12
+
+### Geändert — Hochstufung auf Stable (keine Code-Änderungen seit 4.2.0-beta.29)
+
+- **Die 4.2.0-beta-Linie wird Stable.** Enthält den kompletten Bogen beta.18 →
+  beta.29: Cross-Version-Family-Section, Umbruch der Tab-Leiste, Retirement der
+  Legacy-Karte auf der Plugins-Seite, 0.1.0-rc.8-Cold-Session-Fix. `engines.dsh`
+  behält die vollständige 11-Host-Linien-Aufzählung; der npm-Kanal `latest`
+  zeigt damit erstmals auf eine Multi-Linien-Stable.
+- **Dual-Manifest-Drift behoben:** `dsh.plugin.json` war noch auf
+  `4.2.0-beta.28` (beim beta.29-Bump übersehen); beide Manifeste lesen jetzt 4.2.1.
+
 ## [4.2.0-beta.28] — 2026-10-08
 
 ### Entfernt
+
+- **Die Legacy-Item-Karte der Plugins-Seite (`settings.plugin.item`) ist
+  retired.** Sie duplizierte die Family-Tab-Karte auf der ≤0.1.5-Plugins-Seite;
+  der 起子插件设置-Family-Tab ist nun die einzige Einstellungsoberfläche auf
+  jeder Host-Generation.
 
 ## [4.2.0-beta.27] — 2026-10-08
 

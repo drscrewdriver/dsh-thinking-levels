@@ -11,9 +11,27 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.2.1] — 2026-10-12
+
+### Changed — stable promotion (no code changes since 4.2.0-beta.29)
+
+- **The 4.2.0-beta line graduates to stable.** This release carries the beta.18 →
+  beta.29 arc: cross-version family section (`installLegacySection`, beta.26),
+  family tab strip wrap (beta.27), legacy plugins-page item card retirement
+  (beta.28), 0.1.0-rc.8 cold-session history fix (beta.29). `engines.dsh` keeps
+  the full 11-line enumeration (0.1.0-rc.8 → 0.2.0-rc.2), so the npm `latest`
+  channel now points at a multi-line stable release.
+- **Dual-manifest drift fixed:** `dsh.plugin.json` was still stamped
+  `4.2.0-beta.28` (the beta.29 bump missed it); both manifests now read 4.2.1.
+
 ## [4.2.0-beta.28] — 2026-10-08
 
 ### Removed
+
+- **The legacy plugins-page item card (`settings.plugin.item`) is retired.** It
+  duplicated the family-tab card on the ≤0.1.5 plugins page; the 起子插件设置
+  family tab is now the single settings surface on every host generation
+  (matching session-guard / free-search / browser-cdp / preset-manager).
 
 ## [4.2.0-beta.27] — 2026-10-08
 
