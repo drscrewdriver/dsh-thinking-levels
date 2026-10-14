@@ -154,6 +154,9 @@ export function apply(ctx: ClientContext): void {
   // The one scope factory, set by whichever generation's settings channel the
   // host provides (see the waist injects at the end of apply).
   let scopeOf: ((ns: string) => unknown) | undefined
+  /** One-shot guard for `registerModernSurface` — see its declaration for why a
+   * second call is not merely redundant but destructive (double seating). */
+  let modernSurfaceClaimed = false
   const scopeInject = (ctx as unknown as {
     inject: (deps: string[], cb: (scope: Record<string, unknown>) => void) => void
   }).inject
@@ -353,33 +356,77 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
    * after the declaration and stands down when this entry is already seated;
    * symmetric guard here: if a dsh-family entry is somehow already in the
    * ledger when our factory fires (host-native surface, future rival), we
-   * stand down too — exactly one owner, whichever path seated first. */
+   * stand down too — exactly one owner, whichever path seated first.
+   *
+   * Declare-or-withdraw (2026-10-14): seating this entry WITHOUT the children
+   * table used to be the fallback, and it was the worst possible outcome — a
+   * childless container still claims the nav row (so every later claimant sees
+   * "dsh-family already seated" and stands down) while `dsh-family.tab` stays
+   * undeclared, so every member card silently disappears and only our own tab
+   * renders. One crippled seat therefore poisons the whole family for the rest
+   * of the boot. Losing the declaration now means losing the section: we yield
+   * instead of seating a body that cannot host anyone's tabs.
+   *
+   * Rank: this plugin heads the ladder at rank 0 — and it defers like every other
+   * claimant instead of seating synchronously. Putting the head on the same derived
+   * formula (200 + 0 * 900 = 200ms) keeps it strictly ahead of guard (1100ms),
+   * steward (3800ms) and mcp-registry (4700ms) while leaving no special case that
+   * only this repo obeys, and no rank constant that exists purely to satisfy
+   * `--check`. The single source of truth for those numbers is
+   * `mine-dsh-plugins/_tools/family-rank.mjs` (offline, GitHub stars + npm
+   * downloads) — never re-derive them by feel in a comment. */
+  /**
+   * 家族接管分级：本插件 rank 0，但与其他候选**走同一派生式**（不例外地同步坐位），
+   * 尝试延迟 = BASE + RANK * STEP = 200ms，仍严格早于 guard(1100)/steward(3800)/mcp(4700)。
+   * 唯一真源是 `mine-dsh-plugins/_tools/family-rank.mjs`，不得在注释/代码里另行推数。 */
+  const FAMILY_CLAIM_RANK = 0
+  const FAMILY_CLAIM_BASE_MS = 200
+  const FAMILY_CLAIM_STEP_MS = 900
+  const FAMILY_CLAIM_DELAY_MS = FAMILY_CLAIM_BASE_MS + FAMILY_CLAIM_RANK * FAMILY_CLAIM_STEP_MS
+
   function registerModernSurface(): void {
     if (scopeOf === undefined) return
+    // Idempotence latch: both the configForms and the settingsScope waist call
+    // this, and a second call would double-inject `settings.section` (same id,
+    // same priority → the host throws) and double-register the bundle card and
+    // the input ring. One seating per client load, whichever service dispatches first.
+    if (modernSurfaceClaimed) return
+    modernSurfaceClaimed = true
     ctx.slots.inject('settings.section', function* () {
       console.log('[dsh-thinking-levels] settings.section factory fired (declared)')
-      if (ctx.slots.entries('settings.section').some(e => e.options.id === 'dsh-family')) {
-        console.log('[dsh-thinking-levels] settings.section: dsh-family already seated — stand down')
-        return
-      }
-      const base = {
-        name: 'settings.section',
-        id: 'dsh-family',
-        order: 40,
-        label: () => t('family.title'),
-        locale: NS,
-        inject: sectionInjected,
-      }
-      try {
-        yield ctx.slots.register({
-          ...base,
-          children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
-        }, FamilySettingsSection)
-      } catch {
-        // The children table was claimed by the takeover shadow (or a rival):
-        // this entry is the priority-0 head either way — the declared ledger
-        // is the same slot key, so the section body reads it identically.
-        yield ctx.slots.register(base, FamilySettingsSection)
+      // 分级时刻再查账本（与 guard/steward/mcp 同一机制）：声明事件内同步抢位在
+      // 本家能赢，只是因为它 rank 0——把「谁先」交给派生式而不是交给运气。
+      let claimed: (() => void) | undefined
+      const timer = setTimeout(() => {
+        if (ctx.slots.entries('settings.section').some(e => e.options.id === 'dsh-family')) {
+          console.log('[dsh-thinking-levels] settings.section: dsh-family already seated — stand down')
+          return
+        }
+        const base = {
+          name: 'settings.section',
+          id: 'dsh-family',
+          order: 40,
+          label: () => t('family.title'),
+          locale: NS,
+          inject: sectionInjected,
+        }
+        try {
+          claimed = ctx.slots.register({
+            ...base,
+            children: { 'dsh-family.tab': { kind: 'list', scope: 'root' } },
+          }, FamilySettingsSection) as unknown as (() => void) | undefined
+          console.log('[dsh-thinking-levels] settings.section: family takeover registered (children declared)')
+        } catch (error) {
+          // Declare-or-withdraw: the children table is held by someone else, so a
+          // section seated here could not render a single member tab. Withdraw
+          // (no registration) and let the holder serve the family.
+          console.log('[dsh-thinking-levels] settings.section: children claim lost — withdrawing ('
+            + (error instanceof Error ? error.message : String(error)) + ')')
+        }
+      }, FAMILY_CLAIM_DELAY_MS)
+      yield () => {
+        clearTimeout(timer)
+        if (typeof claimed === 'function') claimed()
       }
     })
 

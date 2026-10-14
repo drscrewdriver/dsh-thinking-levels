@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "4.2.1",
+  "version": "4.2.1-local.2",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -107,6 +107,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsdown",
+    "prepack": "npm run build",
     "prepublishOnly": "npm run build",
     "release:4x": "npm publish --tag dsh-0.2.0 --registry=https://registry.npmjs.org",
     "typecheck": "tsc --noEmit",

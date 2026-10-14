@@ -18,8 +18,11 @@
  *     priority -1 replaces the shipped `ModelSelect`), skipped gracefully
  *     when the harness lacks `modelDirectories`.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
+
+/** rank 0 头位的派生尝试延迟（与 src/client/index.ts 的 BASE + RANK * STEP 同式）。 */
+const FAMILY_CLAIM_DELAY_MS = 200 + 0 * 900
 
 interface CapturedRegistration {
   readonly slot: string
@@ -35,9 +38,9 @@ interface CapturedRegistration {
  * exclusive on real hosts, and exactly one waist path may fire. */
 function collectRegistrations(
   withDirectories = true,
-  generation: 'configForms' | 'settingsScope' = 'configForms',
+  generation: 'configForms' | 'settingsScope' | 'both' = 'configForms',
   nsStatus: Record<string, string> = {},
-  opts: { throwOnChildren?: boolean } = {},
+  opts: { throwOnChildren?: boolean; advance?: boolean } = {},
 ): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>> } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
@@ -50,7 +53,7 @@ function collectRegistrations(
   const ctx = {
     effect: (build: () => unknown) => { void build(); return () => {} },
     locale: { register: () => () => {}, bind: () => (key: string) => key },
-    configForms: generation === 'configForms'
+    configForms: (generation === 'configForms' || generation === 'both')
       ? {
           get: <T,>(entryId: string) => {
             forms.push(entryId)
@@ -58,7 +61,7 @@ function collectRegistrations(
           },
         }
       : undefined,
-    settingsScope: generation === 'settingsScope'
+    settingsScope: (generation === 'settingsScope' || generation === 'both')
       ? { bind: bindSettingsScope }
       : undefined,
     modelDirectories: withDirectories
@@ -109,7 +112,12 @@ function collectRegistrations(
       },
     },
   }
+  // The family claim is deferred onto the rank ladder (it no longer seats inside
+  // the declaration event), so drive the clock to reach the post-election state.
+  vi.useFakeTimers()
   apply(ctx as never)
+  if (opts.advance !== false) vi.advanceTimersByTime(FAMILY_CLAIM_DELAY_MS + 10)
+  vi.useRealTimers()
   return { declared, registrations, forms, ledger }
 }
 
@@ -125,8 +133,11 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(registrations[0]!.slot).toBe('conversation.input.model')
     expect(registrations[1]!.slot).toBe('conversation.input.right')
     expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
-    expect(registrations[2]!.slot).toBe('settings.section')
-    expect(registrations[3]!.slot).toBe('plugins.bundle.config')
+    // The family claim rides the rank ladder, so it lands AFTER the surfaces that
+    // seat synchronously at apply time -- injection ORDER (declared above) is
+    // unchanged, only the registration order moves.
+    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
+    expect(registrations[3]!.slot).toBe('settings.section')
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
@@ -138,8 +149,8 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(registrations).toHaveLength(3)
     expect(registrations[0]!.slot).toBe('conversation.input.right')
     expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
-    expect(registrations[1]!.slot).toBe('settings.section')
-    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
+    expect(registrations[1]!.slot).toBe('plugins.bundle.config')
+    expect(registrations[2]!.slot).toBe('settings.section')
     // The projection hook rides the right seat on every generation; only the
     // ring (0.2.0 projection consumers) gates on the data being present.
   })
@@ -248,17 +259,46 @@ describe('settingsScope generation (route A: family section on ≤0.1.6 hosts)',
 })
 
 describe('family section children-declaration conflict (takeover shadow race)', () => {
-  it('lands the p0 head without children when the takeover shadow claimed the declaration first', () => {
+  it('withdraws entirely when the takeover shadow claimed the declaration first', () => {
+    // The old fallback seated the p0 head WITHOUT the children table, and that was
+    // the worst possible outcome: a childless container still owns the nav row (so
+    // guard/steward/mcp all see "dsh-family already seated" and stand down) while
+    // `dsh-family.tab` stays undeclared — every member card goes dark for the rest
+    // of the boot with no visible error. Declare-or-withdraw: no declaration, no section.
     const { registrations } = collectRegistrations(true, 'settingsScope', {}, { throwOnChildren: true })
-    const section = registrations.find(r => r.slot === 'settings.section')
-    expect(section).toBeDefined()
-    expect(section!.options['id']).toBe('dsh-family')
-    expect(section!.options['children']).toBeUndefined()
+    expect(registrations.find(r => r.slot === 'settings.section')).toBeUndefined()
+    // The bundle detail card is an independent surface: it must survive the withdrawal.
+    expect(registrations.some(r => r.slot === 'plugins.bundle.config')).toBe(true)
   })
 
   it('keeps the children declaration when nothing conflicts', () => {
     const { registrations } = collectRegistrations(true, 'settingsScope')
     const section = registrations.find(r => r.slot === 'settings.section')
     expect(section!.options['children']).toEqual({ 'dsh-family.tab': { kind: 'list', scope: 'root' } })
+  })
+})
+
+describe('modern-surface idempotence latch (task_4)', () => {
+  it('heads the ladder by DEFERRING on the derived schedule, not by seating synchronously', () => {
+    // Spec B tier: TL moved from "immediate" to an explicit first attempt. Rank 0
+    // must still win, but only because the formula puts it at 200ms -- not because
+    // it is exempt from the timer. Stop short of the ladder and nothing is seated.
+    const beforeLadder = collectRegistrations(true, 'settingsScope', {}, { advance: false })
+    expect(beforeLadder.declared).toContain('settings.section')
+    expect(beforeLadder.registrations.some(r => r.slot === 'settings.section')).toBe(false)
+    // Let the ladder elapse and the same run seats the section.
+    const afterLadder = collectRegistrations(true, 'settingsScope')
+    expect(afterLadder.registrations.some(r => r.slot === 'settings.section')).toBe(true)
+  })
+  it('seats the section once even when configForms AND settingsScope both dispatch', () => {
+    // registerModernSurface is reached from BOTH waist callbacks (configForms and
+    // settingsScope). A double dispatch without the latch would double-inject
+    // `settings.section` (same id, same priority -> the host throws) and
+    // double-register the bundle card and the projection hook. One seating per load.
+    const { declared, registrations } = collectRegistrations(true, 'both')
+    expect(declared.filter(s => s === 'settings.section')).toHaveLength(1)
+    expect(registrations.filter(r => r.slot === 'settings.section')).toHaveLength(1)
+    expect(registrations.filter(r => r.slot === 'plugins.bundle.config')).toHaveLength(1)
+    expect(declared.filter(s => s === 'conversation.input.right')).toHaveLength(1)
   })
 })
