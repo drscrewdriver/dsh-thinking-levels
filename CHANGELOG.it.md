@@ -7,6 +7,21 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.3.0] — 2026-10-17
+
+### Aggiunto
+- Catalogo prezzi (src/price-catalog.ts): 29 modelli x regione — DeepSeek V4.1-Flash / V4-Flash / V4-Pro con coppie picco/fascia ufficiale (Pechino 09-12 e 14-18 picco, dal 2026-08-17); GLM / Kimi / Qwen / Doubao / MiniMax / Ernie a tariffa piana. Ogni voce ha tre prezzi per milione di token — input non in cache / input cache hit / output — piu asOf e fonte. Slot USD riservati ma volutamente vuoti finche non riverificati (numeri non inventati).
+- Impostazione defaultPricing (cn / global / custom / off, default off): i modelli fuori catalogo non sono piu stimati a tariffa Flash ma mostrati come «non fatturati».
+- Tabella correzione festivi/recuperi 2026 (39 voci, stessa fonte di dsh-session-guard): i weekend di recupero contano come lavorativi; i festivi legali sono fascia tutto il giorno.
+
+### Modificato
+- stateVersion proiezione 1 -> 2: ogni campione d'uso persiste la ricevuta di calcolo al momento del fold; la sostituzione stesso-step sottrae i valori registrati (niente ricalcoli a tariffe miste, niente saldi negativi); totali per valuta. Dopo laggiornamento le sessioni vecchie vengono rifoldate col catalogo corrente; successive modifiche prezzi colpiscono solo i nuovi campioni.
+- Popover fatturazione: simboli per valuta (¥ / $, altrimenti codice ISO), chip flat/null onesti, «fatturato come <modello>», sessioni miste in righe separate.
+
+### Corretto
+- Normalizzazione forma di settings.describe() (array in-processo vs busta RPC {namespaces:[...]}): forme esotiche = assente, niente eccezioni inghiottite (congelamento silenzioso).
+- Registrazione proiezione protetta try/catch: l'unita fatturazione non puo piu avvelenare il plugin o la cronologia sessioni fredde.
+
 ## [4.2.1] — 2026-10-12
 
 ### Modificato — promozione a stable (nessuna modifica al codice da 4.2.0-beta.29)

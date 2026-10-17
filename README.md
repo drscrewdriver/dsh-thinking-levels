@@ -263,6 +263,15 @@ npm test            # vitest — 46 tests
 
 Test coverage: level policy (manual pass-through incl. the extended levels, `on` clamping, auto scheduler, validation, simple-tool boundary), the model-capability guard (`reasoningEffortSupported`, `resolveEffortInjection` stripping/passthrough), session-event parsing (guards, window cap, malformed records), the config schema (defaults lockstep, out-of-band rejection, `models` overrides), and the official-compat sync (identification, explicit-value respect, identity idempotence, write-time schema gating).
 
+
+## Pricing catalog (4.3.0+)
+
+Billing samples are priced at fold time from a builtin catalog (src/price-catalog.ts): 29 model entries x region. DeepSeek V4.1-Flash / V4-Flash / V4-Pro carry the official peak/off-peak pairs (Beijing 09:00-12:00 and 14:00-18:00 on workdays are peak; the 2026 State Council holiday/make-up table is applied, with make-up-workday weekends counted as workdays); GLM / Kimi / Qwen / Doubao / MiniMax / Ernie carry flat CN rates. Each entry prices three slots per million tokens — non-cached input, cache-hit input and output — with asOf + source annotations; currency follows the entry (¥ CNY, $ USD, no FX conversion). Overseas (USD) catalog slots are intentionally empty until official pages can be re-verified.
+
+Models outside the catalog fall to the defaultPricing setting (cn / global / custom / off, default off): "off" renders the billing popover as unpriced while token counters keep working — nothing is silently estimated any more.
+
+Semantics note: a pricing or policy change only affects samples booked after the change; the first time you open an old session right after upgrading, its cumulative ledger is refolded once against the current catalog.
+
 ## License
 
 MIT

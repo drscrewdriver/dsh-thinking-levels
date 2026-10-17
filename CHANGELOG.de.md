@@ -7,6 +7,21 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.3.0] — 2026-10-17
+
+### Neu
+- Preis-Katalog (src/price-catalog.ts): 29 Modelle x Region — DeepSeek V4.1-Flash / V4-Flash / V4-Pro mit offiziellen Peak/Tal-Paaren (Peking 09-12 & 14-18 Peak, ab 2026-08-17); GLM / Kimi / Qwen / Doubao / MiniMax / Ernie pauschal. Jeder Eintrag fuehrt drei Preise pro Mio. Tokens — Nicht-Cache-Eingabe / Cache-Treffer-Eingabe / Ausgabe — plus asOf + Quelle. USD-Slots strukturell vorhanden, bis zur Verifikation bewusst leer (keine erfundenen Zahlen).
+- Einstellung defaultPricing (cn / global / custom / off, Standard off): Modelle auerhalb des Katalogs werden nicht mehr zu Flash-Raten geschatzt, sondern als «nicht berechnet» angezeigt.
+- Kalenderkorrekturtabelle 2026 (39 Eintrage, gleiche Quelle wie dsh-session-guard): Nacharbeits-Wochenenden zaehlen als Arbeitstage; gesetzliche Feiertage ganztags Tal.
+
+### Geaendert
+- Projektion stateVersion 1 -> 2: jedes Nutzungs-Sample persistiert die Abrechnung zum Faltungszeitpunkt; Ersatz desselben Schritts subtrahiert die protokollierten Werte (keine Mischung alter Raten, keine negativen Betraege); Summen nach Waehrung getrennt. Nach dem Upgrade werden Alt-Sessions gegen den aktuellen Katalog neu gefaltet; spaetere Preisanderungen betreffen nur neue Buchungen.
+- Abrechnungs-Popover: waehrungsabhaengige Symbole (¥ / $, sonst ISO-Code), ehrliche flat/null-Anzeige, «abgerechnet als <Modell>», Mischwaehrungs-Sessions zeilen statt falscher Summe.
+
+### Behoben
+- settings.describe()-Formnormalisierung (In-Process-Array vs RPC-Huelle {namespaces:[...]}): exotische Formen gelten als fehlend statt verschluckt zu schweigen.
+- Projektionsregistrierung mit try/catch: ein Abrechnungsmodul kann nicht mehr das ganze Plugin oder den Kaltstart-History vergiften.
+
 ## [4.2.1] — 2026-10-12
 
 ### Geändert — Hochstufung auf Stable (keine Code-Änderungen seit 4.2.0-beta.29)

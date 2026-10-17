@@ -11,6 +11,22 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.3.0] — 2026-10-17
+
+### Added
+- Price catalog (src/price-catalog.ts): 29 model entries x region — DeepSeek V4.1-Flash / V4-Flash / V4-Pro carry the official peak/off-peak pairs (Beijing 09-12 & 14-18 peak, schedule effective 2026-08-17); GLM / Kimi / Qwen / Doubao / MiniMax / Ernie carry flat CN rates. Every entry prices three slots per million tokens — non-cached input / cache-hit input / output — and ships asOf + source annotations. Overseas (USD) slots are structurally present but intentionally left empty until official pages can be re-verified: no fabricated numbers.
+- defaultPricing setting (cn / global / custom / off, default off): models outside the catalog are no longer estimated at Flash rates — they render as unpriced instead.
+- 2026 State Council holiday/make-up correction table (39 rows, shared provenance with dsh-session-guard): make-up-workday weekends count as workdays for peak gating; statutory holidays are off-peak all day. Unknown years degrade to natural-weekend rules.
+
+### Changed
+- Projection stateVersion 1 -> 2: each usage sample stores a pricing receipt settled at fold time; same-step replacement subtracts the recorded values (no mixed-rate recomputation, no negative ledgers); session/turn totals are bucketed per currency. After upgrading, old checkpoints are discarded and refolded against the CURRENT catalog — historical totals shift once; afterwards pricing edits only affect subsequent samples.
+- Billing popover: currency-aware symbols (¥ / $, unknown currency falls back to its ISO code), honest chips for flat/null tiers, "priced as <model>" derived from the catalog label, and mixed-currency sessions list per-currency rows instead of a fake sum.
+- matchedModel / unitPricePerM deprecated (dual-written for one more generation).
+
+### Fixed
+- settings.describe() shape normalization: in-process array vs RPC {namespaces:[...]} envelope — exotic shapes now read as absent instead of throwing into a swallowed catch (the silent-freeze failure class).
+- Projection registration is try/catch-guarded: a billing-unit failure hides the billing section instead of poisoning the whole plugin fiber or cold session history.
+
 ## [4.2.1] — 2026-10-12
 
 ### Changed — stable promotion (no code changes since 4.2.0-beta.29)

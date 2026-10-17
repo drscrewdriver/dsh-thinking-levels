@@ -7,6 +7,21 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.3.0] — 2026-10-17
+
+### Añadido
+- Catálogo de precios (src/price-catalog.ts): 29 modelos x region — DeepSeek V4.1-Flash / V4-Flash / V4-Pro con pares punta/valle oficiales (Pekín 09-12 y 14-18 punta; vigente 2026-08-17); GLM / Kimi / Qwen / Doubao / MiniMax / Ernie en tarifa plana. Cada entrada lleva tres precios por millon de tokens — entrada sin cache / entrada cache hit / salida — mas asOf y fuente. Las ranuras USD existen pero quedan vacias a proposito hasta verificar las paginas oficiales (sin numeros inventados).
+- Ajuste defaultPricing (cn / global / custom / off, por defecto off): los modelos fuera del catalogo ya no se estiman a tarifa Flash; se muestran «sin facturar».
+- Tabla de correccion festivos/recuperos 2026 (39 entradas, misma fuente que dsh-session-guard): los fines de semana recuperados cuentan como laborables; los festivos legales son valle todo el dia.
+
+### Cambiado
+- stateVersion de la proyeccion 1 -> 2: cada muestra de uso persiste el recibo de calculo del momento del plegado; el reemplazo mismo-paso sustrae valores registrados (sin recalculos con tasas mezcladas, sin saldos negativos); totales por moneda. Tras la actualizacion, las sesiones antiguas se repliegan con el catalogo vigente; los cambios de precio posteriores solo afectan a muestras nuevas.
+- Popover de facturacion: simbolos por moneda (¥ / $, si no codigo ISO), chips flat/null honestos, «facturado como <modelo>», sesiones mixtas en filas separadas.
+
+### Corregido
+- Normalizacion de forma de settings.describe() (matriz in-process vs sobre RPC {namespaces:[...]}): formas exoticas se leen como ausentes en lugar de lanzar y congelar en silencio.
+- Registro de la proyeccion protegido con try/catch: una unidad de facturacion averiada ya no envenena el plugin ni el historiado de sesiones frias.
+
 ## [4.2.1] — 2026-10-12
 
 ### Cambiado — promoción a estable (sin cambios de código desde 4.2.0-beta.29)

@@ -7,6 +7,21 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.3.0] — 2026-10-17
+
+### Ajouté
+- Catalogue de prix (src/price-catalog.ts) : 29 modèles x regions — DeepSeek V4.1-Flash / V4-Flash / V4-Pro avec paires pointe/creux officielles (pekin 09h-12h & 14h-18h, en vigueur 2026-08-17) ; GLM / Kimi / Qwen / Doubao / MiniMax / Ernie en tarif plat. Chaque entrée porte 3 prix au million de jetons — entree hors cache / entree cache frappe / sortie — plus asOf et source. Les emplacements USD sont reserves mais vides jusqu'a reverification officielle (aucun chiffre invente).
+- Reglage defaultPricing (cn / global / custom / off, defaut off) : les modeles hors catalogue ne sont plus estimes au tarif Flash, affiches « non facture ».
+- Table de rectification jours ferries / rattrapages 2026 (39 entrees, meme source que dsh-session-guard) : les weekends rattrapes comptent comme jours ouvres ; les feries legales sont en creux toute la journee.
+
+### Change
+- stateVersion de la projection 1 -> 2 : chaque echantillon d'usage persiste un recu de facturation regle au pliage ; le remplacement meme-etape soustrait les valeurs enregistrees (plus de recalculation a taux melange, plus de soldes negatifs) ; totaux par devise. Apres mise a jour, les anciennes sessions sont repliees au catalogue courant — les totaux bougent une fois ; ensuite un changement de prix ne touche que les nouveaux echantillons.
+- Popover de facturation : symboles par devise (¥ / $, code ISO sinon), puces flat/null honnetes, « facture selon <modele> », sessions multi-devises en lignes separees.
+
+### Corrige
+- Normalisation de la forme de settings.describe() (tableau en-processus vs enveloppe RPC {namespaces:[...]}) : formes exotiques = absent au lieu d'une exception avalee (gel silencieux).
+- Enregistrement de la projection protege par try/catch : une unite de facturation en echec ne peut plus empoisonner le plugin ni l'historique des sessions froides.
+
 ## [4.2.1] — 2026-10-12
 
 ### Changé — promotion en version stable (aucun changement de code depuis 4.2.0-beta.29)
