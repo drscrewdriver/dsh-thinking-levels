@@ -37,7 +37,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Volatile } from '@deepseek-ai/cosmokit'
 import z from '@deepseek-ai/schemastery'
 import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
-import { buildBillingDefinition } from './billing-projection.ts'
+import { buildBillingDefinition, type PricingPolicy } from './billing-projection.ts'
 import { recentToolCalls } from './session-events.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
@@ -90,6 +90,11 @@ export interface ThinkingLevelsConfig {
   takeover: boolean | Volatile<boolean>
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
+  /**
+   * 目录外模型的计价兜底档（price-catalog 未命中时生效）：cn/global/custom/off。
+   * 缺省 off（未计价，不再拿单一型号价硬算）；目录内模型自动按条目地区计价。
+   */
+  defaultPricing: PricingPolicy | Volatile<PricingPolicy>
 }
 
 const effortId = z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
@@ -104,6 +109,9 @@ const modelsSchema = z.dict(z.object({
   contextWindow: z.number().step(1).min(CONTEXT_WINDOW_MIN).max(CONTEXT_WINDOW_MAX),
 })).default({})
 
+/** 计价兜底档：schemastery 枚举，两代 schema 共享（the two must never drift）。 */
+const defaultPricingSchema = z.union(['cn', 'global', 'custom', 'off']).default('off')
+
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
  * time (cordis.yml `config:` of the plugin row). The same schema doubles as
@@ -117,6 +125,7 @@ export const Config = z.object({
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
   takeover: z.boolean().default(false).volatile(),
+  defaultPricing: defaultPricingSchema.volatile(),
   models: modelsSchema,
 })
 
@@ -133,6 +142,7 @@ export const LegacyConfig = z.object({
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
   takeover: z.boolean().default(false),
+  defaultPricing: defaultPricingSchema,
   models: modelsSchema,
 })
 
@@ -143,6 +153,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   allowDowngrade: true,
   allowUpgrade: false,
   takeover: false,
+  defaultPricing: 'off',
   models: {},
 }
 
@@ -181,6 +192,7 @@ interface LiveConfig {
   allowDowngrade: boolean
   allowUpgrade: boolean
   takeover: boolean
+  defaultPricing: PricingPolicy
   models: Record<string, ModelCapabilityOverride>
 }
 
@@ -197,6 +209,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
     takeover: readVolatile(config.takeover, false),
+    defaultPricing: readVolatile(config.defaultPricing, 'off'),
     models: config.models,
   }
 }
@@ -520,7 +533,9 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       sessionProjections?: { register: (definition: unknown) => void }
     }) => void) => void
   }).inject?.(['sessionProjections'], (scope) => {
-    const def = buildBillingDefinition() as {
+    // 注册失败只掉账单面（warn + 隐藏），不得毒化整个插件 fiber（takeover 主面）。
+    try {
+      const def = buildBillingDefinition(() => ({ defaultPricing: resolveLiveConfig(source()).defaultPricing })) as {
       key: string
       stateVersion: number
       init: () => unknown
@@ -540,7 +555,10 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       def.schema = wire.viewSchema
       def.view = wire.view
     }
-    scope.sessionProjections?.register(def)
+      scope.sessionProjections?.register(def)
+    } catch (error) {
+      console.warn(`[dsh-thinking-levels] tlCacheBilling register failed (billing section stays hidden): ${error instanceof Error ? error.message : String(error)}`)
+    }
   })
   const current: () => LiveConfig = () => resolveLiveConfig(source())
   ctx.on('loader/volatile-update', () => {
