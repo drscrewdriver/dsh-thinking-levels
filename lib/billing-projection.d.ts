@@ -7,10 +7,16 @@
  * replacement settles old-minus-new, turn aggregation resets on turn switch,
  * session totals price every sample at its own event-time rate.
  *
- * Pricing: single model DeepSeek-V4.1-Flash, Beijing-time peak/off-peak
- * (workdays 09-12 & 14-18 peak, weekends and CN statutory holidays off-peak
- * all day; pure UTC+8 math, never the local clock). Unmatched model names are
- * still priced at Flash rates and flagged via modelMatched=false.
+ * 目录化改造 T3：价格与日历判定全部下沉 `price-catalog.ts`（唯一事实源），本单
+ * 元只做记账。计价在**折入时刻**结算并作为凭证（`Sample.billed`）持久进 state：
+ * - 同 step 替换「减记录值、加新算值」——杜绝按新费率重算旧账的混口径负数路径；
+ * - 金额按币种分桶（CNY/USD），跨币种会话不再相加失真；
+ * - `view` 只读凭证不重算，设置改价不会漂移已展示的读数。
+ * 语义边界：改价只影响在线增量新账；冷重放（checkpoint 废弃后整段重折）必然
+ * 按当前目录重算——stateVersion 2 即为此声明（宿主对旧 ver 行整行废弃重折）。
+ *
+ * 计价快照经 `buildBillingDefinition(getPricing)` 闭包注入，按事件时刻现读；
+ * **热路径绝不走 describeSettings**（宿主 describe 非轻量且会 emit 事件）。
  *
  * Schema library: the projection framework duck-types `stateSchema.parse()` /
  * `wire.viewSchema.parse()` (dsh-session-projection lib:255/259/305), so these
@@ -19,43 +25,25 @@
  * @module dsh-thinking-levels/billing-projection
  */
 import { z } from 'zod';
-/** 谷价费率行（元/百万 token）——价目表的基准列。 */
-export interface RateRow {
-    cacheHit: number;
-    cacheMiss: number;
+import { type Currency, type PriceRow, type PricingSnapshot, type PricingSource, type Tier } from './price-catalog.ts';
+export { isPeakBeijing, HOLIDAY_TABLE_2026, HOLIDAY_TABLES } from './price-catalog.ts';
+export { PRICE_CATALOG, CATALOG_VERSION } from './price-catalog.ts';
+export type { Currency, PriceRow, Tier, PricingSnapshot, PricingPolicy, PricingSource, CatalogEntry, ResolvedRate } from './price-catalog.ts';
+/** 一笔样本的计价凭证（折入时刻结算，plain JSON 持久）。 */
+export interface Billed {
+    hit: number;
+    miss: number;
     output: number;
+    currency: Currency;
+    tier: Tier | null;
+    source: PricingSource;
+    priced: boolean;
+    catalogKey: string | null;
+    catalogLabel: string | null;
+    priceRow: PriceRow | null;
 }
-/** 账目只认 DeepSeek-V4.1-Flash：现名、旧名与历史变体全部由 Flash 服务。 */
-export declare const BILLING_MODEL: {
-    readonly key: "deepseek-v4.1-flash";
-    readonly label: "DeepSeek-V4.1-Flash";
-    readonly aliases: readonly ["deepseek-v4.1-flash", "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"];
-    readonly peak: {
-        readonly cacheHit: 0.04;
-        readonly cacheMiss: 2;
-        readonly output: 8;
-    };
-    readonly offPeak: {
-        readonly cacheHit: 0.02;
-        readonly cacheMiss: 1;
-        readonly output: 4;
-    };
-};
-export type Tier = 'peak' | 'offPeak';
-/**
- * 中国法定节假日放假日（北京时间 YYYY-MM-DD），2026 年国务院安排 33 天（holiday-cn）。
- * 只收放假日不收调休补班周末；表外年份退化为只认周末。
- */
-export declare const HOLIDAYS_2026: ReadonlySet<string>;
-/** 时刻是否为北京高峰。UTC+8 纯数学换算；无效时间戳用 getUTC* 拼串不抛错。 */
-export declare function isPeakBeijing(timeMs: number): boolean;
-/** 模型在某时刻的费率行 + 峰谷 + 白名单命中标记。 */
-export declare function rateOf(model: string | null, timeMs: number): {
-    row: RateRow;
-    tier: Tier;
-    matchedModel: string;
-    matched: boolean;
-};
+/** 目录外模型的兜底档位（设置面 defaultPricing 的值域）。 */
+declare const POLICY_VALUES: readonly ["cn", "global", "custom", "off"];
 /** 一个 usage 样本：state.last 只存最新一轮。 */
 export interface Sample {
     turn: number;
@@ -68,12 +56,11 @@ export interface Sample {
     provider: string | null;
     /** 事件时刻 epoch ms（峰谷判定用事件时刻，不用当前时钟）。 */
     time: number;
+    /** 折入时刻的计价凭证。 */
+    billed: Billed;
 }
-/** 会话累计：跨轮逐笔按各自事件时刻费率计价。 */
-export interface Totals {
-    cacheHitCost: number;
-    missCost: number;
-    outputCost: number;
+/** 币种无关的使用计数（轮数/失效步数/tokens）。 */
+export interface Counters {
     inputTokens: number;
     cacheReadTokens: number;
     outputTokens: number;
@@ -82,15 +69,24 @@ export interface Totals {
     writeTokens: number;
     fullMissSteps: number;
 }
-/** 当前轮累计：turn 切换重置。 */
-export interface TurnTotals {
-    id: number;
+/** 单币种金额桶。 */
+export interface Money {
     hitCost: number;
     missCost: number;
     outputCost: number;
+}
+/** 会话累计：金额按币种分桶；跨笔各按其事件时刻费率（折入时刻结算）。 */
+export interface Totals {
+    counts: Counters;
+    money: Record<Currency, Money>;
+}
+/** 当前轮累计：turn 切换重置。 */
+export interface TurnTotals {
+    id: number;
     inputTokens: number;
     cacheReadTokens: number;
     outputTokens: number;
+    money: Record<Currency, Money>;
 }
 export interface ProjectionState {
     provider: string | null;
@@ -99,29 +95,55 @@ export interface ProjectionState {
     turn: TurnTotals | null;
     totals: Totals;
 }
-/** 按样本模型与事件时刻计一轮三笔费用（元）。 */
-export declare function costOf(sample: Sample): {
-    hit: number;
-    miss: number;
-    output: number;
-};
 /** 写失效：发生过缓存写入（官方不报，恒 false，个别中转有值）。 */
 export declare const isWriteMiss: (s: Sample) => boolean;
 /** 完全失效：有输入但缓存命中为 0（首轮无缓存可命中也算，近似，任何路由可靠）。 */
 export declare const isFullMiss: (s: Sample) => boolean;
+/** 折入时刻结算：按解析出的费率行算三笔（off → 恒 0 且 priced=false）。 */
+export declare function billFor(sample: Sample, snapshot: PricingSnapshot): Billed;
 /**
  * Build the `tlCacheBilling` projection definition. Registered soft-coupled
  * (runtime inject — NEVER a top-level export inject, which would make the
  * whole plugin 0.2.0-only): hosts without the sessionProjections service
  * simply never register it, and the ring's billing section stays hidden.
+ * @param getPricing - 折入时刻的计价快照读取（O(1)，由插件 config 派生）。
  */
-export declare function buildBillingDefinition(): {
+export declare function buildBillingDefinition(getPricing: () => PricingSnapshot): {
     key: string;
     stateVersion: number;
     stateSchema: z.ZodObject<{
         provider: z.ZodNullable<z.ZodString>;
         model: z.ZodNullable<z.ZodString>;
         last: z.ZodNullable<z.ZodObject<{
+            billed: z.ZodObject<{
+                hit: z.ZodNumber;
+                miss: z.ZodNumber;
+                output: z.ZodNumber;
+                currency: z.ZodEnum<{
+                    CNY: "CNY";
+                    USD: "USD";
+                }>;
+                tier: z.ZodNullable<z.ZodEnum<{
+                    peak: "peak";
+                    offPeak: "offPeak";
+                    flat: "flat";
+                }>>;
+                source: z.ZodEnum<{
+                    cn: "cn";
+                    global: "global";
+                    custom: "custom";
+                    off: "off";
+                    "catalog-miss": "catalog-miss";
+                }>;
+                priced: z.ZodBoolean;
+                catalogKey: z.ZodNullable<z.ZodString>;
+                catalogLabel: z.ZodNullable<z.ZodString>;
+                priceRow: z.ZodNullable<z.ZodObject<{
+                    inputMiss: z.ZodNumber;
+                    inputCacheHit: z.ZodNumber;
+                    output: z.ZodNumber;
+                }, z.core.$strip>>;
+            }, z.core.$strip>;
             inputTokens: z.ZodNumber;
             cacheReadTokens: z.ZodNumber;
             cacheWriteTokens: z.ZodNumber;
@@ -134,254 +156,271 @@ export declare function buildBillingDefinition(): {
         }, z.core.$strip>>;
         turn: z.ZodNullable<z.ZodObject<{
             id: z.ZodNumber;
-            hitCost: z.ZodNumber;
-            missCost: z.ZodNumber;
-            outputCost: z.ZodNumber;
             inputTokens: z.ZodNumber;
             cacheReadTokens: z.ZodNumber;
             outputTokens: z.ZodNumber;
+            money: z.ZodObject<{
+                CNY: z.ZodObject<{
+                    hitCost: z.ZodNumber;
+                    missCost: z.ZodNumber;
+                    outputCost: z.ZodNumber;
+                }, z.core.$strip>;
+                USD: z.ZodObject<{
+                    hitCost: z.ZodNumber;
+                    missCost: z.ZodNumber;
+                    outputCost: z.ZodNumber;
+                }, z.core.$strip>;
+            }, z.core.$strip>;
         }, z.core.$strip>>;
         totals: z.ZodObject<{
-            cacheHitCost: z.ZodNumber;
-            missCost: z.ZodNumber;
-            outputCost: z.ZodNumber;
-            inputTokens: z.ZodNumber;
-            cacheReadTokens: z.ZodNumber;
-            outputTokens: z.ZodNumber;
-            rounds: z.ZodNumber;
-            missSteps: z.ZodNumber;
-            writeTokens: z.ZodNumber;
-            fullMissSteps: z.ZodNumber;
+            counts: z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                cacheReadTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                rounds: z.ZodNumber;
+                missSteps: z.ZodNumber;
+                writeTokens: z.ZodNumber;
+                fullMissSteps: z.ZodNumber;
+            }, z.core.$strip>;
+            money: z.ZodObject<{
+                CNY: z.ZodObject<{
+                    hitCost: z.ZodNumber;
+                    missCost: z.ZodNumber;
+                    outputCost: z.ZodNumber;
+                }, z.core.$strip>;
+                USD: z.ZodObject<{
+                    hitCost: z.ZodNumber;
+                    missCost: z.ZodNumber;
+                    outputCost: z.ZodNumber;
+                }, z.core.$strip>;
+            }, z.core.$strip>;
         }, z.core.$strip>;
     }, z.core.$strip>;
     init: () => {
         provider: string | null;
         model: string | null;
-        last: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["last"];
-        turn: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["turn"];
+        last: {
+            billed: {
+                hit: number;
+                miss: number;
+                output: number;
+                currency: "CNY" | "USD";
+                tier: "peak" | "offPeak" | "flat" | null;
+                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                priced: boolean;
+                catalogKey: string | null;
+                catalogLabel: string | null;
+                priceRow: {
+                    inputMiss: number;
+                    inputCacheHit: number;
+                    output: number;
+                } | null;
+            };
+            inputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            outputTokens: number;
+            model: string | null;
+            provider: string | null;
+            time: number;
+            turn: number;
+            step: number;
+        } | null;
+        turn: {
+            id: number;
+            inputTokens: number;
+            cacheReadTokens: number;
+            outputTokens: number;
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        } | null;
+        totals: {
+            counts: {
+                inputTokens: number;
+                cacheReadTokens: number;
+                outputTokens: number;
+                rounds: number;
+                missSteps: number;
+                writeTokens: number;
+                fullMissSteps: number;
+            };
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        };
+    } & {
+        last: Sample | null;
+        turn: TurnTotals | null;
         totals: Totals;
     };
     apply: (state: {
         provider: string | null;
         model: string | null;
-        last: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["last"];
-        turn: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["turn"];
+        last: {
+            billed: {
+                hit: number;
+                miss: number;
+                output: number;
+                currency: "CNY" | "USD";
+                tier: "peak" | "offPeak" | "flat" | null;
+                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                priced: boolean;
+                catalogKey: string | null;
+                catalogLabel: string | null;
+                priceRow: {
+                    inputMiss: number;
+                    inputCacheHit: number;
+                    output: number;
+                } | null;
+            };
+            inputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            outputTokens: number;
+            model: string | null;
+            provider: string | null;
+            time: number;
+            turn: number;
+            step: number;
+        } | null;
+        turn: {
+            id: number;
+            inputTokens: number;
+            cacheReadTokens: number;
+            outputTokens: number;
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        } | null;
+        totals: {
+            counts: {
+                inputTokens: number;
+                cacheReadTokens: number;
+                outputTokens: number;
+                rounds: number;
+                missSteps: number;
+                writeTokens: number;
+                fullMissSteps: number;
+            };
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        };
+    } & {
+        last: Sample | null;
+        turn: TurnTotals | null;
         totals: Totals;
     }, event: any) => {
         provider: string | null;
         model: string | null;
-        last: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["last"];
-        turn: z.infer<z.ZodObject<{
-            provider: z.ZodNullable<z.ZodString>;
-            model: z.ZodNullable<z.ZodString>;
-            last: z.ZodNullable<z.ZodObject<{
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                cacheWriteTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                model: z.ZodNullable<z.ZodString>;
-                provider: z.ZodNullable<z.ZodString>;
-                time: z.ZodNumber;
-                turn: z.ZodNumber;
-                step: z.ZodNumber;
-            }, z.core.$strip>>;
-            turn: z.ZodNullable<z.ZodObject<{
-                id: z.ZodNumber;
-                hitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-            }, z.core.$strip>>;
-            totals: z.ZodObject<{
-                cacheHitCost: z.ZodNumber;
-                missCost: z.ZodNumber;
-                outputCost: z.ZodNumber;
-                inputTokens: z.ZodNumber;
-                cacheReadTokens: z.ZodNumber;
-                outputTokens: z.ZodNumber;
-                rounds: z.ZodNumber;
-                missSteps: z.ZodNumber;
-                writeTokens: z.ZodNumber;
-                fullMissSteps: z.ZodNumber;
-            }, z.core.$strip>;
-        }, z.core.$strip>>["turn"];
+        last: {
+            billed: {
+                hit: number;
+                miss: number;
+                output: number;
+                currency: "CNY" | "USD";
+                tier: "peak" | "offPeak" | "flat" | null;
+                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                priced: boolean;
+                catalogKey: string | null;
+                catalogLabel: string | null;
+                priceRow: {
+                    inputMiss: number;
+                    inputCacheHit: number;
+                    output: number;
+                } | null;
+            };
+            inputTokens: number;
+            cacheReadTokens: number;
+            cacheWriteTokens: number;
+            outputTokens: number;
+            model: string | null;
+            provider: string | null;
+            time: number;
+            turn: number;
+            step: number;
+        } | null;
+        turn: {
+            id: number;
+            inputTokens: number;
+            cacheReadTokens: number;
+            outputTokens: number;
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        } | null;
+        totals: {
+            counts: {
+                inputTokens: number;
+                cacheReadTokens: number;
+                outputTokens: number;
+                rounds: number;
+                missSteps: number;
+                writeTokens: number;
+                fullMissSteps: number;
+            };
+            money: {
+                CNY: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+                USD: {
+                    hitCost: number;
+                    missCost: number;
+                    outputCost: number;
+                };
+            };
+        };
+    } & {
+        last: Sample | null;
+        turn: TurnTotals | null;
         totals: Totals;
     };
     wire: {
@@ -390,7 +429,10 @@ export declare function buildBillingDefinition(): {
             cost: z.ZodNumber;
             missCost: z.ZodNumber;
             outputCost: z.ZodNumber;
-            currency: z.ZodLiteral<"CNY">;
+            currency: z.ZodEnum<{
+                CNY: "CNY";
+                USD: "USD";
+            }>;
             cacheReadTokens: z.ZodNumber;
             totalInputTokens: z.ZodNumber;
             outputTokens: z.ZodNumber;
@@ -402,10 +444,26 @@ export declare function buildBillingDefinition(): {
             tier: z.ZodNullable<z.ZodEnum<{
                 peak: "peak";
                 offPeak: "offPeak";
+                flat: "flat";
             }>>;
             unitPricePerM: z.ZodNullable<z.ZodNumber>;
             turn: z.ZodNullable<z.ZodNumber>;
             step: z.ZodNullable<z.ZodNumber>;
+            priced: z.ZodBoolean;
+            pricingSource: z.ZodNullable<z.ZodEnum<{
+                cn: "cn";
+                global: "global";
+                custom: "custom";
+                off: "off";
+                "catalog-miss": "catalog-miss";
+            }>>;
+            catalogKey: z.ZodNullable<z.ZodString>;
+            catalogLabel: z.ZodNullable<z.ZodString>;
+            priceRow: z.ZodNullable<z.ZodObject<{
+                inputMiss: z.ZodNumber;
+                inputCacheHit: z.ZodNumber;
+                output: z.ZodNumber;
+            }, z.core.$strip>>;
             turnCost: z.ZodNumber;
             turnHitCost: z.ZodNumber;
             turnMissCost: z.ZodNumber;
@@ -424,89 +482,98 @@ export declare function buildBillingDefinition(): {
             sessionMissSteps: z.ZodNumber;
             sessionWriteTokens: z.ZodNumber;
             sessionFullMissSteps: z.ZodNumber;
+            sessionByCurrency: z.ZodArray<z.ZodObject<{
+                currency: z.ZodEnum<{
+                    CNY: "CNY";
+                    USD: "USD";
+                }>;
+                hitCost: z.ZodNumber;
+                missCost: z.ZodNumber;
+                outputCost: z.ZodNumber;
+            }, z.core.$strip>>;
+            mixedCurrency: z.ZodBoolean;
         }, z.core.$strip>;
         view: (state: {
             provider: string | null;
             model: string | null;
-            last: z.infer<z.ZodObject<{
-                provider: z.ZodNullable<z.ZodString>;
-                model: z.ZodNullable<z.ZodString>;
-                last: z.ZodNullable<z.ZodObject<{
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    cacheWriteTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                    model: z.ZodNullable<z.ZodString>;
-                    provider: z.ZodNullable<z.ZodString>;
-                    time: z.ZodNumber;
-                    turn: z.ZodNumber;
-                    step: z.ZodNumber;
-                }, z.core.$strip>>;
-                turn: z.ZodNullable<z.ZodObject<{
-                    id: z.ZodNumber;
-                    hitCost: z.ZodNumber;
-                    missCost: z.ZodNumber;
-                    outputCost: z.ZodNumber;
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                }, z.core.$strip>>;
-                totals: z.ZodObject<{
-                    cacheHitCost: z.ZodNumber;
-                    missCost: z.ZodNumber;
-                    outputCost: z.ZodNumber;
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                    rounds: z.ZodNumber;
-                    missSteps: z.ZodNumber;
-                    writeTokens: z.ZodNumber;
-                    fullMissSteps: z.ZodNumber;
-                }, z.core.$strip>;
-            }, z.core.$strip>>["last"];
-            turn: z.infer<z.ZodObject<{
-                provider: z.ZodNullable<z.ZodString>;
-                model: z.ZodNullable<z.ZodString>;
-                last: z.ZodNullable<z.ZodObject<{
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    cacheWriteTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                    model: z.ZodNullable<z.ZodString>;
-                    provider: z.ZodNullable<z.ZodString>;
-                    time: z.ZodNumber;
-                    turn: z.ZodNumber;
-                    step: z.ZodNumber;
-                }, z.core.$strip>>;
-                turn: z.ZodNullable<z.ZodObject<{
-                    id: z.ZodNumber;
-                    hitCost: z.ZodNumber;
-                    missCost: z.ZodNumber;
-                    outputCost: z.ZodNumber;
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                }, z.core.$strip>>;
-                totals: z.ZodObject<{
-                    cacheHitCost: z.ZodNumber;
-                    missCost: z.ZodNumber;
-                    outputCost: z.ZodNumber;
-                    inputTokens: z.ZodNumber;
-                    cacheReadTokens: z.ZodNumber;
-                    outputTokens: z.ZodNumber;
-                    rounds: z.ZodNumber;
-                    missSteps: z.ZodNumber;
-                    writeTokens: z.ZodNumber;
-                    fullMissSteps: z.ZodNumber;
-                }, z.core.$strip>;
-            }, z.core.$strip>>["turn"];
+            last: {
+                billed: {
+                    hit: number;
+                    miss: number;
+                    output: number;
+                    currency: "CNY" | "USD";
+                    tier: "peak" | "offPeak" | "flat" | null;
+                    source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                    priced: boolean;
+                    catalogKey: string | null;
+                    catalogLabel: string | null;
+                    priceRow: {
+                        inputMiss: number;
+                        inputCacheHit: number;
+                        output: number;
+                    } | null;
+                };
+                inputTokens: number;
+                cacheReadTokens: number;
+                cacheWriteTokens: number;
+                outputTokens: number;
+                model: string | null;
+                provider: string | null;
+                time: number;
+                turn: number;
+                step: number;
+            } | null;
+            turn: {
+                id: number;
+                inputTokens: number;
+                cacheReadTokens: number;
+                outputTokens: number;
+                money: {
+                    CNY: {
+                        hitCost: number;
+                        missCost: number;
+                        outputCost: number;
+                    };
+                    USD: {
+                        hitCost: number;
+                        missCost: number;
+                        outputCost: number;
+                    };
+                };
+            } | null;
+            totals: {
+                counts: {
+                    inputTokens: number;
+                    cacheReadTokens: number;
+                    outputTokens: number;
+                    rounds: number;
+                    missSteps: number;
+                    writeTokens: number;
+                    fullMissSteps: number;
+                };
+                money: {
+                    CNY: {
+                        hitCost: number;
+                        missCost: number;
+                        outputCost: number;
+                    };
+                    USD: {
+                        hitCost: number;
+                        missCost: number;
+                        outputCost: number;
+                    };
+                };
+            };
+        } & {
+            last: Sample | null;
+            turn: TurnTotals | null;
             totals: Totals;
         }) => {
             available: boolean;
             cost: number;
             missCost: number;
             outputCost: number;
-            currency: "CNY";
+            currency: Currency;
             cacheReadTokens: number;
             totalInputTokens: number;
             outputTokens: number;
@@ -519,6 +586,11 @@ export declare function buildBillingDefinition(): {
             unitPricePerM: null;
             turn: null;
             step: null;
+            priced: boolean;
+            pricingSource: null;
+            catalogKey: null;
+            catalogLabel: null;
+            priceRow: null;
             turnCost: number;
             turnHitCost: number;
             turnMissCost: number;
@@ -537,24 +609,36 @@ export declare function buildBillingDefinition(): {
             sessionMissSteps: number;
             sessionWriteTokens: number;
             sessionFullMissSteps: number;
+            sessionByCurrency: never[];
+            mixedCurrency: boolean;
         } | {
             available: boolean;
             cost: number;
             missCost: number;
             outputCost: number;
-            currency: "CNY";
+            currency: Currency;
             cacheReadTokens: number;
             totalInputTokens: number;
             outputTokens: number;
             hitRate: number | null;
             model: string | null;
             provider: string | null;
-            matchedModel: string;
+            matchedModel: string | null;
             modelMatched: boolean;
-            tier: Tier;
-            unitPricePerM: number;
+            tier: "peak" | "offPeak" | "flat" | null;
+            /** @deprecated 目录化后请以 priceRow 三价目位为准；保留一代 = 当前行缓存命中价。 */
+            unitPricePerM: number | null;
             turn: number;
             step: number;
+            priced: boolean;
+            pricingSource: "cn" | "global" | "custom" | "off" | "catalog-miss";
+            catalogKey: string | null;
+            catalogLabel: string | null;
+            priceRow: ({
+                inputMiss: number;
+                inputCacheHit: number;
+                output: number;
+            } & PriceRow) | null;
             turnCost: number;
             turnHitCost: number;
             turnMissCost: number;
@@ -573,6 +657,15 @@ export declare function buildBillingDefinition(): {
             sessionMissSteps: number;
             sessionWriteTokens: number;
             sessionFullMissSteps: number;
+            sessionByCurrency: {
+                hitCost: number;
+                missCost: number;
+                outputCost: number;
+                currency: "CNY" | "USD";
+            }[];
+            mixedCurrency: boolean;
         };
     };
 };
+/** 设置面 defaultPricing 值域（index.ts schema 与本模块共用，防漂移）。 */
+export { POLICY_VALUES };

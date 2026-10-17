@@ -37,6 +37,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { Volatile } from '@deepseek-ai/cosmokit';
 import z from '@deepseek-ai/schemastery';
 import { type EffortId } from './thinking-level.ts';
+import { type PricingPolicy } from './billing-projection.ts';
 /** One configurer-confirmed capability override for a `provider/model` key. */
 export interface ModelCapabilityOverride {
     /** Manual override of the vision-model classification (auto: inputModalities). */
@@ -76,6 +77,11 @@ export interface ThinkingLevelsConfig {
     takeover: boolean | Volatile<boolean>;
     /** Configurer-confirmed capability overrides, keyed `provider/model`. */
     models: Record<string, ModelCapabilityOverride>;
+    /**
+     * 目录外模型的计价兜底档（price-catalog 未命中时生效）：cn/global/custom/off。
+     * 缺省 off（未计价，不再拿单一型号价硬算）；目录内模型自动按条目地区计价。
+     */
+    defaultPricing: PricingPolicy | Volatile<PricingPolicy>;
 }
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
@@ -90,6 +96,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
+    defaultPricing: z<"cn" | "global" | "custom" | "off", "cn" | "global" | "custom" | "off", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -107,6 +114,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
+    defaultPricing: z<"cn" | "global" | "custom" | "off", "cn" | "global" | "custom" | "off", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -132,6 +140,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
+    defaultPricing: z<"cn" | "global" | "custom" | "off", "cn" | "global" | "custom" | "off", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -149,6 +158,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
+    defaultPricing: z<"cn" | "global" | "custom" | "off", "cn" | "global" | "custom" | "off", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;

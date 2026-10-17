@@ -30,6 +30,13 @@ export interface SectionReadout<T = unknown> {
     value: T;
     revision: number;
 }
+/**
+ * 形状归一（唯一一处 unwrap）：进程内 `describe()` 交回描述符数组；Remote/RPC
+ * 信封交回 `{writable, hasDocument, namespaces:[…]}`。其余形状（含 undefined）
+ * 一律当「不可用」返回 undefined，不得让 `find is not a function` 这类
+ * TypeError 泄到调用方被 catch 吞成静默冻结（同生态 fail-open 坑先例）。
+ */
+export declare function normalizeDescriptors(raw: unknown): SettingsDescriptorLike[] | undefined;
 /** One `describe()` pass over the live settings, or `undefined` when the service is absent. */
 export declare function describeSettings(ctx: Context): SettingsDescriptorLike[] | undefined;
 /**
