@@ -34,10 +34,25 @@ export interface SectionReadout<T = unknown> {
   revision: number
 }
 
+/**
+ * 形状归一（唯一一处 unwrap）：进程内 `describe()` 交回描述符数组；Remote/RPC
+ * 信封交回 `{writable, hasDocument, namespaces:[…]}`。其余形状（含 undefined）
+ * 一律当「不可用」返回 undefined，不得让 `find is not a function` 这类
+ * TypeError 泄到调用方被 catch 吞成静默冻结（同生态 fail-open 坑先例）。
+ */
+export function normalizeDescriptors(raw: unknown): SettingsDescriptorLike[] | undefined {
+  if (Array.isArray(raw)) return raw as SettingsDescriptorLike[]
+  const wrapped = raw as { namespaces?: unknown } | null
+  if (wrapped !== null && typeof wrapped === 'object' && Array.isArray(wrapped.namespaces)) {
+    return wrapped.namespaces as SettingsDescriptorLike[]
+  }
+  return undefined
+}
+
 /** One `describe()` pass over the live settings, or `undefined` when the service is absent. */
 export function describeSettings(ctx: Context): SettingsDescriptorLike[] | undefined {
   const settings = ctx.get('settings') as SettingsServiceLike | undefined
-  return settings?.describe?.()
+  return normalizeDescriptors(settings?.describe?.())
 }
 
 /**
