@@ -11,6 +11,14 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.3.1] — 2026-10-17（ホスト列挙の更新：0.2.1-rc.1 を追加）
+
+### Fixed
+- `engines.dsh` と 7 個の `@deepseek-ai/dsh-*` peer に `|| 0.2.1-rc.1` を追加（12 項目の正確な列挙、区間/caret 不使用）。ホスト互換ゲートが DSH `0.2.1-rc.1` を受け入れるようになります。
+- `dsh.plugin.json` の `engines.dsh` も同一の 12 項目列挙に統一（ゲートは `package.json` のみ読みますが、両リストは一致必須）。
+- devDependencies の `@deepseek-ai/dsh-client-*` を 0.2.0-rc.1 → 0.2.1-rc.1 に更新し、ビルドと全テスト（140 件）を対象ラインで検証。
+- README の互換記述（en/zh/ja/ko/de/es/fr/it/ru）を列挙に同期。動作変更なし。
+
 ## [4.3.0] — 2026-10-17
 
 ### 追加

@@ -3,3 +3,12 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/cosmokit@1.8.6'
+  - '@deepseek-ai/dsh-client-locale@0.2.1-rc.1'
+  - '@deepseek-ai/dsh-client-store@0.2.1-rc.1'
+  - '@deepseek-ai/dsh-client-ui-renderer@0.2.1-rc.1'
+  - '@deepseek-ai/dsh-client-ui-settings@0.2.1-rc.1'
+  - '@deepseek-ai/dsh-client-ui-slots@0.2.1-rc.1'
+  - '@deepseek-ai/schemastery@3.18.5'

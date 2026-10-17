@@ -33,7 +33,7 @@
 
 > **▼ DSH version support**
 >
-> This release (4.0.0) supports **DSH v0.2.0-rc.1 to < 0.2.1** only.
+> This release (4.3.x) pins DSH hosts by the exact 12-term enumeration `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1` — each rc listed individually, no ranges or carets; 0.2.1 stable is not declared until it ships.
 >
 > | DSH version | Status | Notes |
 > | --- | --- | --- |
@@ -43,7 +43,7 @@
 >
 > The boundary is `0.1.7-rc.1`, where DSH removed the imperative settings registration (`settings.register` / `installSettingsSection`) and the client `settingsScope` service. Since that boundary the runtime-adjustable config fields are marked `.volatile()` in the schemastery schema, the host generates the settings form from that schema alone (no registration call, no client settings card), and the plugin reads the live values per request, driven by `loader/volatile-update`. The 3.1.x–3.4.x lines target the 0.1.7 declarative surface; the 4.0.x line is the same surface retargeted to the 0.2.0-rc segment.
 
-> **Version-range policy:** every compatibility line pins its host segment tightly. Lines targeting 0.1.x hosts follow `>=0.1.x-rc.1 <0.1.(x+1)-0` (3.1.x: `>=0.1.7-rc.1 <0.1.8-0`; 3.0.x: `>=0.1.5-alpha.1 <0.1.6-0`; 2.0.x: `>=0.1.2-alpha.1 <0.1.3-0`; 1.0.0-beta: `>=0.1.0-rc.8 <0.1.2-alpha.1`); lines targeting the 0.2.x segment follow `>=0.2.0-rc.1 <0.2.1-0` (4.0.x: `>=0.2.0-rc.1 <0.2.1-0`). No line ever declares an open upper bound, so a compatibility resolver can never match a plugin line against a newer host segment it was not built for. 0.4.0–0.6.0 carried no dsh peer declarations at all and are effectively compatibility-untyped — do not install them.
+> **Version-range policy:** every compatibility line pins its host segment tightly. Lines targeting 0.1.x hosts follow `>=0.1.x-rc.1 <0.1.(x+1)-0` (3.1.x: `>=0.1.7-rc.1 <0.1.8-0`; 3.0.x: `>=0.1.5-alpha.1 <0.1.6-0`; 2.0.x: `>=0.1.2-alpha.1 <0.1.3-0`; 1.0.0-beta: `>=0.1.0-rc.8 <0.1.2-alpha.1`); lines targeting the 0.2.x segment follow `>=0.2.0-rc.1 <0.2.1-0` (4.0.x: `>=0.2.0-rc.1 <0.2.1-0`). No line ever declares an open upper bound, so a compatibility resolver can never match a plugin line against a newer host segment it was not built for. 0.4.0–0.6.0 carried no dsh peer declarations at all and are effectively compatibility-untyped — do not install them. Since the 4.2.x multi-line era, the 4.x line pins hosts with the exact per-rc enumeration above instead of a segment range — the range formulas describe the historical per-segment lines.
 
 > **Compatibility note:** Version `0.6.0` includes Japanese (`ja`) and Korean (`ko`) dictionaries and selector entries, but the current official DSH releases expose only `zh` and `en` through `LocaleRuntime`. On stock DSH, selecting `ja` or `ko` fails with `locale "<id>" is not registered`. These languages will work after official DSH adds the locale IDs. Advanced users can use a DSH fork that updates `packages/client/locale/src/locale-settings.ts` (`LOCALE_IDS`) and `packages/client/locale/src/client/index.ts` (`LOCALES` labels), together with the corresponding core dictionaries and tests, then rebuild and run the forked DSH. Changing this plugin alone cannot extend DSH's global locale list.
 

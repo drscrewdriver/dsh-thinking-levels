@@ -11,6 +11,14 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.3.1] — 2026-10-17 (host enumeration: +0.2.1-rc.1)
+
+### Fixed
+- `engines.dsh` and the seven `@deepseek-ai/dsh-*` peers append `|| 0.2.1-rc.1` (exact 12-term enumeration, no ranges or carets), so the host compatibility gate accepts DSH `0.2.1-rc.1`.
+- `dsh.plugin.json` `engines.dsh` carries the same 12-term enumeration — the gate only reads `package.json`, but the two lists must not diverge.
+- devDependencies `@deepseek-ai/dsh-client-*` moved 0.2.0-rc.1 → 0.2.1-rc.1; build and the full suite (140 tests) verified against the target line.
+- README compatibility statements (en/zh/ja/ko/de/es/fr/it/ru) synced to the enumeration. No behaviour change in this release.
+
 ## [4.3.0] — 2026-10-17
 
 ### Added

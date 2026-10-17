@@ -7,6 +7,14 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.3.1] — 2026-10-17 (énumération hôte : +0.2.1-rc.1)
+
+### Fixed
+- `engines.dsh` et les sept peers `@deepseek-ai/dsh-*` ajoutent `|| 0.2.1-rc.1` (énumération exacte de 12 termes, sans plages ni carets) ; la porte de compatibilité hôte accepte désormais DSH `0.2.1-rc.1`.
+- `engines.dsh` de `dsh.plugin.json` aligné sur la même énumération — la porte ne lit que `package.json`, mais les deux listes ne doivent pas diverger.
+- devDependencies `@deepseek-ai/dsh-client-*` passés de 0.2.0-rc.1 → 0.2.1-rc.1 ; build et suite de tests (140) vérifiés contre la ligne cible.
+- Énoncés de compatibilité des README (en/zh/ja/ko/de/es/fr/it/ru) synchronisés. Aucun changement de comportement.
+
 ## [4.3.0] — 2026-10-17
 
 ### Ajouté

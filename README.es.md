@@ -21,7 +21,7 @@
 
 > **▼ Versiones de DSH admitidas**
 >
-> Esta versión (4.0.0) admite únicamente **DSH v0.2.0-rc.1 a < 0.2.1**.
+> Esta versión (4.3.x) fija los hosts de DSH mediante una enumeración exacta de 12 términos `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1` — cada rc listado individualmente, sin rangos ni carets; la 0.2.1 estable no se declara hasta su publicación.
 >
 > | Versión de DSH | Estado | Notas |
 > | --- | --- | --- |
