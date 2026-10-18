@@ -27,6 +27,7 @@ import type { CSSProperties, JSX } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SettingsScope } from './scope-face.ts'
 import type { EffortId } from '../thinking-level.ts'
+import type { PricingPolicy } from '../price-catalog.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 import type { ThinkingLevelsConfig } from '../index.ts'
 
@@ -50,6 +51,11 @@ export type ThinkingLevelsCardProps = PropsLocale<'thinking-levels'> & ThinkingL
 /** The user-facing levels, in picker order: eight standard levels plus the auto scheduler sentinel. */
 const EFFORT_OPTIONS: readonly EffortId[] = [
   'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto',
+]
+
+/** 计价兜底档，in picker order：缺省 estimate（典型价估算，未校准仅供参考）。 */
+const PRICING_OPTIONS: readonly PricingPolicy[] = [
+  'estimate', 'cn', 'global', 'custom', 'off',
 ]
 
 /**
@@ -1220,15 +1226,17 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
     allowDowngrade: boolean
     allowUpgrade: boolean
     takeover: boolean
+    defaultPricing: PricingPolicy
   }>
   // Optimistic overlay for this card's own writes (plan §E): same contract as
   // the capability card's overlay — clear on resolve(true), roll back + banner
   // on resolve(false).
-  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean }>>({})
+  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; defaultPricing: PricingPolicy }>>({})
   const [writeErrorTl, setWriteErrorTl] = useState<string | null>(null)
   const viewValue = { ...value, ...pendingTl }
   const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
-  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover', v: unknown): void => {
+  const defaultPricing = PRICING_OPTIONS.includes(viewValue.defaultPricing as PricingPolicy) ? viewValue.defaultPricing as PricingPolicy : 'estimate'
+  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover' | 'defaultPricing', v: unknown): void => {
     setPendingTl((cur) => ({ ...cur, [field]: v as never }))
     void setWithRetry(scope, field, v).then(({ ok }) => {
       setPendingTl((cur) => {
@@ -1361,6 +1369,24 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                       disabled={readonly || viewValue.level !== 'auto'}
                       onChange={(event) => { writeTl('allowUpgrade', event.currentTarget.checked) }}
                     />
+                  </div>
+                  <div style={rowStyle}>
+                    <label
+                      htmlFor="plugin-config-thinking-levels-default-pricing"
+                      style={labelStyle}
+                      title={t('card.defaultPricingHint')}
+                    >{t('card.defaultPricing')}</label>
+                    <select
+                      id="plugin-config-thinking-levels-default-pricing"
+                      value={defaultPricing}
+                      disabled={readonly}
+                      style={controlStyle}
+                      onChange={(event) => { writeTl('defaultPricing', event.currentTarget.value) }}
+                    >
+                      {PRICING_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{t(`card.defaultPricing.${option}`)}</option>
+                      ))}
+                    </select>
                   </div>
                   {writeErrorTl !== null && (
                     <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-danger, #e5484d)' }} role="status">⚠ {writeErrorTl}</p>

@@ -11,9 +11,11 @@
  * 元只做记账。计价在**折入时刻**结算并作为凭证（`Sample.billed`）持久进 state：
  * - 同 step 替换「减记录值、加新算值」——杜绝按新费率重算旧账的混口径负数路径；
  * - 金额按币种分桶（CNY/USD），跨币种会话不再相加失真；
- * - `view` 只读凭证不重算，设置改价不会漂移已展示的读数。
+ * - `view` 只读凭证不重算，设置改价不会漂移已展示的读数；
+ * - 目录外模型的兜底典型价估算带 `estimated` 凭证位（未校准仅供参考）。
  * 语义边界：改价只影响在线增量新账；冷重放（checkpoint 废弃后整段重折）必然
- * 按当前目录重算——stateVersion 2 即为此声明（宿主对旧 ver 行整行废弃重折）。
+ * 按当前目录重算——stateVersion 3 即为此声明（宿主对旧 ver 行整行废弃重折，
+ * ver 2 凭证缺 estimated 字段，不可原样过新 schema）。
  *
  * 计价快照经 `buildBillingDefinition(getPricing)` 闭包注入，按事件时刻现读；
  * **热路径绝不走 describeSettings**（宿主 describe 非轻量且会 emit 事件）。
@@ -38,12 +40,14 @@ export interface Billed {
     tier: Tier | null;
     source: PricingSource;
     priced: boolean;
+    /** priced 且金额为兜底典型价估算（未校准，仅供参考）。 */
+    estimated: boolean;
     catalogKey: string | null;
     catalogLabel: string | null;
     priceRow: PriceRow | null;
 }
 /** 目录外模型的兜底档位（设置面 defaultPricing 的值域）。 */
-declare const POLICY_VALUES: readonly ["cn", "global", "custom", "off"];
+declare const POLICY_VALUES: readonly ["estimate", "cn", "global", "custom", "off"];
 /** 一个 usage 样本：state.last 只存最新一轮。 */
 export interface Sample {
     turn: number;
@@ -129,6 +133,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     flat: "flat";
                 }>>;
                 source: z.ZodEnum<{
+                    estimate: "estimate";
                     cn: "cn";
                     global: "global";
                     custom: "custom";
@@ -136,6 +141,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     "catalog-miss": "catalog-miss";
                 }>;
                 priced: z.ZodBoolean;
+                estimated: z.ZodBoolean;
                 catalogKey: z.ZodNullable<z.ZodString>;
                 catalogLabel: z.ZodNullable<z.ZodString>;
                 priceRow: z.ZodNullable<z.ZodObject<{
@@ -206,8 +212,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
                 priced: boolean;
+                estimated: boolean;
                 catalogKey: string | null;
                 catalogLabel: string | null;
                 priceRow: {
@@ -282,8 +289,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
                 priced: boolean;
+                estimated: boolean;
                 catalogKey: string | null;
                 catalogLabel: string | null;
                 priceRow: {
@@ -357,8 +365,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
                 priced: boolean;
+                estimated: boolean;
                 catalogKey: string | null;
                 catalogLabel: string | null;
                 priceRow: {
@@ -451,12 +460,14 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             step: z.ZodNullable<z.ZodNumber>;
             priced: z.ZodBoolean;
             pricingSource: z.ZodNullable<z.ZodEnum<{
+                estimate: "estimate";
                 cn: "cn";
                 global: "global";
                 custom: "custom";
                 off: "off";
                 "catalog-miss": "catalog-miss";
             }>>;
+            estimated: z.ZodBoolean;
             catalogKey: z.ZodNullable<z.ZodString>;
             catalogLabel: z.ZodNullable<z.ZodString>;
             priceRow: z.ZodNullable<z.ZodObject<{
@@ -503,8 +514,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     output: number;
                     currency: "CNY" | "USD";
                     tier: "peak" | "offPeak" | "flat" | null;
-                    source: "cn" | "global" | "custom" | "off" | "catalog-miss";
+                    source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
                     priced: boolean;
+                    estimated: boolean;
                     catalogKey: string | null;
                     catalogLabel: string | null;
                     priceRow: {
@@ -588,6 +600,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             step: null;
             priced: boolean;
             pricingSource: null;
+            estimated: boolean;
             catalogKey: null;
             catalogLabel: null;
             priceRow: null;
@@ -631,7 +644,8 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             turn: number;
             step: number;
             priced: boolean;
-            pricingSource: "cn" | "global" | "custom" | "off" | "catalog-miss";
+            pricingSource: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+            estimated: boolean;
             catalogKey: string | null;
             catalogLabel: string | null;
             priceRow: ({

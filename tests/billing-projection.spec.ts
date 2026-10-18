@@ -18,7 +18,7 @@ const OFF: PricingSnapshot = { defaultPricing: 'off' }
 /** 完整样本构造（billed 凭证占位，billFor/apply 会重算）。 */
 const BILLED_ZERO = {
   hit: 0, miss: 0, output: 0, currency: 'CNY', tier: null, source: 'off',
-  priced: false, catalogKey: null, catalogLabel: null, priceRow: null,
+  priced: false, estimated: false, catalogKey: null, catalogLabel: null, priceRow: null,
 } as const
 
 const mkSample = (over: Partial<Sample>): Sample => ({
@@ -61,7 +61,18 @@ describe('billFor — 折入时刻结算', () => {
 
   it('目录外 + off 兜底：金额恒 0、priced=false、source=catalog-miss', () => {
     const billed = billFor(mkSample({ inputTokens: 10, outputTokens: 1, model: 'mythos-9', time: monday(10) }), OFF)
-    expect(billed).toMatchObject({ hit: 0, miss: 0, output: 0, priced: false, source: 'catalog-miss' })
+    expect(billed).toMatchObject({ hit: 0, miss: 0, output: 0, priced: false, estimated: false, source: 'catalog-miss' })
+  })
+
+  it('目录外 + estimate 兜底：典型价入账且 estimated=true（未校准仅供参考）', () => {
+    const billed = billFor(mkSample({ inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0, model: 'mythos-9', time: monday(10) }), { defaultPricing: 'estimate' })
+    expect(billed).toMatchObject({ priced: true, estimated: true, currency: 'CNY', tier: 'flat', source: 'catalog-miss' })
+    expect(billed.miss).toBeCloseTo(1, 9) // 典型价 inputMiss=1/百万
+  })
+
+  it('目录内命中恒 estimated=false（缺省 estimate 不改目录价）', () => {
+    const billed = billFor(mkSample({ inputTokens: 1_000_000, cacheReadTokens: 0, outputTokens: 0, model: 'deepseek-flash', time: monday(8) }), { defaultPricing: 'estimate' })
+    expect(billed).toMatchObject({ priced: true, estimated: false, source: 'cn', catalogKey: 'deepseek-v4.1-flash' })
   })
 })
 
@@ -78,7 +89,7 @@ describe('失效判定', () => {
   })
 })
 
-describe('投影 apply — 采样/替换/聚合/分桶（stateVersion 2）', () => {
+describe('投影 apply — 采样/替换/聚合/分桶（stateVersion 3）', () => {
   /** 可变快照：模拟设置热改只影响后续新账。 */
   let snap: PricingSnapshot = OFF
   const makeDef = () => buildBillingDefinition(() => snap)
@@ -98,7 +109,7 @@ describe('投影 apply — 采样/替换/聚合/分桶（stateVersion 2）', () 
   it('定义面：key/stateVersion 钉死（bump 审计位）', () => {
     const def = makeDef()
     expect(def.key).toBe('tlCacheBilling')
-    expect(def.stateVersion).toBe(2)
+    expect(def.stateVersion).toBe(3)
   })
 
   it('无关事件返回同一引用（Object.is 把关变更流）', () => {
@@ -231,8 +242,20 @@ describe('view — 四态自洽（wire.viewSchema.parse 全过）', () => {
         usageChunk(1, 1, { inputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 5 }, monday(10))],
     )
     const view = (def.wire as { view: (s: unknown) => Record<string, unknown> }).view(state)
-    expect(view).toMatchObject({ available: true, priced: false, pricingSource: 'catalog-miss', cost: 0, mixedCurrency: false })
+    expect(view).toMatchObject({ available: true, priced: false, estimated: false, pricingSource: 'catalog-miss', cost: 0, mixedCurrency: false })
     expect(view.sessionInputTokens).toBeGreaterThan(0)
+    expect(def.wire.viewSchema.parse(view)).toEqual(view)
+  })
+
+  it('态 3b：目录外 estimate —— priced+estimated，金额入账且自 parse', () => {
+    const { def, state } = fold(
+      { defaultPricing: 'estimate' },
+      [{ type: 'request/header', time: monday(10), data: { header: { config: { provider: 'x', model: 'mimo-v2.6-flash' } } } },
+        usageChunk(1, 1, { inputTokens: 2_000_000, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0 }, monday(10))],
+    )
+    const view = (def.wire as { view: (s: unknown) => Record<string, unknown> }).view(state)
+    expect(view).toMatchObject({ priced: true, estimated: true, pricingSource: 'catalog-miss', tier: 'flat', currency: 'CNY', modelMatched: false })
+    expect(view.sessionMissCost).toBeCloseTo(2, 9)
     expect(def.wire.viewSchema.parse(view)).toEqual(view)
   })
 

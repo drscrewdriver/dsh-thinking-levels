@@ -1,38 +1,28 @@
-# Findings — 模型面板 effort 接入 + 深色适配（2026-09-27）
+# Findings
 
-> 证据来源:活页面运行时探针(内置浏览器 evaluate React fiber / 宿主 slot host face)、
-> 宿主包源码(dsh-client-ui-slots@0.1.7-rc.2 未压缩 lib、served dsh-client-ui-model-selection bundle)。
+## 关键事实纠偏
+- **价格兜底没有 commit**（用户原以为有）：`git log` HEAD=`154faec`（tag v4.3.1，"hosts: add 0.2.1-rc.1 to 12-term enumeration"）；兜底全部改动处于**工作树未提交**态——16 文件：`src/price-catalog.ts`、`src/billing-projection.ts`、`src/index.ts`、`src/client/card.tsx`、`src/client/context-ring.tsx`、`src/client/locales.ts` + `tests/{price-catalog,billing-projection}.spec.ts` + `lib/*` 8 件重建产物。
+- 兜底代码实体已核实在工作树：`PricingPolicy` 含 `'estimate'`（price-catalog.ts:38）、注释"目录外典型价兜底估算，未校准仅供参考"、`billing-projection.ts:528 stateVersion: 3`。
+- 本计划的地基 = **T1 先把兜底落成 commit**，rc.2 补串叠在其上（用户说的"那之上做"语义按此实现）。
 
-## 官方 ModelSelect 的 effort 语义(served bundle 反编译证据)
-- 模型行选择即提交:`selection = {provider: group.id, model: model.id, ...model.reasoning?.defaultEffort === void 0 ? {} : {reasoningEffort: model.reasoning.defaultEffort}}` —— 选模型默认带上该模型 `defaultEffort`。
-- 生效档位:`effectiveEffort = state.current?.reasoningEffort ?? reasoning?.defaultEffort`;目录不可用时回落 `state.retainedEffort`(store 上的名称字符串)。
-- 档位标签:`reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort`;无 reasoning 时显示 `t("effort.providerDefault")`。
-- 档位行:`pending.reasoningEffort === level.effort` 判定进行中,`effectiveEffort === level.effort` 判定当前(带 StateDot)。
-- 提交通道:`directory.select(selection)` → `sessions.selectModel({sessionId, provider, model, reasoningEffort?})`;缺省 `reasoningEffort` = 回提供方默认(官方 submit 的省略语义)。
-- 触发器:`triggerEffort` span 显示 effortLabel;aria-label 格式「选择模型，当前 X，推理等级 Y」。
+## 发布与闸门判定事实
+- 本仓**声明了 `engines.dsh`**（ENUM12 串尾 `0.2.1-rc.1`）→ 宿主 ≥0.2.1-alpha.4 起该 range **单独裁决、peers 全忽略**（闸门换代，官方指南 `plugin-engines-dsh`；台账 VD-020-021-01）→ **不补 rc.2 串 = rc.2 宿主拒载，无侥幸**。
+- `publishConfig.tag = 'dsh-0.2.0'`（钉死旧线）：裸 `npm publish` 会静默打旧 tag——本批必须显式 `--tag dsh-0.2.1-rc.2`（纪律记忆 §6 点名仓之一）。
+- npm 现状（registry.npmjs.org 实测）：`latest=4.3.1`、`dsh-0.2.1-rc.1=4.3.1`、`dsh-0.2.0=4.3.0`；4.3.2 未占用。
+- 装机双通道不同构：**desktop = 本地 tgz `file:` 指针**（`dsh-thinking-levels-4.3.1.tgz`）、**web = npm 版本号** `4.3.1`——升 4.3.2 需分别处理（desktop 先 pack 新 tgz 再改指针）。
 
-## 槽位选举与 abdication(接管 3.4.1 失败的完整机制,已由 3.4.2 修复)
-- `conversation.input.model` 是 `kind: "single", scope: "session"`;渲染取 `entriesOfSlot(key)[0]`。
-- 选举:`entries` 按 `priority` 升序稳定排序,`entriesOfSlot` 返回每 cell 第一个**未 abdicated** 条目。我们 `priority: -1` > 官方缺省 0。
-- abdication:条目 render/inject 抛错 → `SlotErrorBoundary` → `reportEntryError(abdicate: true)` → 永久罢黜,官方条目(下一顺位)顶上;DOM 无任何可见痕迹(无 `data-slot-error`)。
-- 3.4.1 根因:cordis `Service` 经 traceable proxy 把 `this.ctx` 重绑到**访问方** ctx(`createTraceable` get trap:`if (prop === tracker.property) return ctx`)。`directoryFor()` 读 `this.ctx.sessions`;我们延迟注入 fiber 只声明了 `modelDirectories` → `sessions` 解析为 undefined → TypeError → 整条目罢黜。`ModelDirectoryResolver.static inject = ["sessions", "remote", "remote.session"]` 即访问方必须声明的依赖集。
-- 运行时证据(修复前):`entriesOf('conversation.input.model')` 返回 2 条(我们 + 官方),`entriesOfSlot` 只剩官方 —— 与上述机制吻合。
+## rc.2 触面核查（零代码依据）
+- rc.1→rc.2 插件可见面仅两处（tag 探针全量核过）：`ctx.web` 缝 +provider（不触）；`conversation.input.model.label` 槽新增官方 occupant。
+- thinking-levels 注入槽实测为 `conversation.input.model` / `conversation.input.right` / `settings.section` / `plugins.bundle.config` / `dsh-family.tab`——**与 1017 徽章槽名不同、不相撞**；但物理同区（模型选择器附近），冒烟阶段目视一眼即可，不是代码风险。
+- 闸门/settings/vendor/slot 结构/会话 V4 在 rc.2 零 diff（探针 13 列全等）→ 除枚举串外无任何必改项。
 
-## 主题 token 事实(深色适配依据)
-- token 定义在 **`body`**(computed 487 个自定义属性),不在 `:root`(仅 radius/font 等静态 token)。随 `body[data-ds-dark-theme]` 翻转;本机当前深色(`data-ds-theme-source=system` + `prefers-color-scheme: dark`),装了第三方皮肤 maid-atelier。
-- 插件样式引用的 10 个名字中 **5 个不存在**(永远走亮色 fallback):`--dsw-alias-bg-surface`、`--dsw-alias-danger`、`--dsw-alias-danger-weak`(及 `--dsw-alias-state-business-primary-weak` 需复核)——这就是深色下底色偏白的根因。
-- 实测翻转值(body 作用域解析):`bg-layer-1` #f8faffb8/#121f43e6、`bg-layer-2` #ebf0fad6/#182850eb、`bg-layer-3` #e0e7f6e0/#20315bf0、`border-l2` #475b914d/#97a9d857、`label-primary` #172347/#e7ecf7、`label-secondary` #4d5d7f/#bdc9e3、`label-tertiary` #6f7c99/#96a6c9、`state-business-primary` #536eae/#9bb0e1、`state-error-primary` #ec1313/#f25a5a、`interactive-bg-hover-danger` #ec13130d/(暗随主题)。
-- `--ds-font-family-code` 在 `:root` 定义,现有引用有效。
+## 架构决策沿用
+- 兜底基线（2026-10-18 裁决）：目录外非 off/custom 档一律 `BILLING_FALLBACK` 典型价入账 + `estimated=true`；显式 `off` 才显示「未计价」；页脚「未校准·仅供参考」。
+- stateVersion 2→3：ver2 凭证缺 `estimated` 字段不可原样过新 schema，冷重放按当前目录重折、总额一次性位移——**发布注记必须声明**（无迁移垫片）。
+- 本仓无 `scripts/hosts.mjs` 单源（与 21 仓治理批差异点）：同串靠手工逐点位 + grep 核验；hosts:check prepack 门禁在本仓**不存在**，勿写进验收。
 
-## 技术选型
-- 原生 `<select>` 做档位下拉:inline-style 约束下唯一自带弹层、免定位/免键盘处理的控件;官方菜单原语(`_7KE1Ra_menu`)是 CSS module,client bundle 纯洁性约束下不可复用。
-- chip 从行 `<button>` 移出:`<button>` 内嵌 `role="button"` span 本就属非法交互嵌套(现有代码),加 select 后必须重构为兄弟节点。
-
-## 约束与依赖
-- 本机 profile 无 `llm-deepseek` → 官方 DeepSeek 分支(`deepseek-official`)无实机写入路径,仅做「徽章禁用、不崩溃」回归。
-- 服务端 HMR 已证实:改 `~/.dsh/profiles/web/node_modules/.../lib/client.js` 后页面 boot roster 的 per-file `rev` 自动更新(`8533d66f67cc` → `e9957d026371`),无需重启进程。
-
-## 风险识别
-- `<select>` 在深色下的 option 列表底色由浏览器/OS 决定,inline style 只能控制闭合态;可给 select 加 `color-scheme: dark light` 让原生弹层跟随主题(计划内)。
-- 第三方皮肤(maid-atelier)下 `bg-layer-*` 可能被皮肤重定义 → 面板与页面仍同色系(预期行为),不做像素断言,验证以「亮暗一致、无白底」为准。
-- `state.retainedEffort` 未纳入契约(目录不可用时的档位名回落)——目录不可用时面板本身已降级,YAGNI 不补。
+## 约束与风险
+- 工作树含 lib 重建产物：commit 1 必须 src+lib+tests 同提交（prepack-stale-build 防线）；提交前跑一遍 build 确认 lib 与 src 逐字节对应。
+- Electron 桌面端会并发重写 profile package.json（含 UTF-8 BOM 陷阱）：desktop 换 tgz 用"改指针+pnpm install+核验"链式一次过。
+- 旧批次（3.4.3）四件套内容已被本批覆盖，原文可 `git show HEAD:spec.md` 找回。
+- npm packument 传播滞后 ~60s：publish 后先 `npm view dsh-thinking-levels@4.3.2` 可达再装 web profile。

@@ -87,14 +87,35 @@ describe('resolveRate — 策略优先与兜底', () => {
     expect(flat).toMatchObject({ tier: 'flat', currency: 'CNY', source: 'cn', priced: true })
   })
 
-  it('目录外 + defaultPricing=off → 不计价且 source=catalog-miss', () => {
+  it('目录外 + 缺省 off → 不计价且 source=catalog-miss（缺省路径标记）', () => {
     const miss = resolveRate('mythos-9', 'p', monday(10), OFF)
-    expect(miss).toMatchObject({ row: null, priced: false, source: 'catalog-miss', entry: null })
+    expect(miss).toMatchObject({ row: null, priced: false, estimated: false, source: 'catalog-miss', entry: null })
   })
 
-  it('目录外 + defaultPricing=cn → 无条目可取，同样不计价', () => {
+  it('显式 off 策略（非缺省）→ source=off 不计价', () => {
+    const off = resolveRate('mythos-9', 'p', monday(10), { defaultPricing: 'estimate', policies: { '*': { policy: 'off' } } })
+    expect(off).toMatchObject({ row: null, priced: false, estimated: false, source: 'off' })
+  })
+
+  it('目录外 + 缺省 estimate → 典型价兜底估算，estimated=true 且 source=catalog-miss', () => {
+    const est = resolveRate('mythos-9', 'p', monday(10), { defaultPricing: 'estimate' })
+    expect(est).toMatchObject({ priced: true, estimated: true, tier: 'flat', currency: 'CNY', source: 'catalog-miss', entry: null })
+    expect(est.row).toEqual({ inputCacheHit: 0.02, inputMiss: 1, output: 4 })
+  })
+
+  it('目录外 + defaultPricing=cn（选了校准档）→ 仍取兜底典型价，标 estimated', () => {
     const miss = resolveRate('mythos-9', 'p', monday(10), { defaultPricing: 'cn' })
-    expect(miss.priced).toBe(false)
+    expect(miss).toMatchObject({ priced: true, estimated: true, source: 'catalog-miss', currency: 'CNY' })
+  })
+
+  it('显式 estimate 策略命中目录外 → source=estimate（非缺省路径）', () => {
+    const est = resolveRate('mythos-9', 'p', monday(10), { defaultPricing: 'off', policies: { '*': { policy: 'estimate' } } })
+    expect(est).toMatchObject({ priced: true, estimated: true, source: 'estimate' })
+  })
+
+  it('目录外 + custom 无自填行 → 仍不计价（不拿兜底冒充自填价）', () => {
+    const bare = resolveRate('mythos-9', 'p', monday(10), { defaultPricing: 'off', policies: { '*': { policy: 'custom' } } })
+    expect(bare).toMatchObject({ row: null, priced: false, estimated: false, source: 'custom' })
   })
 
   it('策略 key 特异性 provider/model > model > provider > *', () => {
@@ -116,8 +137,13 @@ describe('resolveRate — 策略优先与兜底', () => {
     expect(bare).toMatchObject({ row: null, priced: false, source: 'custom' })
   })
 
-  it('global 档无条目（留位期）→ priced=false 但 source 记 global', () => {
+  it('global 档有条目但无 USD 行（留空期）→ priced=false 但 source 记 global，不回退兜底', () => {
     const g = resolveRate('glm-5', 'p', monday(10), { defaultPricing: 'off', policies: { 'glm-5': { policy: 'global' } } })
-    expect(g).toMatchObject({ priced: false, source: 'global', row: null })
+    expect(g).toMatchObject({ priced: false, estimated: false, source: 'global', row: null })
+  })
+
+  it('目录内命中恒 estimated=false（兜底不冒充目录价）', () => {
+    const hit = resolveRate('deepseek-flash', 'p', monday(10), { defaultPricing: 'estimate' })
+    expect(hit).toMatchObject({ priced: true, estimated: false, source: 'cn' })
   })
 })

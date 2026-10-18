@@ -1,57 +1,36 @@
-# Spec: 模型面板 effort 接入 + 深色模式适配（3.4.2 → 3.4.3）
+# Spec: dsh-thinking-levels 4.3.2 —— 价格兜底落账 + 0.2.1-rc.2 兼容声明
 
-> 前置:3.4.2 已修复座位接管(延迟注入补声明 `sessions`/`remote`/`remote.session`,
-> `directoryFor` 防护降级),实机确认面板已顶掉官方选择器(HMR 热生效)。
-> 本轮补齐官方弹层原有而面板尚未覆盖的两块:推理等级(effort)选择、深色主题适配。
+> 基线：HEAD `154faec`（v4.3.1，ENUM12 止于 `0.2.1-rc.1`）；工作树含未提交的兜底改动（16 文件）。
+> 本批两件事合成一次发版：**先提交兜底（feat），再补 rc.2 串（hosts），一次 bump 4.3.1→4.3.2 发布**。
 
 ## 需求
-1. **effort 接入**(与官方 ModelSelect 语义对齐):
-   - 触发器在模型名旁显示当前生效档位徽章;生效值 = `current.reasoningEffort ?? 当前模型 reasoning.defaultEffort`。
-   - 每条声明了 `reasoning` 的模型线提供档位下拉:「提供方默认」+ `reasoning.efforts[]` 各档(显示 `level.name`,提交 `level.id`)。
-   - 选择经 `directory.select({provider, model, reasoningEffort?})` 写入会话;「提供方默认」**省略** `reasoningEffort` 字段(与官方 submit 一致:缺省即回到提供方默认)。
-   - 回归红线:模型切换、context window 徽章编辑、popup 开合行为不变。
-2. **深色模式适配**:面板所有颜色改用宿主真实主题 token(定义在 `body`,随 `data-ds-dark-theme` 翻转),亮暗两套主题目视正确。
+- R1 价格兜底改动入库：目录外模型缺省 `estimate` 典型价入账 + `estimated=true` 诚实标注 + stateVersion 3 + 设置卡"目录外定价"下拉 + 9 语文案（已完成开发，仅缺提交，见 T1）。
+- R2 0.2.1-rc.2 兼容声明：`engines.dsh` 与全部 `@deepseek-ai/dsh*` peers 同串追加 ` || 0.2.1-rc.2`（ENUM12→ENUM13）。**硬需求**：该包声明了 `engines.dsh`，≥a.4 闸门由它单独裁决——不补串在 rc.2 宿主上直接 `incompatible-version` 拒载。
+- R3 版本与凭证：bump 4.3.1→4.3.2（package.json + dsh.plugin.json 双清单）、CHANGELOG 8 语（含 stateVersion 冷重放一次性位移声明）、README 兼容行。
+- R4 发布：`npm publish --tag dsh-0.2.1-rc.2` + `dist-tag add latest`（**禁止裸发**——本仓 `publishConfig.tag` 钉死旧线 `dsh-0.2.0`）。
+- R5 装机：desktop（`file:` tgz 通道）+ web（npm 通道）双 profile 升 4.3.2，rc.2 宿主装载冒烟零 FAILED。
 
 ## 技术方案
-
-### A. effort(src/client/model-panel.tsx + src/client/locales.ts)
-1. 触发器:`triggerName` 后加 `triggerEffort` span(tertiary 色、省略号,对齐官方 `triggerEffort` 形态):
-   ```tsx
-   const currentReasoning = current?.model.reasoning
-   const effectiveEffort = state.current?.reasoningEffort ?? currentReasoning?.defaultEffort
-   const effortLabel = currentReasoning === undefined ? undefined
-     : effectiveEffort === undefined ? t('input.effort.default')
-     : currentReasoning.efforts.find(l => l.id === effectiveEffort)?.name ?? effectiveEffort
-   ```
-2. 模型线重构:行容器 flex 化 —— [选择按钮(flex:1,名称/描述/✓)] [effort `<select>`(仅 `model.reasoning` 存在时)] [window chip(**移出**按钮成兄弟节点)]。消除 button 内嵌套交互元素(chip 原本嵌在行按钮里,select 再嵌即非法)。
-3. `chooseEffort(provider, model, effort | undefined)`:`busy || directory === undefined` 时忽略;调用 `directory.select({provider, model, ...(effort === undefined ? {} : {reasoningEffort: effort})})`;期间 `busy` 禁用该行全部控件。
-4. select 展示值:激活线 = 生效值;非激活线 = `defaultEffort`;`value=""` 表「提供方默认」。`onChange` 时 `event.stopPropagation()` 后提交。
-5. 新 locale key ×4 语言:`input.effort.title`(思考强度 / Reasoning effort / 思考レベル / 추론 강도)、`input.effort.default`(提供方默认 / Provider default / プロバイダーの既定 / 공급자 기본값)。
-
-### B. 深色适配(src/client/model-panel.tsx 样式区)
-臆造 token → 宿主真实 token(实测翻转值):
-| 旧(宿主未定义,永远走亮色 fallback) | 新 token | 亮 | 暗 |
-|---|---|---|---|
-| `--dsw-alias-bg-surface` | `--dsw-alias-bg-layer-1` | `#f8faffb8` | `#121f43e6` |
-| `--dsw-alias-danger` | `--dsw-alias-state-error-primary` | `#ec1313` | `#f25a5a` |
-| `--dsw-alias-danger-weak` | `--dsw-alias-interactive-bg-hover-danger` | `#ec13130d` | 随主题翻转 |
-
-保留并已验证两套主题均翻转:`--dsw-alias-bg-layer-3`(弹层底)、`--dsw-alias-border-l2`、`--dsw-alias-label-primary/secondary/tertiary`、`--dsw-alias-state-business-primary`。
-- 删除颜色 fallback 的硬编码亮色(`#fff`、`#e5484d`、`rgba(229,72,77,.10)`、`rgba(77,107,254,.10)`),fallback 用 `transparent` 或删除;弹层 `boxShadow` 保持中性黑(两主题通用)。
-- `--ds-font-family-code` 在 `:root` 已定义,不动。
-
-### C. 版本与部署
-- package.json + dsh.plugin.json → `3.4.3`;`npm run typecheck && npx vitest run && npm run build`;产物同步 `~/.dsh/profiles/web/node_modules/dsh-thinking-levels`(服务端 HMR 自动热载;若 `rev` 未变则重启 web 进程)。
+- **提交切分**（两 commit，顺序固定）：
+  1. `feat(billing): out-of-catalog estimate fallback ...`（16 文件全量：src×6 + lib×8 + tests×2，lib 与 src 同 commit 防 stale-build）；
+  2. `hosts: add 0.2.1-rc.2 to 13-term enumeration (4.3.2)`（package.json engines+12 peers、dsh.plugin.json version、README×2 兼容句、CHANGELOG×8）。
+- 声明点位（本仓无 `scripts/hosts.mjs` 单源，手工同串，逐点位 grep 核）：
+  - `package.json`：`engines.dsh` 1 处 + peerDependencies 12 处（全部 `0.1.0-rc.8 || … || 0.2.1-rc.1` 同串行尾追加）；
+  - `README.md` / `README.zh.md` 兼容版本句（如有枚举行）；
+  - `dsh.plugin.json` 仅 version 字段（不含枚举）。
+- semver 双向验证（includePrerelease）：`satisfies('0.2.1-rc.2')=true`、`satisfies('0.3.0-rc.1')=false`、`satisfies('0.2.1-alpha.5')=false`（α.5 未在枚举，拒为正确行为须与 4.3.1 现状一致）。
+- 发版门禁：typecheck → vitest（148 基线）→ build → pack → V1-V6（双清单同号、同串 13 项逐 peer、lib↔src 哈希、registry 钉死、tag 显式）→ L3 深度评审。
+- 装机：`npm pack --pack-destination .` 出 `dsh-thinking-levels-4.3.2.tgz`；desktop 改 `file:` 指针 + "改串+连装一次过+剥 BOM"链式命令（Electron 并发覆盖陷阱）；web 走 npm `4.3.2`。
 
 ## 决策记录
 | 选项 | 选择 | 理由 |
 |------|------|------|
-| effort UI:每模型线下拉 vs 官方式「当前模型档位行列表」 | 每模型线下拉 | 面板是多模型分线布局;官方档位行是它单列布局的产物,照搬会在 320px 弹层里挤压 window 徽章。下拉让任意模型可先设档,功能是官方超集 |
-| 下拉用原生 `<select>` | 是 | inline-style 约束(无 CSS 文件)下唯一免样式弹层的控件;官方菜单原语不可复用(client bundle 纯洁性) |
-| 深色适配:宿主 token vs `prefers-color-scheme` 自建 | 宿主 token | 主题由 body `data-ds-dark-theme` 驱动(含第三方皮肤如 maid-atelier),跟随宿主才与页面同色系;media query 检测会和皮肤冲突 |
-| chip/select 移出行按钮 | 是 | `<button>` 内嵌交互元素非法且点击行为不可靠;顺带修复现有 chip 的非法嵌套 |
+| 兜底与 rc.2 补串分两次发版 vs 合一 | **合一（4.3.2）** | 兜底未发版即无存量用户；rc.2 拒载急修，合一省一轮装机冒烟 |
+| 是否顺手删 engines.dsh 走"最大兼容路线" | **保留并补串** | 本仓纪律=精确枚举同串；宽路线把判定权交给巧合 |
+| publishConfig.tag | **本批不改，发布显式 --tag** | 改它属另一条治理批（21 仓统一）；本批只保证不踩 |
+| stateVersion 3 冷重放 | 发布注记声明，不做迁移垫片 | ver2 凭证缺字段不可原样过新 schema（已裁决） |
 
 ## 约束
-- client bundle 纯洁性:不 value-import `@deepseek-ai/*`,只走 cordis 服务与 slot(现状不变)。
-- inline styles,无 CSS 文件/模块;不新增 npm 依赖。
-- 验证环境:`~/.dsh/profiles/web`(DSH 0.1.7-rc.2;`llm-deepseek` 未装配,官方 DeepSeek 分支只做不崩溃回归,写入目标以 `llm-pi-ai` 网关模型为准)。
+- 发版前 HEAD 两 commit 必须全部在 v4.3.1 tag 之后线性叠加；禁 rebase 已推送历史。
+- `npm publish` 后验证传播（packument 滞后 ~60s，装前 `npm view dsh-thinking-levels@4.3.2` 可达）。
+- 计划产物覆盖旧批次四文件的原文在 `git show HEAD:spec.md` 等可找回。

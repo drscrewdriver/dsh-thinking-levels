@@ -11,9 +11,11 @@
  * 元只做记账。计价在**折入时刻**结算并作为凭证（`Sample.billed`）持久进 state：
  * - 同 step 替换「减记录值、加新算值」——杜绝按新费率重算旧账的混口径负数路径；
  * - 金额按币种分桶（CNY/USD），跨币种会话不再相加失真；
- * - `view` 只读凭证不重算，设置改价不会漂移已展示的读数。
+ * - `view` 只读凭证不重算，设置改价不会漂移已展示的读数；
+ * - 目录外模型的兜底典型价估算带 `estimated` 凭证位（未校准仅供参考）。
  * 语义边界：改价只影响在线增量新账；冷重放（checkpoint 废弃后整段重折）必然
- * 按当前目录重算——stateVersion 2 即为此声明（宿主对旧 ver 行整行废弃重折）。
+ * 按当前目录重算——stateVersion 3 即为此声明（宿主对旧 ver 行整行废弃重折，
+ * ver 2 凭证缺 estimated 字段，不可原样过新 schema）。
  *
  * 计价快照经 `buildBillingDefinition(getPricing)` 闭包注入，按事件时刻现读；
  * **热路径绝不走 describeSettings**（宿主 describe 非轻量且会 emit 事件）。
@@ -48,13 +50,15 @@ export interface Billed {
   tier: Tier | null
   source: PricingSource
   priced: boolean
+  /** priced 且金额为兜底典型价估算（未校准，仅供参考）。 */
+  estimated: boolean
   catalogKey: string | null
   catalogLabel: string | null
   priceRow: PriceRow | null
 }
 
 /** 目录外模型的兜底档位（设置面 defaultPricing 的值域）。 */
-const POLICY_VALUES = ['cn', 'global', 'custom', 'off'] as const
+const POLICY_VALUES = ['estimate', 'cn', 'global', 'custom', 'off'] as const
 
 const round9 = (n: number): number => Math.round(n * 1e9) / 1e9
 
@@ -147,7 +151,7 @@ export function billFor(sample: Sample, snapshot: PricingSnapshot): Billed {
     return {
       hit: 0, miss: 0, output: 0,
       currency: resolved.currency ?? 'CNY',
-      tier: resolved.tier, source: resolved.source, priced: false,
+      tier: resolved.tier, source: resolved.source, priced: false, estimated: false,
       catalogKey: resolved.entry?.key ?? null,
       catalogLabel: resolved.entry?.label ?? null,
       priceRow: null,
@@ -159,6 +163,7 @@ export function billFor(sample: Sample, snapshot: PricingSnapshot): Billed {
     output: round9((sample.outputTokens * row.output) / 1e6),
     currency: resolved.currency ?? 'CNY',
     tier: resolved.tier, source: resolved.source, priced: true,
+    estimated: resolved.estimated,
     catalogKey: resolved.entry?.key ?? null,
     catalogLabel: resolved.entry?.label ?? null,
     priceRow: { ...row },
@@ -171,8 +176,9 @@ const billedShape = z.object({
   output: z.number(),
   currency: z.enum(['CNY', 'USD']),
   tier: z.enum(['peak', 'offPeak', 'flat']).nullable(),
-  source: z.enum(['cn', 'global', 'custom', 'off', 'catalog-miss']),
+  source: z.enum(['estimate', 'cn', 'global', 'custom', 'off', 'catalog-miss']),
   priced: z.boolean(),
+  estimated: z.boolean(),
   catalogKey: z.string().nullable(),
   catalogLabel: z.string().nullable(),
   priceRow: z.object({ inputMiss: z.number(), inputCacheHit: z.number(), output: z.number() }).nullable(),
@@ -286,7 +292,7 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
       provider: sourceProvider ?? state.provider,
       time: typeof event.time === 'number' ? event.time : Date.now(),
       // 凭证在折入时刻结算（事件时刻的费率 + 当时的计价快照）
-      billed: { hit: 0, miss: 0, output: 0, currency: 'CNY', tier: null, source: 'off', priced: false, catalogKey: null, catalogLabel: null, priceRow: null },
+      billed: { hit: 0, miss: 0, output: 0, currency: 'CNY', tier: null, source: 'off', priced: false, estimated: false, catalogKey: null, catalogLabel: null, priceRow: null },
     }
     sample.billed = billFor(sample, getPricing())
 
@@ -302,6 +308,7 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
       prev.billed.hit === sample.billed.hit &&
       prev.billed.miss === sample.billed.miss &&
       prev.billed.output === sample.billed.output &&
+      prev.billed.estimated === sample.billed.estimated &&
       prev.billed.currency === sample.billed.currency
     ) {
       return state
@@ -408,7 +415,7 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
         cacheReadTokens: 0, totalInputTokens: 0, outputTokens: 0, hitRate: null,
         model: state.model, provider: state.provider, matchedModel: null, modelMatched: false,
         tier: null, unitPricePerM: null, turn: null, step: null,
-        priced: false, pricingSource: null, catalogKey: null, catalogLabel: null, priceRow: null,
+        priced: false, pricingSource: null, estimated: false, catalogKey: null, catalogLabel: null, priceRow: null,
         turnCost: 0, turnHitCost: 0, turnMissCost: 0, turnOutputCost: 0,
         turnTokens: 0, turnCacheReadTokens: 0, turnInputTokens: 0, turnOutputTokens: 0,
         sessionCacheHitCost: 0, sessionMissCost: 0, sessionOutputCost: 0,
@@ -443,6 +450,7 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
       step: s.step,
       priced: b.priced,
       pricingSource: b.source,
+      estimated: b.estimated,
       catalogKey: b.catalogKey,
       catalogLabel: b.catalogLabel,
       priceRow: b.priceRow,
@@ -488,7 +496,8 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
     turn: z.number().int().nullable(),
     step: z.number().int().nullable(),
     priced: z.boolean(),
-    pricingSource: z.enum(['cn', 'global', 'custom', 'off', 'catalog-miss']).nullable(),
+    pricingSource: z.enum(['estimate', 'cn', 'global', 'custom', 'off', 'catalog-miss']).nullable(),
+    estimated: z.boolean(),
     catalogKey: z.string().nullable(),
     catalogLabel: z.string().nullable(),
     priceRow: z.object({ inputMiss: z.number(), inputCacheHit: z.number(), output: z.number() }).nullable(),
@@ -516,7 +525,7 @@ export function buildBillingDefinition(getPricing: () => PricingSnapshot) {
 
   return {
     key: 'tlCacheBilling',
-    stateVersion: 2,
+    stateVersion: 3,
     stateSchema,
     init,
     apply,

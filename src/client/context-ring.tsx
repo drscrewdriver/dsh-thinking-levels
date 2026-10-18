@@ -71,7 +71,9 @@ export interface CacheBillingLike {
   unitPricePerM?: number | null
   /** 目录化新增字段（全部 optional：旧 view 落新客户端时保守回退）。 */
   priced?: boolean
-  pricingSource?: 'cn' | 'global' | 'custom' | 'off' | 'catalog-miss' | null
+  pricingSource?: 'estimate' | 'cn' | 'global' | 'custom' | 'off' | 'catalog-miss' | null
+  /** 金额为兜底典型价估算（未校准，仅供参考）。 */
+  estimated?: boolean
   catalogKey?: string | null
   catalogLabel?: string | null
   priceRow?: { inputMiss: number; inputCacheHit: number; output: number } | null
@@ -142,6 +144,8 @@ interface CopyShape {
   billPricedAs: (label: string) => string
   billPriced: string
   billEstimate: string
+  /** 兜底典型价估算的诚实标注（未校准仅供参考）。 */
+  billUncalibratedHint: string
 }
 
 const COPY: Record<'zh' | 'en', CopyShape> = {
@@ -174,6 +178,7 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     billPricedAs: (label: string) => `按 ${label} 计价`,
     billPriced: '按目录价计价',
     billEstimate: '目录外估算价',
+    billUncalibratedHint: '未校准·仅供参考',
   },
   en: {
     title: 'Context check',
@@ -204,6 +209,7 @@ const COPY: Record<'zh' | 'en', CopyShape> = {
     billPricedAs: (label: string) => `priced as ${label}`,
     billPriced: 'priced at catalog rates',
     billEstimate: 'estimated off-catalog',
+    billUncalibratedHint: 'uncalibrated — reference only',
   },
 } as const
 
@@ -584,13 +590,15 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
               ? ` · ${billing.tier === 'peak' ? c.billPeak : billing.tier === 'offPeak' ? c.billOffPeak : billing.tier === 'flat' ? c.billFlat : c.billUnpriced} · ${
                   billing.priced === false
                     ? c.billUnpriced
-                    : typeof billing.catalogLabel === 'string'
-                      ? c.billPricedAs(billing.catalogLabel)
-                      : billing.pricingSource === 'custom'
-                        ? c.billCustom
-                        : billing.modelMatched === false
-                          ? c.billEstimate
-                          : c.billPriced
+                    : billing.estimated === true
+                      ? c.billUncalibratedHint
+                      : typeof billing.catalogLabel === 'string'
+                        ? c.billPricedAs(billing.catalogLabel)
+                        : billing.pricingSource === 'custom'
+                          ? c.billCustom
+                          : billing.modelMatched === false
+                            ? c.billEstimate
+                            : c.billPriced
                 }`
               : ''}
           </div>

@@ -17,8 +17,9 @@
  *   API 表），结构留位、数值留空——宁缺毋伪，核实通道到位后走 golden 门禁补录。
  *
  * 判定链：策略 key 特异性（provider/model > model > provider > *）→ 目录命中
- * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省 off，
- * source 记 'catalog-miss'）。节假日/补班修正表随 isPeakBeijing 一并迁入，
+ * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省
+ * estimate = 典型价兜底估算，source 记 'catalog-miss' 且 estimated=true；
+ * off 才是真不计价）。节假日/补班修正表随 isPeakBeijing 一并迁入，
  * billing-projection 只负责记账，不再持有价格与日历。
  * @module dsh-thinking-levels/price-catalog
  */
@@ -30,8 +31,8 @@ export interface PriceRow {
     inputCacheHit: number;
     output: number;
 }
-/** 每 API 计价策略四档。 */
-export type PricingPolicy = 'cn' | 'global' | 'custom' | 'off';
+/** 每 API 计价策略档位（estimate = 目录外典型价兜底估算，未校准仅供参考）。 */
+export type PricingPolicy = 'estimate' | 'cn' | 'global' | 'custom' | 'off';
 /** 生效来源：四档 + 目录外兜底标记。 */
 export type PricingSource = PricingPolicy | 'catalog-miss';
 /** 峰/谷/平三态；平价条目（无峰谷官方价）与 custom 档用 flat。 */
@@ -71,6 +72,15 @@ export interface CatalogEntry {
 }
 /** 目录版本（进解析缓存键与审计）。 */
 export declare const CATALOG_VERSION = 1;
+/**
+ * 目录外模型的兜底典型价（CNY/百万 token）：取 DeepSeek-V4.1-Flash 谷时行
+ * ——主力模型的平价档，数量级最贴近通用网关。仅用于 estimate 档/目录外缺省，
+ * 展示侧必须带「未校准·仅供参考」标注，不得伪装成目录条目。
+ */
+export declare const BILLING_FALLBACK: {
+    row: PriceRow;
+    currency: Currency;
+};
 /** 内置典型价目目录（CNY/百万 token）。 */
 export declare const PRICE_CATALOG: readonly CatalogEntry[];
 /**
@@ -97,6 +107,8 @@ export interface ResolvedRate {
     source: PricingSource;
     entry: CatalogEntry | null;
     priced: boolean;
+    /** 金额为兜底典型价估算（未校准，仅供参考）；恒随 priced。 */
+    estimated: boolean;
 }
 /** 唯一计价解析出口。目录命中且无显式策略时取条目自身地区（cn 优先，仅 global 取 global）。 */
 export declare function resolveRate(model: string | null, provider: string | null, timeMs: number, snapshot: PricingSnapshot): ResolvedRate;

@@ -17,8 +17,9 @@
  *   API 表），结构留位、数值留空——宁缺毋伪，核实通道到位后走 golden 门禁补录。
  *
  * 判定链：策略 key 特异性（provider/model > model > provider > *）→ 目录命中
- * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省 off，
- * source 记 'catalog-miss'）。节假日/补班修正表随 isPeakBeijing 一并迁入，
+ * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省
+ * estimate = 典型价兜底估算，source 记 'catalog-miss' 且 estimated=true；
+ * off 才是真不计价）。节假日/补班修正表随 isPeakBeijing 一并迁入，
  * billing-projection 只负责记账，不再持有价格与日历。
  * @module dsh-thinking-levels/price-catalog
  */
@@ -33,8 +34,8 @@ export interface PriceRow {
   output: number
 }
 
-/** 每 API 计价策略四档。 */
-export type PricingPolicy = 'cn' | 'global' | 'custom' | 'off'
+/** 每 API 计价策略档位（estimate = 目录外典型价兜底估算，未校准仅供参考）。 */
+export type PricingPolicy = 'estimate' | 'cn' | 'global' | 'custom' | 'off'
 
 /** 生效来源：四档 + 目录外兜底标记。 */
 export type PricingSource = PricingPolicy | 'catalog-miss'
@@ -74,6 +75,16 @@ export interface CatalogEntry {
 
 /** 目录版本（进解析缓存键与审计）。 */
 export const CATALOG_VERSION = 1
+
+/**
+ * 目录外模型的兜底典型价（CNY/百万 token）：取 DeepSeek-V4.1-Flash 谷时行
+ * ——主力模型的平价档，数量级最贴近通用网关。仅用于 estimate 档/目录外缺省，
+ * 展示侧必须带「未校准·仅供参考」标注，不得伪装成目录条目。
+ */
+export const BILLING_FALLBACK: { row: PriceRow; currency: Currency } = {
+  row: { inputCacheHit: 0.02, inputMiss: 1, output: 4 },
+  currency: 'CNY',
+}
 
 const PEAKOFF = 'DeepSeek 官方峰谷分时（峰窗 09-12/14-18 北京；源 api-docs.deepseek.com/zh-cn/quick_start/pricing/）'
 const PEAKREF = '镜像 .peakref/companion/lib/core/price/catalog.js 官方页快照（低档价）'
@@ -265,6 +276,8 @@ export interface ResolvedRate {
   source: PricingSource
   entry: CatalogEntry | null
   priced: boolean
+  /** 金额为兜底典型价估算（未校准，仅供参考）；恒随 priced。 */
+  estimated: boolean
 }
 
 /** 策略 key 匹配：provider/model > model > provider > *。 */
@@ -301,13 +314,20 @@ export function resolveRate(
   const miss = (row: ResolvedRate): ResolvedRate =>
     viaDefault ? { ...row, source: 'catalog-miss' } : row
 
-  if (policy === 'off') return miss({ row: null, tier: null, currency: null, source: 'off', entry, priced: false })
+  if (policy === 'off') return miss({ row: null, tier: null, currency: null, source: 'off', entry, priced: false, estimated: false })
   if (policy === 'custom') {
     const custom = explicit?.custom
-    if (custom === undefined) return miss({ row: null, tier: null, currency: null, source: 'custom', entry, priced: false })
-    return miss({ row: { inputMiss: custom.inputMiss, inputCacheHit: custom.inputCacheHit, output: custom.output }, tier: 'flat', currency: custom.currency, source: 'custom', entry, priced: true })
+    if (custom === undefined) return miss({ row: null, tier: null, currency: null, source: 'custom', entry, priced: false, estimated: false })
+    return miss({ row: { inputMiss: custom.inputMiss, inputCacheHit: custom.inputCacheHit, output: custom.output }, tier: 'flat', currency: custom.currency, source: 'custom', entry, priced: true, estimated: false })
   }
-  const picked = entry === null ? null : regionRow(entry, policy, timeMs)
-  if (picked === null) return miss({ row: null, tier: null, currency: null, source: policy, entry, priced: false })
-  return miss({ ...picked, source: policy, entry, priced: true })
+  // 目录外 + 非 off/custom 档（缺省 estimate，或显式选 cn/global 校准档），
+  // 或显式 estimate 命中目录内（取不到地区行）：取典型价兜底估算并标
+  // estimated——展示侧带「未校准·仅供参考」，不再显示「未计价」。
+  // 命中条目但地区无行（如 global 留空期）不回退兜底。
+  if (entry === null || policy === 'estimate') {
+    return miss({ row: { ...BILLING_FALLBACK.row }, tier: 'flat', currency: BILLING_FALLBACK.currency, source: policy, entry, priced: true, estimated: true })
+  }
+  const picked = regionRow(entry, policy, timeMs)
+  if (picked === null) return miss({ row: null, tier: null, currency: null, source: policy, entry, priced: false, estimated: false })
+  return miss({ ...picked, source: policy, entry, priced: true, estimated: false })
 }

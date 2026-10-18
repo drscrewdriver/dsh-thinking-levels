@@ -91,8 +91,9 @@ export interface ThinkingLevelsConfig {
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
   /**
-   * 目录外模型的计价兜底档（price-catalog 未命中时生效）：cn/global/custom/off。
-   * 缺省 off（未计价，不再拿单一型号价硬算）；目录内模型自动按条目地区计价。
+   * 目录外模型的计价兜底档（price-catalog 未命中时生效）：estimate/cn/global/custom/off。
+   * 缺省 estimate（典型价兜底估算，显示「未校准·仅供参考」）；off 才是真不计价；
+   * 目录内模型自动按条目地区计价，不受本项影响。
    */
   defaultPricing: PricingPolicy | Volatile<PricingPolicy>
 }
@@ -110,7 +111,7 @@ const modelsSchema = z.dict(z.object({
 })).default({})
 
 /** 计价兜底档：schemastery 枚举，两代 schema 共享（the two must never drift）。 */
-const defaultPricingSchema = z.union(['cn', 'global', 'custom', 'off']).default('off')
+const defaultPricingSchema = z.union(['estimate', 'cn', 'global', 'custom', 'off']).default('estimate')
 
 /**
  * Composition-entry schema: what a dsh profile may configure at assembly
@@ -153,7 +154,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   allowDowngrade: true,
   allowUpgrade: false,
   takeover: false,
-  defaultPricing: 'off',
+  defaultPricing: 'estimate',
   models: {},
 }
 
@@ -209,7 +210,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
     takeover: readVolatile(config.takeover, false),
-    defaultPricing: readVolatile(config.defaultPricing, 'off'),
+    defaultPricing: readVolatile(config.defaultPricing, 'estimate'),
     models: config.models,
   }
 }
