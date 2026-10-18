@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.3 (2026-10-18)
+
+- 计价目录化上线：price-catalog 41 条（国内 30 CNY 峰谷/平价 + 海外 11 USD：Claude 4 官方页一手、GPT 4/Gemini 3 Copilot 计费文档×公告交叉核实），注入型号按目录实价入账、目录外走 estimate 典型价兜底并标「未校准·仅供参考」（免费档调用=按标准价折算的花费/白嫖额度感知）。
+- 凭证入账 stateVersion 2→3；设置卡目录外定价五档选择器（9 语）；CATALOG_VERSION 1→2；golden 150/150 绿。
+
 ## 4.3.2 (2026-10-18)
 
 - hosts: 追加 0.2.1-rc.2 声明面枚举（宿主 peer 逐包 npm 实测 rc.2 在版；不触 ctx.web provider 与 model.label 槽，代码零改动，纯元数据发版；农场 rc.2 格挂账待命）
