@@ -13,8 +13,10 @@
  *   （官方定价页 2026-08-14 快照，2026-08-17 起峰谷分时；峰窗 09-12/14-18 北京）；
  * - 国内厂商 flat 行：镜像 .peakref companion price/catalog.js CATALOG_TABLE
  *   （各官方定价页人民币站低档价快照；免费行照录 0）；
- * - 海外 USD 行：本轮网络侧无法核实（OpenAI 403 / Google 超时 / Anthropic 页无
- *   API 表），结构留位、数值留空——宁缺毋伪，核实通道到位后走 golden 门禁补录。
+ * - 海外 USD 行：2026-10-18 补录（CATALOG_VERSION 1→2）——Claude 四行为
+ *   Anthropic 官方定价页直接抓取；GPT/Gemini 行为 GitHub Copilot 计费文档一手
+ *   表（USD/MTok 默认档），并与多家独立报道交叉核实；促销/介绍期价格在 source
+ *   注明失效时点，届时按标准价改录并重跑 golden 门禁。
  *
  * 判定链：策略 key 特异性（provider/model > model > provider > *）→ 目录命中
  * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省
@@ -51,7 +53,7 @@ export interface PricingSnapshot {
     defaultPricing: PricingPolicy;
     policies?: Readonly<Record<string, PolicyEntry>>;
 }
-/** 目录条目：cn 为 峰谷对 或 平价行；global 预留平价（当前留空）。 */
+/** 目录条目：cn 为 峰谷对 或 平价行；global 为海外平价行（USD，2026-10-18 起有条目）。 */
 export interface CatalogEntry {
     key: string;
     label: string;
@@ -70,8 +72,8 @@ export interface CatalogEntry {
     /** 来源标注（官方定价页或仓内镜像快照路径）。 */
     source: string;
 }
-/** 目录版本（进解析缓存键与审计）。 */
-export declare const CATALOG_VERSION = 1;
+/** 目录版本（进解析缓存键与审计）。2 = 2026-10-18 补录海外 USD 行。 */
+export declare const CATALOG_VERSION = 2;
 /**
  * 目录外模型的兜底典型价（CNY/百万 token）：取 DeepSeek-V4.1-Flash 谷时行
  * ——主力模型的平价档，数量级最贴近通用网关。仅用于 estimate 档/目录外缺省，

@@ -8,7 +8,7 @@ const OFF: PricingSnapshot = { defaultPricing: 'off' }
 
 describe('目录数据完整性（golden）', () => {
   it('版本与复核标注齐全：每条目都有 asOf/source，aliases 非空', () => {
-    expect(CATALOG_VERSION).toBe(1)
+    expect(CATALOG_VERSION).toBe(2)
     for (const entry of PRICE_CATALOG) {
       expect(entry.aliases.length).toBeGreaterThan(0)
       expect(entry.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/)
@@ -16,8 +16,28 @@ describe('目录数据完整性（golden）', () => {
     }
   })
 
-  it('海外 USD 行留位不伪填：当前目录无任何 global 条目', () => {
-    for (const entry of PRICE_CATALOG) expect(entry.global).toBeUndefined()
+  it('海外 USD 行已补录（2026-10-18）：global 条目均带 asOf/source，且无 cn 行', () => {
+    const globals = PRICE_CATALOG.filter((e) => e.global !== undefined)
+    expect(globals.length).toBe(11)
+    for (const entry of globals) {
+      expect(entry.cn).toBeUndefined()
+      expect(entry.asOf).toBe('2026-10-18')
+      expect(entry.source.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('golden：海外 USD 行钉死（防手滑改价）', () => {
+    expect(findEntry('claude-sonnet-5.5')?.global).toEqual({ flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } })
+    expect(findEntry('claude-opus-5.5')?.global).toEqual({ flat: { inputCacheHit: 0.2, inputMiss: 4, output: 20 } })
+    expect(findEntry('gpt-6.1-sol')?.global).toEqual({ flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } })
+    expect(findEntry('gpt-6-luna')?.global).toEqual({ flat: { inputCacheHit: 0.01, inputMiss: 0.1, output: 0.5 } })
+    expect(findEntry('gemini-4-argon')?.global).toEqual({ flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } })
+  })
+
+  it('USD 目录命中（无显式策略）→ 条目自身地区取 global，实价入账非估算', () => {
+    const r = resolveRate('claude-sonnet-5.5', 'anthropic', monday(10), { defaultPricing: 'estimate' })
+    expect(r).toMatchObject({ priced: true, estimated: false, source: 'global', currency: 'USD' })
+    expect(r.row).toEqual({ inputCacheHit: 0.1, inputMiss: 2, output: 10 })
   })
 
   it('golden：DeepSeek 峰谷行钉死（防手滑改价）', () => {

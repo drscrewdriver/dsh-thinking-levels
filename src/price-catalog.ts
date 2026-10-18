@@ -13,8 +13,10 @@
  *   （官方定价页 2026-08-14 快照，2026-08-17 起峰谷分时；峰窗 09-12/14-18 北京）；
  * - 国内厂商 flat 行：镜像 .peakref companion price/catalog.js CATALOG_TABLE
  *   （各官方定价页人民币站低档价快照；免费行照录 0）；
- * - 海外 USD 行：本轮网络侧无法核实（OpenAI 403 / Google 超时 / Anthropic 页无
- *   API 表），结构留位、数值留空——宁缺毋伪，核实通道到位后走 golden 门禁补录。
+ * - 海外 USD 行：2026-10-18 补录（CATALOG_VERSION 1→2）——Claude 四行为
+ *   Anthropic 官方定价页直接抓取；GPT/Gemini 行为 GitHub Copilot 计费文档一手
+ *   表（USD/MTok 默认档），并与多家独立报道交叉核实；促销/介绍期价格在 source
+ *   注明失效时点，届时按标准价改录并重跑 golden 门禁。
  *
  * 判定链：策略 key 特异性（provider/model > model > provider > *）→ 目录命中
  * （精确 > 最长后缀 > 最长包含）→ 目录外走 snapshot.defaultPricing（缺省
@@ -60,7 +62,7 @@ export interface PricingSnapshot {
   policies?: Readonly<Record<string, PolicyEntry>>
 }
 
-/** 目录条目：cn 为 峰谷对 或 平价行；global 预留平价（当前留空）。 */
+/** 目录条目：cn 为 峰谷对 或 平价行；global 为海外平价行（USD，2026-10-18 起有条目）。 */
 export interface CatalogEntry {
   key: string
   label: string
@@ -73,8 +75,8 @@ export interface CatalogEntry {
   source: string
 }
 
-/** 目录版本（进解析缓存键与审计）。 */
-export const CATALOG_VERSION = 1
+/** 目录版本（进解析缓存键与审计）。2 = 2026-10-18 补录海外 USD 行。 */
+export const CATALOG_VERSION = 2
 
 /**
  * 目录外模型的兜底典型价（CNY/百万 token）：取 DeepSeek-V4.1-Flash 谷时行
@@ -88,6 +90,9 @@ export const BILLING_FALLBACK: { row: PriceRow; currency: Currency } = {
 
 const PEAKOFF = 'DeepSeek 官方峰谷分时（峰窗 09-12/14-18 北京；源 api-docs.deepseek.com/zh-cn/quick_start/pricing/）'
 const PEAKREF = '镜像 .peakref/companion/lib/core/price/catalog.js 官方页快照（低档价）'
+const ANOFF = 'Anthropic 官方定价页 2026-10-18 抓取快照（USD/MTok 默认档；缓存写入加价不在三价目位内；Haiku 取 ≤100K 低档）'
+const OPAIREF = 'GitHub Copilot 计费文档 2026-10-18 抓取（USD/MTok 默认档，与 OpenAI 公告口径交叉核实；缓存写入价不在三价目位内）'
+const GEOREF = 'GitHub Copilot 计费文档 2026-10-18 抓取（USD/MTok，与 Google 公告口径交叉核实）'
 
 /** 内置典型价目目录（CNY/百万 token）。 */
 export const PRICE_CATALOG: readonly CatalogEntry[] = [
@@ -163,6 +168,64 @@ export const PRICE_CATALOG: readonly CatalogEntry[] = [
   { key: 'ernie-4.5', label: 'Ernie-4.5', aliases: ['ernie-4.5'], cn: { flat: { inputCacheHit: 0.8, inputMiss: 4, output: 16 } }, asOf: '2026-10-17', source: PEAKREF },
   { key: 'ernie-4.5-turbo', label: 'Ernie-4.5-Turbo', aliases: ['ernie-4.5-turbo'], cn: { flat: { inputCacheHit: 0.16, inputMiss: 0.8, output: 3.2 } }, asOf: '2026-10-17', source: PEAKREF },
   { key: 'ernie-x1', label: 'Ernie-X1', aliases: ['ernie-x1'], cn: { flat: { inputCacheHit: 0.4, inputMiss: 2, output: 8 } }, asOf: '2026-10-17', source: PEAKREF },
+  // ---- 海外 USD 行（2026-10-18 补录；均无峰谷分时，global 平价） ----
+  {
+    key: 'claude-fable-5.1', label: 'Claude-Fable-5.1', aliases: ['claude-fable-5.1', 'fable-5.1'],
+    global: { flat: { inputCacheHit: 0.25, inputMiss: 10, output: 50 } },
+    asOf: '2026-10-18', source: ANOFF,
+  },
+  {
+    key: 'claude-opus-5.5', label: 'Claude-Opus-5.5', aliases: ['claude-opus-5.5', 'opus-5.5'],
+    global: { flat: { inputCacheHit: 0.2, inputMiss: 4, output: 20 } },
+    asOf: '2026-10-18', source: ANOFF,
+  },
+  {
+    key: 'claude-sonnet-5.5', label: 'Claude-Sonnet-5.5', aliases: ['claude-sonnet-5.5', 'sonnet-5.5'],
+    global: { flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } },
+    asOf: '2026-10-18', source: ANOFF,
+  },
+  {
+    key: 'claude-haiku-5.5', label: 'Claude-Haiku-5.5', aliases: ['claude-haiku-5.5', 'haiku-5.5'],
+    // 官方两档价：≤100K prompt 取低档（>100K 为 0.05/0.50/2.50）。
+    global: { flat: { inputCacheHit: 0.01, inputMiss: 0.1, output: 0.5 } },
+    asOf: '2026-10-18', source: `${ANOFF}；>100K prompt 档未录`,
+  },
+  {
+    key: 'gpt-6-astra', label: 'GPT-6-Astra', aliases: ['gpt-6-astra'],
+    global: { flat: { inputCacheHit: 1, inputMiss: 10, output: 50 } },
+    asOf: '2026-10-18', source: OPAIREF,
+  },
+  {
+    key: 'gpt-6-sol', label: 'GPT-6-Sol', aliases: ['gpt-6-sol'],
+    global: { flat: { inputCacheHit: 0.2, inputMiss: 2, output: 10 } },
+    asOf: '2026-10-18', source: OPAIREF,
+  },
+  {
+    key: 'gpt-6-luna', label: 'GPT-6-Luna', aliases: ['gpt-6-luna'],
+    global: { flat: { inputCacheHit: 0.01, inputMiss: 0.1, output: 0.5 } },
+    asOf: '2026-10-18', source: OPAIREF,
+  },
+  {
+    key: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', aliases: ['gpt-6.1-sol'],
+    global: { flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } },
+    asOf: '2026-10-18', source: OPAIREF,
+  },
+  {
+    key: 'gemini-4-argon', label: 'Gemini-4-Argon', aliases: ['gemini-4-argon'],
+    // 介绍价至 2026-11-30；届后标准价 $4/$0.20/$20 需改录并重跑 golden。
+    global: { flat: { inputCacheHit: 0.1, inputMiss: 2, output: 10 } },
+    asOf: '2026-10-18', source: `${GEOREF}；介绍价止 2026-11-30，后转 $4/0.20/20`,
+  },
+  {
+    key: 'gemini-3.7-flash', label: 'Gemini-3.7-Flash', aliases: ['gemini-3.7-flash'],
+    global: { flat: { inputCacheHit: 0.075, inputMiss: 0.75, output: 3.75 } },
+    asOf: '2026-10-18', source: `${GEOREF}；促销价止 2026-12-31`,
+  },
+  {
+    key: 'gemini-3.8-flash', label: 'Gemini-3.8-Flash', aliases: ['gemini-3.8-flash'],
+    global: { flat: { inputCacheHit: 0.075, inputMiss: 0.75, output: 3.75 } },
+    asOf: '2026-10-18', source: `${GEOREF}；促销价止 2026-12-31`,
+  },
 ]
 
 /**
