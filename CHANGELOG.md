@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.3.2 (2026-10-18)
+
+- hosts: 追加 0.2.1-rc.2 声明面枚举（宿主 peer 逐包 npm 实测 rc.2 在版；不触 ctx.web provider 与 model.label 槽，代码零改动，纯元数据发版；农场 rc.2 格挂账待命）
+
 All notable changes to `dsh-thinking-levels` are documented here.
 
 - [English changelog](./CHANGELOG.md)

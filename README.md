@@ -33,7 +33,7 @@
 
 > **▼ DSH version support**
 >
-> This release (4.3.x) pins DSH hosts by the exact 12-term enumeration `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1` — each rc listed individually, no ranges or carets; 0.2.1 stable is not declared until it ships.
+> This release (4.3.x) pins DSH hosts by the exact 13-term enumeration `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2` — each rc listed individually, no ranges or carets; 0.2.1 stable is not declared until it ships.
 >
 > | DSH version | Status | Notes |
 > | --- | --- | --- |
