@@ -1,22 +1,29 @@
 import { describe, expect, it } from 'vitest'
+import type { Volatile } from '@deepseek-ai/cosmokit'
 import { Config, DEFAULT_CONFIG, installLegacySection, readVolatile } from '../src/index.ts'
 
 /** Partial configs ride the wire untrusted; type level only sees full ones. */
 const asConfig = (patch: Record<string, unknown>) => patch as never
 
+/** schemastery hands `.volatile()` fields back as live refs; present a parsed
+ * field in `readVolatile`'s input shape (the union there drives the generic
+ * inference — a bare `Volatile<T>` argument pins T to the ref type instead). */
+const asField = <T>(v: unknown): T | Volatile<T> | undefined => v as T | Volatile<T> | undefined
+
 describe('plugin config schema', () => {
   it('schema defaults stay in lockstep with DEFAULT_CONFIG (volatile fields read through refs)', () => {
     const parsed = Config(asConfig({}))
-    expect(readVolatile(parsed.enabled, true)).toBe(DEFAULT_CONFIG.enabled)
-    expect(readVolatile(parsed.level, 'auto')).toBe(DEFAULT_CONFIG.level)
-    expect(readVolatile(parsed.allowDowngrade, true)).toBe(DEFAULT_CONFIG.allowDowngrade)
-    expect(readVolatile(parsed.allowUpgrade, false)).toBe(DEFAULT_CONFIG.allowUpgrade)
+    expect(readVolatile(asField<boolean>(parsed.enabled), true)).toBe(DEFAULT_CONFIG.enabled)
+    expect(readVolatile(asField<'auto'>(parsed.level), 'auto')).toBe(DEFAULT_CONFIG.level)
+    expect(readVolatile(asField<boolean>(parsed.allowDowngrade), true)).toBe(DEFAULT_CONFIG.allowDowngrade)
+    expect(readVolatile(asField<boolean>(parsed.allowUpgrade), false)).toBe(DEFAULT_CONFIG.allowUpgrade)
+    expect(readVolatile(asField<boolean>(parsed.takeoverUi), false)).toBe(DEFAULT_CONFIG.takeoverUi)
     expect(parsed.models).toEqual(DEFAULT_CONFIG.models)
   })
 
   it('hands the runtime-adjustable fields over as live volatile refs (0.1.7 protocol)', () => {
     const parsed = Config(asConfig({}))
-    for (const field of ['enabled', 'level', 'allowDowngrade', 'allowUpgrade'] as const) {
+    for (const field of ['enabled', 'level', 'allowDowngrade', 'allowUpgrade', 'takeoverUi'] as const) {
       const value: unknown = parsed[field]
       expect(typeof value, field).toBe('object')
       expect(typeof (value as { get?: unknown }).get, field).toBe('function')
@@ -26,11 +33,12 @@ describe('plugin config schema', () => {
   })
 
   it('accepts the nine levels and the scheduler toggles at both surfaces', () => {
-    const parsed = Config(asConfig({ enabled: false, level: 'medium', allowDowngrade: false, allowUpgrade: true }))
-    expect(readVolatile(parsed.enabled, true)).toBe(false)
-    expect(readVolatile(parsed.level, 'auto')).toBe('medium')
-    expect(readVolatile(parsed.allowDowngrade, true)).toBe(false)
-    expect(readVolatile(parsed.allowUpgrade, false)).toBe(true)
+    const parsed = Config(asConfig({ enabled: false, level: 'medium', allowDowngrade: false, allowUpgrade: true, takeoverUi: true }))
+    expect(readVolatile(asField<boolean>(parsed.enabled), true)).toBe(false)
+    expect(readVolatile(asField<'medium'>(parsed.level), 'auto')).toBe('medium')
+    expect(readVolatile(asField<boolean>(parsed.allowDowngrade), true)).toBe(false)
+    expect(readVolatile(asField<boolean>(parsed.allowUpgrade), false)).toBe(true)
+    expect(readVolatile(asField<boolean>(parsed.takeoverUi), false)).toBe(true)
     expect(parsed.models).toEqual({})
   })
 

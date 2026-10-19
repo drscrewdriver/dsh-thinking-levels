@@ -47,8 +47,9 @@ import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } fr
 
 /** The official DeepSeek provider route owned by the llm-deepseek adapter. */
 const DEEPSEEK_PROVIDER = 'deepseek-official'
-/** llm-deepseek's native default context capacity (DEFAULT_CONTEXT_WINDOW). */
-const DEEPSEEK_DEFAULT_WINDOW = 1_000_000
+/** llm-deepseek's native default context capacity (DEFAULT_CONTEXT_WINDOW).
+ * exported for the settings-card editor (4.4.0, takeoverUi off). */
+export const DEEPSEEK_DEFAULT_WINDOW = 1_000_000
 /** Slider stop an unset window parks on: the thumb needs a position, the readout stays "unset". */
 const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value === 256_000)
 
@@ -69,6 +70,22 @@ const UNAVAILABLE_STATE: ModelDirectoryState = {
   error: null,
 }
 
+/**
+ * The absent-own-settings-scope snapshot: a module-level CONSTANT —
+ * `useSyncExternalStore` demands a stable getSnapshot value, an inline
+ * literal re-renders forever (the #185 pattern proven on the capability
+ * card's transport face).
+ */
+const TL_ABSENT_SNAPSHOT = Object.freeze({
+  status: 'unavailable' as const,
+  value: undefined,
+  revision: undefined,
+  writable: false,
+  base: undefined,
+  user: undefined,
+  mode: 'memory' as const,
+})
+
 /** One injected face: the shared model directory plus the two config forms. */
 export interface ModelPanelInjected {
   /**
@@ -82,6 +99,12 @@ export interface ModelPanelInjected {
   piAiScope: SettingsScope<unknown>
   /** The `llm-deepseek` config form (official DeepSeek models). */
   deepseekScope: SettingsScope<unknown>
+  /**
+   * The plugin's OWN settings scope: the trigger chip reads the configured
+   * `level` as the user-intent source (issue #5). Absent on hosts without the
+   * settings channel — the chip then falls back to the directory value.
+   */
+  tlScope?: SettingsScope<unknown>
 }
 
 /** Full props: the injected face + the session standard seat + locale copy. */
@@ -367,7 +390,7 @@ function providersOf(snapshot: unknown): Record<string, unknown> {
 }
 
 /** The user-layer `models`/`defaultContextWindow` of the llm-deepseek namespace. */
-function deepseekSectionOf(snapshot: unknown): {
+export function deepseekSectionOf(snapshot: unknown): {
   models?: Record<string, unknown>[]
   defaultContextWindow?: number
 } {
@@ -389,7 +412,7 @@ function deepseekSectionOf(snapshot: unknown): {
 }
 
 /** One model entry's declared contextWindow, when present. */
-function contextWindowOf(model: Record<string, unknown>): number | undefined {
+export function contextWindowOf(model: Record<string, unknown>): number | undefined {
   const value = model['contextWindow']
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
 }
@@ -429,7 +452,7 @@ function stopIndexOf(value: number | undefined): number {
  * (the "max context window" editor moved into each line).
  * @param props - injected directory + config forms, session seat, copy.
  */
-export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPanelProps): JSX.Element {
+export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessionId, t }: ModelPanelProps): JSX.Element {
   const state = useSyncExternalStore(
     listener => directory?.store.subscribe(listener) ?? (() => {}),
     () => directory?.store.getSnapshot() ?? UNAVAILABLE_STATE,
@@ -442,6 +465,22 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
     listener => deepseekScope.subscribe(listener),
     () => deepseekScope.getSnapshot(),
   )
+  const tlSnapshot = useSyncExternalStore(
+    listener => tlScope?.subscribe(listener) ?? (() => {}),
+    () => (tlScope === undefined ? TL_ABSENT_SNAPSHOT : tlScope.getSnapshot()),
+  )
+  /** The configured default level: the chip's user-intent fallback (issue #5). */
+  const configLevel = (tlSnapshot.status === 'ready'
+    ? (tlSnapshot.value as { level?: string } | undefined)?.level
+    : undefined) ?? 'auto'
+
+  /**
+   * The effort explicitly picked in THIS mount — the authoritative intent
+   * until the session changes (issue #5). The directory's merged `current`
+   * cannot tell a persisted `auto` pending from a scheduler-resolved wire
+   * level apart; a local pick can, so it wins whenever it exists.
+   */
+  const selectedEffortRef = useRef<string | undefined>(undefined)
 
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
@@ -453,6 +492,9 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   const [raw, setRaw] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Popup filter query (issue #3: the official popup's search must survive
+  // the takeover; the threshold `> 4` mirrors the shipped selector's rule).
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -460,10 +502,14 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
     directory?.load().catch(() => { /* surfaced on the shared store */ })
   }, [directory, open])
 
+  // Intent is per-session: a new conversation starts with no local pick.
+  useEffect(() => { selectedEffortRef.current = undefined }, [sessionId])
+
   const close = useCallback((): void => {
     setOpen(false)
     setEditing(null)
     setError(null)
+    setQuery('')
   }, [])
 
   useEffect(() => {
@@ -492,6 +538,26 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
 
   const providers = useMemo(() => providersOf(piSnapshot), [piSnapshot])
   const dsSection = useMemo(() => deepseekSectionOf(dsSnapshot), [dsSnapshot])
+
+  // Popup filtering (issue #3): the takeover popup must offer what the
+  // shipped popup offers — a search row once the catalog outgrows quick
+  // scanning (`> 4`, the shipped rule), matching name/id case-insensitively
+  // and keeping the provider grouping. An empty needle rides the full list.
+  const needle = query.trim().toLowerCase()
+  const totalModels = useMemo(
+    () => state.groups.reduce((count, group) => count + group.models.length, 0),
+    [state.groups],
+  )
+  const showSearch = totalModels > 4
+  const visibleGroups = useMemo(() => (needle === ''
+    ? state.groups
+    : state.groups
+      .map(group => ({
+        ...group,
+        models: group.models.filter(model =>
+          model.name.toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle)),
+      }))
+      .filter(group => group.models.length > 0)), [state.groups, needle])
 
   /** The effective window of one model line, resolved against its family.
    * Declared BEFORE activeWindow: the ring's window-fallback memo calls this
@@ -609,6 +675,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   const chooseEffort = (provider: string, model: string, effort: string): void => {
     if (busy || directory === undefined) return
     setBusy(true)
+    selectedEffortRef.current = effort === '' ? undefined : effort
     directory.select({ provider, model, ...(effort === '' ? {} : { reasoningEffort: effort }) })
       .then(() => { setBusy(false) })
       .catch(() => { setBusy(false) })
@@ -617,12 +684,31 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
   const triggerLabel = current?.name ?? state.current?.model ?? t('model.panel.choose')
 
   const currentReasoning = current?.model.reasoning
-  const effectiveEffort = state.current?.reasoningEffort ?? currentReasoning?.defaultEffort
+  // Issue #5: the chip shows the USER intent, never the masked wire level the
+  // scheduler last sent alone. Chain: this mount's explicit pick > a merged
+  // value that IS `auto` (a persisted pending auto survives while it differs
+  // from the resolved level) > the configured default when the model
+  // advertises the mask > the directory's merged value. When the intent is
+  // the mask, the step's resolved level rides along as a secondary hint.
+  const resolvedEffort = state.current?.reasoningEffort
+  const autoAdvertised = currentReasoning?.efforts.some(effort => effort.id === 'auto') === true
+  const intentEffort = selectedEffortRef.current
+    ?? (resolvedEffort === 'auto' || (autoAdvertised && configLevel === 'auto')
+      ? 'auto'
+      : resolvedEffort ?? currentReasoning?.defaultEffort)
+  const effortName = (id: string): string =>
+    currentReasoning?.efforts.find(level => level.id === id)?.name ?? id
   const effortLabel = currentReasoning === undefined
     ? undefined
-    : effectiveEffort === undefined
+    : intentEffort === undefined
       ? t('input.effort.default')
-      : currentReasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+      : effortName(intentEffort)
+  const resolvedHint = currentReasoning !== undefined
+    && intentEffort === 'auto'
+    && resolvedEffort !== undefined
+    && resolvedEffort !== 'auto'
+    ? `→ ${effortName(resolvedEffort)}`
+    : undefined
 
   return (
     <div ref={rootRef} style={rootStyle}>
@@ -637,6 +723,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
       >
         <span style={triggerNameStyle}>{triggerLabel}</span>
         {effortLabel !== undefined && <span style={triggerEffortStyle}>{effortLabel}</span>}
+        {resolvedHint !== undefined && <span style={triggerEffortStyle}>{resolvedHint}</span>}
         <span style={chevronStyle}>{open ? '▲' : '▼'}</span>
       </button>
       {/* The context-capacity check ring: user-placed to the RIGHT of the
@@ -653,6 +740,16 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
           <>
             <div style={backdropStyle} onClick={close} />
             <div style={popStyle} role="dialog" aria-label={t('model.panel.choose')}>
+              {showSearch && (
+                <input
+                  type="text"
+                  value={query}
+                  placeholder={t('panel.search.placeholder')}
+                  aria-label={t('panel.search.placeholder')}
+                  style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', margin: '2px 0 6px' }}
+                  onChange={event => setQuery(event.currentTarget.value)}
+                />
+              )}
               <div style={modelsStyle}>
                 {directory === undefined && (
                   <div style={statusStyle}>{t('model.panel.unavailable')}</div>
@@ -660,8 +757,8 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                 {directory !== undefined && state.status === 'loading' && state.groups.length === 0 && (
                   <div style={statusStyle}>{t('model.panel.loading')}</div>
                 )}
-                {directory !== undefined && state.groups.map(group => {
-                  const isExpanded = expanded.has(group.id)
+                {directory !== undefined && visibleGroups.map(group => {
+                  const isExpanded = needle !== '' || expanded.has(group.id)
                   const name = group.name ?? group.label ?? group.id
                   const activeModel = state.current?.provider === group.id ? state.current.model : undefined
                   return (
@@ -883,6 +980,9 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, t }: ModelPane
                   )
                 })}
                 {directory !== undefined && state.status !== 'loading' && state.groups.length === 0 && (
+                  <div style={statusStyle}>{t('model.panel.empty')}</div>
+                )}
+                {directory !== undefined && needle !== '' && visibleGroups.length === 0 && state.groups.length > 0 && (
                   <div style={statusStyle}>{t('model.panel.empty')}</div>
                 )}
               </div>

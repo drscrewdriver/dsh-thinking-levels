@@ -107,7 +107,7 @@ function useContributorTabs(
 }
 
 export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.Element {
-  const { t: tHost, renderSlot, scope, piAiScope, ocScope } = props
+  const { t: tHost, renderSlot, scope, piAiScope, ocScope, deepseekScope } = props
   // Locale: the host's PropsLocale delivery when present (0.1.7+), the injected
   // EAGER binder when not (≤0.1.6), identity as the last resort — a thrown
   // translate kills the whole section render.
@@ -149,7 +149,7 @@ export function FamilySettingsSection(props: FamilySettingsSectionProps): JSX.El
       </div>
       <div role="tabpanel">
         {active === OWN_TAB_ID
-          ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} ocScope={ocScope} />
+          ? <ThinkingLevelsCard t={t} scope={scope} piAiScope={piAiScope} ocScope={ocScope} deepseekScope={deepseekScope} />
           : renderSlot
             ? renderSlot('dsh-family.tab', {}, { only: active, fallback: null })
             : props.renderContributor?.(active) ?? null}

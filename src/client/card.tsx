@@ -29,6 +29,7 @@ import type { SettingsScope } from './scope-face.ts'
 import type { EffortId } from '../thinking-level.ts'
 import type { PricingPolicy } from '../price-catalog.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
+import { contextWindowOf, deepseekSectionOf, DEEPSEEK_DEFAULT_WINDOW } from './model-panel.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
@@ -43,6 +44,12 @@ export interface ThinkingLevelsCardInjected {
    * transport is not composed; the checkbox then renders disabled.
    */
   ocScope?: SettingsScope<unknown>
+  /**
+   * The `llm-deepseek` section: with the seat takeover off (4.4.0 default)
+   * the official-model context editor lives on this card instead of the
+   * ModelPanel lines. Absent on hosts without the namespace.
+   */
+  deepseekScope?: SettingsScope<unknown>
 }
 
 /** Full props: locale seat + the injected scopes. */
@@ -360,6 +367,8 @@ interface CapabilityEntry {
   providerCompat?: unknown
   /** The provider-level `defaultInput`, applied to models that declare none (display parity). */
   providerInput?: unknown[]
+  /** The provider-level `api` (wire protocol): the host's compat gates differ per protocol. */
+  providerApi?: unknown
 }
 
 /** The effective `compat` of an entry: its own `compat` merged over the provider-level `compat`. */
@@ -371,6 +380,19 @@ function compatOf(entry: CapabilityEntry): Record<string, unknown> {
   return typeof own === 'object' && own !== null && !Array.isArray(own)
     ? { ...base, ...(own as Record<string, unknown>) }
     : base
+}
+
+/**
+ * Whether the model-level thinking-compat fields (`compat.thinkingFormat`,
+ * `compat.supportsReasoningEffort`) may be written for this entry's provider
+ * (issue #2): the host llm-pi-ai gate offers them ONLY on the
+ * openai-completions protocol — a Responses route carrying them fails the
+ * WHOLE providers write (`not configurable here`). An absent `api` keeps
+ * pi-ai's openai-completions default, so the row stays editable.
+ * (exported for the gate's unit regression, issue #2)
+ */
+export function effortCompatConfigurable(entry: CapabilityEntry): boolean {
+  return typeof entry.providerApi !== 'string' || entry.providerApi === 'openai-completions'
 }
 
 /** Flatten the user-layer providers into capability entries (models arrays only). */
@@ -392,6 +414,7 @@ function entriesOf(providers: Record<string, unknown>): CapabilityEntry[] {
         : `#${index + 1}`,
       providerCompat,
       providerInput,
+      providerApi: raw['api'],
     }))
   })
 }
@@ -934,6 +957,10 @@ function ModelCapabilities(props: {
                   // route-declared thinking/effort posture shows on every model.
                   const compat = compatOf(entry)
                   const supportsEffort = compat['supportsReasoningEffort'] === true
+                  // Issue #2: a non-completions protocol refuses the thinking-compat
+                  // fields at the write site — grey the three controls out before
+                  // the attempt instead of failing the whole providers payload.
+                  const apiGated = !effortCompatConfigurable(entry)
                   const meta = summaryOf(entry)
                   const format = typeof compat['thinkingFormat'] === 'string'
                     ? compat['thinkingFormat']
@@ -969,13 +996,17 @@ function ModelCapabilities(props: {
                       {modelOpen
                         ? (
                           <div style={{ padding: '4px 10px 10px', borderTop: '1px solid var(--dsw-alias-border-l2)' }}>
+                            {apiGated && <p style={hintStyle}>{t('card.capabilities.apiUnsupported')}</p>}
                             {/* Layer 1 — base capabilities: is it a thinking model? A vision model? */}
                             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '2px 0 8px' }}>
-                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                              <label
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                                title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
+                              >
                                 <input
                                   type="checkbox"
                                   checked={thinking}
-                                  disabled={readonly || busy}
+                                  disabled={readonly || busy || apiGated}
                                   onChange={(event) => toggleThinking(entry, event.currentTarget.checked)}
                                 />
                                 <span>{t('card.capabilities.thinking')}</span>
@@ -1015,11 +1046,14 @@ function ModelCapabilities(props: {
                             {/* Layer 2 — only for thinking models: does it take reasoning_effort levels? */}
                             {thinking
                               ? (
-                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', margin: '0 0 8px' }}>
+                                <label
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', margin: '0 0 8px' }}
+                                  title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
+                                >
                                   <input
                                     type="checkbox"
                                     checked={supportsEffort}
-                                    disabled={readonly || busy}
+                                    disabled={readonly || busy || apiGated}
                                     onChange={(event) => toggleEffortCapable(entry, event.currentTarget.checked)}
                                   />
                                   <span>{t('card.capabilities.supportsEffort')}</span>
@@ -1110,7 +1144,8 @@ function ModelCapabilities(props: {
                                 <select
                                   style={controlStyle}
                                   value={format ?? 'inherit'}
-                                  disabled={readonly || busy}
+                                  disabled={readonly || busy || apiGated}
+                                  title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
                                   onChange={(event) => {
                                     const next = event.currentTarget.value
                                     patchModel(entry.providerId, entry.index, (row) => {
@@ -1202,12 +1237,172 @@ function ModelCapabilities(props: {
 }
 
 /**
+ * The absent-llm-deepseek snapshot: module-level CONSTANT (the stable-snapshot
+ * rule that killed the first-ever panel mount, #185).
+ */
+const DS_ABSENT_SNAPSHOT = Object.freeze({
+  status: 'unavailable' as const,
+  value: undefined,
+  revision: undefined,
+  writable: false,
+  base: undefined,
+  user: undefined,
+  mode: 'memory' as const,
+})
+
+/**
+ * Official DeepSeek model context-window editor (4.4.0): the per-line editor
+ * lived only in the ModelPanel; with the seat takeover off by default the
+ * card owns it. Writes mirror the panel's DEEPSEEK branch exactly: the model
+ * entry's `contextWindow` when listed, the route `defaultContextWindow`
+ * otherwise (clear = back to the native 1M).
+ * @param props - the llm-deepseek scope (absent = section hidden), copy, fence.
+ * @returns the editor block, or null when the namespace/scope is unavailable.
+ */
+function DeepSeekContextSection(props: {
+  scope: SettingsScope<unknown> | undefined
+  t: (key: string) => string
+  readonly: boolean
+}): JSX.Element | null {
+  const { scope, t, readonly } = props
+  const subscribe = useCallback(
+    (listener: () => void) => (scope !== undefined ? scope.subscribe(listener) : () => {}),
+    [scope],
+  )
+  const getSnapshot = useCallback(
+    () => (scope === undefined ? DS_ABSENT_SNAPSHOT : scope.getSnapshot()),
+    [scope],
+  )
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot)
+  const [raw, setRaw] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  if (snapshot.status !== 'ready') return null
+  const section = deepseekSectionOf(snapshot)
+  const models = section.models ?? []
+  if (models.length === 0 && section.defaultContextWindow === undefined) return null
+  const writable = snapshot.writable && !readonly && !busy
+
+  /** Commit one row's window (index -1 = the route default layer). */
+  const commit = (index: number, value: number | undefined): void => {
+    if (scope === undefined || !writable) return
+    setBusy(true)
+    const rows = (deepseekSectionOf(scope.getSnapshot()).models ?? []).map(entry => ({ ...entry }))
+    const write = index >= 0
+      ? scope.set('models', rows.map((entry, at) => {
+        if (at !== index) return entry
+        if (value === undefined) {
+          const rest = { ...entry }
+          delete rest['contextWindow']
+          return rest
+        }
+        return { ...entry, contextWindow: value }
+      }))
+      : scope.set('defaultContextWindow', value ?? DEEPSEEK_DEFAULT_WINDOW)
+    void write.then(
+      () => {
+        setBusy(false)
+        setErrors(cur => {
+          const next = { ...cur }
+          delete next[String(index)]
+          return next
+        })
+      },
+      () => {
+        setBusy(false)
+        setErrors(cur => ({ ...cur, [String(index)]: t('card.capabilities.failed') }))
+      },
+    )
+  }
+
+  /** Validate and commit the custom input; empty clears. */
+  const applyCustom = (index: number): void => {
+    const key = String(index)
+    const trimmed = (raw[key] ?? '').trim()
+    if (trimmed === '') {
+      commit(index, undefined)
+      return
+    }
+    const validation = validateContextWindow(trimmed)
+    if (!validation.ok) {
+      setErrors(cur => ({
+        ...cur,
+        [key]: t(validation.reason === 'integer' ? 'input.context.integer' : 'input.context.range'),
+      }))
+      return
+    }
+    commit(index, validation.value)
+  }
+
+  const rows: { label: string; index: number; value: number | undefined }[] = [
+    ...models.map((entry, index) => ({
+      label: String(entry['name'] ?? entry['id'] ?? index),
+      index,
+      value: contextWindowOf(entry),
+    })),
+    { label: t('model.panel.window'), index: -1, value: section.defaultContextWindow },
+  ]
+
+  return (
+    <div style={sectionStyle}>
+      <p style={fieldLabelStyle}>{t('card.dsContextTitle')}</p>
+      {rows.map(row => {
+        const key = String(row.index)
+        return (
+          <div key={key} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', margin: '6px 0' }}>
+            <span style={{ ...fieldLabelStyle, margin: 0 }}>{row.label}</span>
+            <span style={badgeStyle}>{row.value === undefined ? t('input.context.unset') : formatContextWindow(row.value)}</span>
+            {CONTEXT_WINDOW_PRESETS.map(preset => (
+              <button
+                key={preset.value}
+                type="button"
+                disabled={!writable}
+                onClick={() => commit(row.index, preset.value)}
+                style={{
+                  ...controlStyle,
+                  padding: '2px 8px',
+                  cursor: writable ? 'pointer' : 'default',
+                  opacity: writable ? 1 : 0.5,
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+            <input
+              type="text"
+              inputMode="numeric"
+              value={raw[key] ?? ''}
+              disabled={!writable}
+              placeholder={t('card.capabilities.contextCustomPlaceholder')}
+              style={{ ...controlStyle, width: '120px' }}
+              onChange={event => setRaw(cur => ({ ...cur, [key]: event.currentTarget.value }))}
+              onKeyDown={event => { if (event.key === 'Enter') applyCustom(row.index) }}
+            />
+            <button
+              type="button"
+              disabled={!writable || row.value === undefined}
+              onClick={() => commit(row.index, undefined)}
+              style={{ ...controlStyle, padding: '2px 8px' }}
+            >
+              {t('input.context.clear')}
+            </button>
+            {errors[key] !== undefined && (
+              <span style={{ fontSize: '12px', color: 'var(--dsw-alias-danger, #e5484d)' }}>{errors[key]}</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * The card body, wrapped in a disclosure shell like every peer settings card:
  * a header (name + description + chevron) that toggles the body, expanded by
  * default so the family section reads as an open page of drawers.
  * @param props - locale copy and the injected scopes.
  */
-export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLevelsCardProps): JSX.Element {
+export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope }: ThinkingLevelsCardProps): JSX.Element {
   const [open, setOpen] = useState(true)
   // Stable subscription identities (see ModelCapabilities): the host controller
   // folds a fresh snapshot on every subscribe, so per-render inline lambdas
@@ -1226,17 +1421,18 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
     allowDowngrade: boolean
     allowUpgrade: boolean
     takeover: boolean
+    takeoverUi: boolean
     defaultPricing: PricingPolicy
   }>
   // Optimistic overlay for this card's own writes (plan §E): same contract as
   // the capability card's overlay — clear on resolve(true), roll back + banner
   // on resolve(false).
-  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; defaultPricing: PricingPolicy }>>({})
+  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; takeoverUi: boolean; defaultPricing: PricingPolicy }>>({})
   const [writeErrorTl, setWriteErrorTl] = useState<string | null>(null)
   const viewValue = { ...value, ...pendingTl }
   const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
   const defaultPricing = PRICING_OPTIONS.includes(viewValue.defaultPricing as PricingPolicy) ? viewValue.defaultPricing as PricingPolicy : 'estimate'
-  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover' | 'defaultPricing', v: unknown): void => {
+  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
     setPendingTl((cur) => ({ ...cur, [field]: v as never }))
     void setWithRetry(scope, field, v).then(({ ok }) => {
       setPendingTl((cur) => {
@@ -1351,6 +1547,21 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                     />
                   </div>
                   <div style={rowStyle}>
+                    <label
+                      htmlFor="plugin-config-thinking-levels-takeover-ui"
+                      style={labelStyle}
+                      title={t('card.takeoverUiHint')}
+                    >{t('card.takeoverUi')}</label>
+                    <input
+                      id="plugin-config-thinking-levels-takeover-ui"
+                      type="checkbox"
+                      checked={viewValue.takeoverUi ?? false}
+                      disabled={readonly}
+                      title={t('card.takeoverUiHint')}
+                      onChange={(event) => { writeTl('takeoverUi', event.currentTarget.checked) }}
+                    />
+                  </div>
+                  <div style={rowStyle}>
                     <label htmlFor="plugin-config-thinking-levels-downgrade" style={labelStyle}>{t('card.allowDowngrade')}</label>
                     <input
                       id="plugin-config-thinking-levels-downgrade"
@@ -1394,6 +1605,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope }: ThinkingLev
                   {!snapshot.writable
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
                   <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
+                  <DeepSeekContextSection scope={deepseekScope} t={t} readonly={readonly} />
                 </>
               )}
           </div>

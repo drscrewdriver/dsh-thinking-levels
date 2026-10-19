@@ -75,6 +75,14 @@ export interface ThinkingLevelsConfig {
      * flag is the control-layer UI for it.
      */
     takeover: boolean | Volatile<boolean>;
+    /**
+     * UI takeover switch (issues #3/#4): false (default) keeps the official
+     * composer model popup — the `auto` mask still arrives through the adapter
+     * advertisement below, and the official popup keeps its native search.
+     * true seats the plugin's ModelPanel (which carries its own search box and
+     * the intent/resolved effort chip).
+     */
+    takeoverUi: boolean | Volatile<boolean>;
     /** Configurer-confirmed capability overrides, keyed `provider/model`. */
     models: Record<string, ModelCapabilityOverride>;
     /**
@@ -97,6 +105,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
+    takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
@@ -115,6 +124,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
+    takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
@@ -141,6 +151,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
+    takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
@@ -159,6 +170,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
+    takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
@@ -191,6 +203,45 @@ declare module '@deepseek-ai/cordis' {
  * the schema default is the fallback.
  */
 export declare function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T): T;
+/** Minimal face of the llm service's adapter registrations (typed locally to avoid a host-package value import). */
+interface LlmRegistration {
+    adapter: {
+        resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
+            reasoning?: {
+                efforts?: {
+                    id: string;
+                    name: string;
+                }[];
+            };
+        }>;
+    };
+}
+/**
+ * Advertise `auto` (and, for configurer-confirmed rc.6-era models, `low`) in
+ * the model directory: wrap every registered adapter's `resolveModel` so the
+ * returned `reasoning.efforts` include the extra levels. Idempotent per
+ * adapter. `auto` is a mask the plugin resolves per request; `low` is only
+ * added when the model override confirms the level, so rc.7+ models (which
+ * already advertise low) and unconfirmed models stay untouched.
+ *
+ * A thinking model WITHOUT effort support (Qwen3.6-style, per the llm-pi-ai
+ * config: `reasoningEfforts` present but `compat.supportsReasoningEffort` not
+ * true) gets its selector collapsed to a plain On/Off toggle: `off` disables
+ * thinking, `on` maps to the `high` level, which pi-ai serializes as
+ * `enable_thinking: true` under `thinkingFormat: qwen`. No auto/low masks are
+ * offered for these — there is nothing to schedule.
+ * @param llm - the resolved `llm` service, when present.
+ * @param overrideFor - model override lookup, keyed `provider/model`.
+ * @param piAiFor - llm-pi-ai config capability lookup, keyed `provider/model`.
+ * (exported for the idempotence regression test, issue #4 — same precedent as
+ * `installLegacySection`)
+ */
+export declare function advertiseModelCapability(llm: {
+    adapters?: Map<string, LlmRegistration>;
+} | undefined, overrideFor: (provider: string, model: string) => ModelCapabilityOverride | undefined, piAiFor: (provider: string, model: string) => {
+    thinkingOn: boolean;
+    supportsEffort: boolean;
+} | undefined): void;
 /**
  * Legacy (≤0.1.6) settings registration: on hosts whose settings service
  * carries the imperative face (`register` present, `describe` absent), install
@@ -208,3 +259,4 @@ export declare function installLegacySection(ctx: Context, config: ThinkingLevel
  * @param config - resolved plugin configuration.
  */
 export declare function apply(ctx: Context, config?: ThinkingLevelsConfig): void;
+export {};

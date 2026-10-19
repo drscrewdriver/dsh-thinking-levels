@@ -11,6 +11,17 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.4.0] — 2026-10-19（issue 일괄 처리: #2 #3 #4 #5）
+
+### 수정
+- 기능 카드(#2): `api`가 openai-completions이 아닌 제공자에서는 Thinking / Supports-effort / thinkingFormat 컨트롤을 안내 문구와 함께 비활성화 — 잘못된 쓰기로 인한 `card.writeError` 제거(호스트 Responses 호환 게이트는 이 모델 필드를 제공하지 않음).
+- 로딩 비용(#4): `resolveModel` 광고를 멱등화(WeakSet 가드). 기존에는 `llm/adapters-updated`마다 래퍼가 중첩되어 해석마다 전체 settings 읽기가 발생. readout 세대 캐시화, 설정 커밋 시 무효화, takeover 미러 재동기는 관련 namespace에서만 실행.
+- 단계 chip(#5): `auto` 선택 시 chip은 **Auto**를 유지하고 해당 스텝의 해석 값은 `→ <level>` 보조 표기로 격하.
+
+### 추가
+- `takeoverUi` 설정(기본 OFF, #3/#4): 공식 모델 팝업 유지(검색·로딩은 네이티브, `auto`는 서버측 광고로 계속 제공). OFF일 때 공식 모델 컨텍스트 편집은 설정 카드로. ON이면 ModelPanel 인수 복원. 변경 후 새로고침 필요.
+- ModelPanel 팝업 검색(#3): 4개 모델 초과 시 표시, 공식 규칙과 동일.
+
 ## [4.3.1] — 2026-10-17(호스트 열거 갱신: 0.2.1-rc.1 추가)
 
 ### Fixed

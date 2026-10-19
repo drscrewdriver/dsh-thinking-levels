@@ -88,6 +88,14 @@ export interface ThinkingLevelsConfig {
    * flag is the control-layer UI for it.
    */
   takeover: boolean | Volatile<boolean>
+  /**
+   * UI takeover switch (issues #3/#4): false (default) keeps the official
+   * composer model popup — the `auto` mask still arrives through the adapter
+   * advertisement below, and the official popup keeps its native search.
+   * true seats the plugin's ModelPanel (which carries its own search box and
+   * the intent/resolved effort chip).
+   */
+  takeoverUi: boolean | Volatile<boolean>
   /** Configurer-confirmed capability overrides, keyed `provider/model`. */
   models: Record<string, ModelCapabilityOverride>
   /**
@@ -126,6 +134,7 @@ export const Config = z.object({
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
   takeover: z.boolean().default(false).volatile(),
+  takeoverUi: z.boolean().default(false).volatile(),
   defaultPricing: defaultPricingSchema.volatile(),
   models: modelsSchema,
 })
@@ -143,6 +152,7 @@ export const LegacyConfig = z.object({
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
   takeover: z.boolean().default(false),
+  takeoverUi: z.boolean().default(false),
   defaultPricing: defaultPricingSchema,
   models: modelsSchema,
 })
@@ -154,6 +164,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   allowDowngrade: true,
   allowUpgrade: false,
   takeover: false,
+  takeoverUi: false,
   defaultPricing: 'estimate',
   models: {},
 }
@@ -193,6 +204,7 @@ interface LiveConfig {
   allowDowngrade: boolean
   allowUpgrade: boolean
   takeover: boolean
+  takeoverUi: boolean
   defaultPricing: PricingPolicy
   models: Record<string, ModelCapabilityOverride>
 }
@@ -210,6 +222,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
     takeover: readVolatile(config.takeover, false),
+    takeoverUi: readVolatile(config.takeoverUi, false),
     defaultPricing: readVolatile(config.defaultPricing, 'estimate'),
     models: config.models,
   }
@@ -243,6 +256,16 @@ interface LlmRegistration {
 }
 
 /**
+ * Adapters whose `resolveModel` is already wrapped — the per-adapter
+ * idempotence issue #4 proves was missing: re-running the advertisement on
+ * every `llm/adapters-updated` stacked a new wrapper per pass, and every
+ * stacked layer re-ran the post-processing on each resolveModel call.
+ * Keyed on the adapter object itself, so a genuinely new adapter is wrapped
+ * once and retired ones need no cleanup.
+ */
+const advertisedAdapters = new WeakSet<object>()
+
+/**
  * Advertise `auto` (and, for configurer-confirmed rc.6-era models, `low`) in
  * the model directory: wrap every registered adapter's `resolveModel` so the
  * returned `reasoning.efforts` include the extra levels. Idempotent per
@@ -259,14 +282,22 @@ interface LlmRegistration {
  * @param llm - the resolved `llm` service, when present.
  * @param overrideFor - model override lookup, keyed `provider/model`.
  * @param piAiFor - llm-pi-ai config capability lookup, keyed `provider/model`.
+ * (exported for the idempotence regression test, issue #4 — same precedent as
+ * `installLegacySection`)
  */
-function advertiseModelCapability(
+export function advertiseModelCapability(
   llm: { adapters?: Map<string, LlmRegistration> } | undefined,
   overrideFor: (provider: string, model: string) => ModelCapabilityOverride | undefined,
   piAiFor: (provider: string, model: string) => { thinkingOn: boolean; supportsEffort: boolean } | undefined,
 ): void {
   for (const registration of llm?.adapters?.values() ?? []) {
     const adapter = registration.adapter
+    // Issue #4: the re-run on every `llm/adapters-updated` must NOT stack
+    // wrappers — each stacked layer re-ran the post-processing (and a full
+    // describeSettings) on every resolveModel call. This WeakSet is the
+    // idempotence the JSDoc has always promised.
+    if (advertisedAdapters.has(adapter)) continue
+    advertisedAdapters.add(adapter)
     const original = adapter.resolveModel.bind(adapter)
     adapter.resolveModel = async (provider, model, signal) => {
       const info = await original(provider, model, signal)
@@ -448,6 +479,20 @@ interface LegacySettingsSctx {
 const THINKING_LEVELS_SETTINGS_NAMESPACE = 'thinking-levels'
 
 /**
+ * The settings namespaces whose commits can move the takeover judgment
+ * (issue #4): the transport's `enabled` mirror must not be re-synced through
+ * a full describeSettings on EVERY unrelated commit — boot fires many.
+ * Includes both transport packaging ids and both own namespaces, so the
+ * mirror still re-checks whenever its own inputs move.
+ */
+const TAKEOVER_SYNC_NAMESPACES: readonly string[] = [
+  PI_AI_NAMESPACE,
+  ...TAKEOVER_NAMESPACE_CANDIDATES,
+  'dsh-thinking-levels',
+  THINKING_LEVELS_SETTINGS_NAMESPACE,
+]
+
+/**
  * Legacy (≤0.1.6) settings registration: on hosts whose settings service
  * carries the imperative face (`register` present, `describe` absent), install
  * this plugin's section so its config is runtime-editable and the live values
@@ -488,6 +533,7 @@ export function installLegacySection(
         allowDowngrade: readVolatile(config.allowDowngrade, true),
         allowUpgrade: readVolatile(config.allowUpgrade, false),
         takeover: readVolatile(config.takeover, false),
+        takeoverUi: readVolatile(config.takeoverUi, false),
         models: config.models,
       }
       const scope = settings.register(THINKING_LEVELS_SETTINGS_NAMESPACE, LegacyConfig, { base: plainBase }) as {
@@ -641,9 +687,10 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   })
   onSyncAny('settings/document-updated', (ns: string) => {
     if (ns === PI_AI_NAMESPACE) syncDeveloperRole()
-    // Any settings commit re-checks the mirror (identity-gated); the write we
-    // just made re-enters here and settles without a second write.
-    syncTakeover()
+    // The mirror re-checks only where a commit can move the takeover
+    // judgment (issue #4); the write it just made re-enters here and
+    // settles (identity-gated) without a second write.
+    if (TAKEOVER_SYNC_NAMESPACES.includes(ns)) syncTakeover()
   })
 
   // Inject the level decision into every model request of a step.
@@ -719,8 +766,17 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // (Qwen3.6) is collapsed to an On/Off toggle in the selector — but ONLY when
   // the route is taken over by the openai-completions transport. A pi-ai-served
   // route (e.g. mimo via xiaomi) keeps its native off/high levels.
+  // Readout cache (issue #4): the resolveModel wrapper runs piAiFor on EVERY
+  // model resolution, and a full describeSettings per call made the model
+  // page cost O(models × adapters). One readout per generation, invalidated
+  // with the capability cache on every settings commit below.
+  let readoutCache: { routes: string[] | null; piAi: PiAiSection | undefined } | undefined
+  const cachedReadout = (): { routes: string[] | null; piAi: PiAiSection | undefined } => {
+    if (readoutCache === undefined) readoutCache = takeoverReadout(ctx)
+    return readoutCache
+  }
   const piAiFor = (provider: string, model: string): { thinkingOn: boolean; supportsEffort: boolean } | undefined => {
-    const readout = takeoverReadout(ctx)
+    const readout = cachedReadout()
     return piAiPosture(readout.piAi, provider, model, readout.routes)
   }
   advertiseModelCapability(llm, overrideFor, piAiFor)
@@ -738,5 +794,6 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // toggle folding follows the new posture on the next request.
   onAny('settings/document-updated', () => {
     capability.clear()
+    readoutCache = undefined
   })
 }

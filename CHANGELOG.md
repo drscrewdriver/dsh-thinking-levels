@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.4.0] — 2026-10-19 (issue batch: #2 #3 #4 #5)
+
+### Fixed
+- Capability card (#2): providers whose `api` is not `openai-completions` (openai-responses family, anthropic-messages …) now grey out the Thinking / Supports-effort / thinkingFormat controls with an explanatory note instead of failing the whole providers write with a generic `card.writeError` — the host's Responses compat gate never offers those model-level fields.
+- Load cost (#4): the `resolveModel` advertisement is idempotent again — repeated `llm/adapters-updated` used to STACK wrappers, each replaying a full settings readout (O(models × wrappers) on the model page). The readout is generation-cached (invalidated on settings commits) and the takeover mirror re-check only runs for namespaces that can move the judgment. Note: the 4.3.0 projection stateVersion bump keeps a ONE-TIME history re-fold on the first load after upgrading.
+- Effort chip (#5): with the level set to `auto` the panel chip keeps showing **Auto** and demotes the step's resolved level to a secondary `→ <level>` hint, instead of being overwritten by the scheduler's wire value.
+
+### Added
+- `takeoverUi` setting (default OFF, #3/#4): the composer keeps the official model popup — native search and loading, and the `auto` mask still arrives through the server-side advertisement; official-model context editing lives on the settings card while it is OFF. Flip it ON to restore the ModelPanel takeover. Reload the page after changing.
+- ModelPanel popup search (#3): shown past four models, mirroring the shipped selector's rule.
+
 ## 4.3.3 (2026-10-18)
 
 - 计价目录化上线：price-catalog 41 条（国内 30 CNY 峰谷/平价 + 海外 11 USD：Claude 4 官方页一手、GPT 4/Gemini 3 Copilot 计费文档×公告交叉核实），注入型号按目录实价入账、目录外走 estimate 典型价兜底并标「未校准·仅供参考」（免费档调用=按标准价折算的花费/白嫖额度感知）。

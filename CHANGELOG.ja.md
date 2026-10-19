@@ -11,6 +11,17 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.4.0] — 2026-10-19（issue まとめ対応：#2 #3 #4 #5）
+
+### 修正
+- 能力カード（#2）：`api` が openai-completions 以外のプロバイダーでは、Thinking / Supports-effort / thinkingFormat のコントロールを説明付きで無効化。無効な書き込みによる `card.writeError` を解消（ホストの Responses 互換ゲートはこれらのモデルレベルフィールドを提供しません）。
+- 読み込みコスト（#4）：`resolveModel` 広告を冪等化（WeakSet ガード）。従来は `llm/adapters-updated` ごとにラッパーが積まれ、解決ごとに全量 settings 読み出しが発生していました。readout は世代キャッシュ化し、設定コミットで無効化。takeover ミラーの再同期は関連 namespace のコミットのみに実行。
+- 档位 chip（#5）：レベルが `auto` のとき chip は **Auto** を維持し、そのステップの解決値は `→ <level>` の二次表示に降格（表示が上書きされる問題の解消）。
+
+### 追加
+- `takeoverUi` 設定（既定 OFF、#3/#4）：公式モデルポップアップを維持（検索・読み込みはネイティブ、`auto` はサーバー側広告で引き続き提供）。OFF の間は公式モデルのコンテキスト編集は設定カードに。ON で ModelPanel 引き継ぎを復元。変更後はリロードが必要。
+- ModelPanel ポップアップの検索（#3）：4 モデル超で表示、公式の規則に準拠。
+
 ## [4.3.1] — 2026-10-17（ホスト列挙の更新：0.2.1-rc.1 を追加）
 
 ### Fixed

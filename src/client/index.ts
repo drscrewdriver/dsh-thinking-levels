@@ -217,6 +217,22 @@ export function apply(ctx: ClientContext): void {
     const directories = scope.modelDirectories
     if (directories === undefined) return
     ctx.slots.inject('conversation.input.model', function* () {
+      // Seat takeover is opt-in since 4.4.0 (issues #3/#4): the settings
+      // snapshot's `takeoverUi` decides. A not-yet-folded mirror (loading),
+      // an absent settings channel, or false all keep the shipped
+      // ModelSelect — native popup, native search, no plugin render cost.
+      // Flipping the switch takes effect on reload (the settings row says so);
+      // reading it late here is deliberately the conservative direction.
+      const tlHandle = scopeOf === undefined
+        ? undefined
+        : tlSettingsScopeOf(scopeOf) as {
+          getSnapshot?: () => { status?: string; value?: unknown }
+          subscribe?: (listener: () => void) => () => void
+        } | undefined
+      const tlSnap = typeof tlHandle?.getSnapshot === 'function' ? tlHandle.getSnapshot() : undefined
+      const takeUi = tlSnap?.status === 'ready'
+        && (tlSnap.value as { takeoverUi?: unknown } | undefined)?.takeoverUi === true
+      if (!takeUi) return
       yield ctx.slots.register({
         name: 'conversation.input.model',
         id: 'context-window-model-panel',
@@ -240,6 +256,9 @@ export function apply(ctx: ClientContext): void {
             // renders, both deferred injects have long settled.
             piAiScope: scopeOf?.('llm-pi-ai') as never,
             deepseekScope: scopeOf?.('llm-deepseek') as never,
+            // The plugin's own settings face: the chip reads the configured
+            // level as the user-intent source (issue #5).
+            tlScope: scopeOf === undefined ? undefined : tlSettingsScopeOf(scopeOf) as never,
           }
         },
       }, ModelPanel)
@@ -294,6 +313,9 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     // hosts register the section as `thinking-levels` (see tlSettingsScopeOf).
     scope: tlSettingsScopeOf(scopeOf!) as never,
     piAiScope: scopeOf!('llm-pi-ai') as never,
+    // The official DeepSeek section: the card's context editor when the seat
+    // takeover is off (4.4.0).
+    deepseekScope: scopeOf!('llm-deepseek') as never,
     // The transport's entry id changed shape across its packaging history
     // (`dsh-llm-openai-completions` in the 0.4.0 fragment; earlier manual
     // installs used the short form): settle on whichever namespace the host's

@@ -173,6 +173,17 @@
 
 ---
 
+## 4.4.0 — GitHub issue 批次修复（#2 / #3 / #4 / #5，2026-10-19）
+
+- **#2 能力卡 writeError**：宿主 `dsh-llm-pi-ai` 的兼容闸门按协议分流（两代宿主实物核对）——`RESPONSES_COMPAT_GATE` 不 offer `compat.thinkingFormat` / `compat.supportsReasoningEffort`，严格校验对携带不可配字段的 providers 整写拒绝（`invalid(...not configurable here)`）。插件不分 api 类型一律写这两个字段 → responses 路由必炸 `card.writeError`。修复：`CapabilityEntry` 携带 provider 级 `api`，`effortCompatConfigurable()` 判非 `openai-completions`（含 absent=默认 completions 放行）时三个控件 disabled + `apiUnsupported` 提示，杜绝无效写。
+- **#4 加载变慢**：`advertiseModelCapability` JSDoc 声称幂等但函数体无守卫，每次 `llm/adapters-updated` 叠加一层 `resolveModel` 包装，每层带一次全量 `describeSettings` → 模型页成本 O(模型数×层数)（确定性 bug，`tests/advertise.spec.ts` 坐实）。修复：模块级 `WeakSet` 幂等守卫 + `piAiFor` readout 代际缓存（`settings/document-updated` 同点失效）+ `syncTakeover` 仅响应 `TAKEOVER_SYNC_NAMESPACES` 内的提交。另：4.3.0 stateVersion 1→2 的一次性全史重折为升级首载固定成本，不可回滚，已写入发版说明。
+- **#3 弹窗搜索丢失**：座位以 priority -1 整体替换官方 ModelSelect，而官方 0.2.x 弹窗自带 `>4` 搜索（client.js `showSearch`），替换品 ModelPanel 无搜索。修复双路：接管态弹窗补搜索（阈值/行为对齐官方）+ 新增 `takeoverUi` 开关（缺省 **关** = 不替换官方弹窗，auto 档位仍经 resolveModel 广告注入出现）。
+- **#5 auto 显示被顶掉**：插件把解析值写进请求配置（`{ ...seed, reasoningEffort: decision.level }`），宿主投影 `next = pending ?? lastUsed` 在新会话（无 model/selection 事件）直接取 lastUsed=解析值，chip 显示 low。修复在显示层：ModelPanel trigger 改意图源链（本挂载显式选择 > 合并值即 auto > 配置缺省档为 auto 且模型广告 mask > 合并值），意图为 auto 时解析值降为次级标注 `→ low`；未采纳「每请求断言 pending」（会逐步刷 model/selection 事件污染日志）。官方 chip（takeoverUi 关时）不可插件侧改，README/卡片文案标注语义。
+- **附带**：上下文窗口编辑在 takeoverUi 关时迁入设置卡（`DeepSeekContextSection`，写路径与面板 DEEPSEEK 分支同源）；legacy `plainBase` 补 `takeoverUi` 防 ≤0.1.6 宿主丢字段。
+- **验证**：typecheck/build/lint 全绿；vitest 160/160（新增 advertise.spec 3 例、model-panel.spec 6 例、config 3 断言、settings-seat 改造含缺省不接管用例）。
+
+---
+
 ## 通用排查线索
 
 - 插件"已停用/未挂载"无错误：检查 profile 与 `$DSH_HOME/cordis.patch.yml` 的 `disabled` 条目（桌面端可能改写 profile patch 文件）；检查 host 值依赖是否在 profile 解析树内。

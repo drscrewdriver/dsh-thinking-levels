@@ -14,9 +14,10 @@
  *     generates the plugin's settings form from the schema alone);
  *   - `settings.plugins.tab` / `settings.section` stay UNTOUCHED;
  *   - the composer MODEL seat (`conversation.input.model`) is occupied with
- *     the context-window model panel (the dsh-reasoning-effort pattern:
- *     priority -1 replaces the shipped `ModelSelect`), skipped gracefully
- *     when the harness lacks `modelDirectories`.
+ *     the context-window model panel ONLY when `takeoverUi` is on (4.4.0:
+ *     default off keeps the shipped `ModelSelect` — native popup and search;
+ *     occupancy still follows the dsh-reasoning-effort pattern of priority -1),
+ *     skipped gracefully when the harness lacks `modelDirectories`.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index.ts'
@@ -40,15 +41,19 @@ function collectRegistrations(
   withDirectories = true,
   generation: 'configForms' | 'settingsScope' | 'both' = 'configForms',
   nsStatus: Record<string, string> = {},
-  opts: { throwOnChildren?: boolean; advance?: boolean } = {},
+  opts: { throwOnChildren?: boolean; advance?: boolean; takeoverUi?: boolean } = {},
 ): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>> } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
   const forms: string[] = []
   const ledger: Array<Record<string, unknown>> = []
+  const deferred: Array<() => void> = []
+  // 4.4.0 seat gate: the model panel only seats when the own-settings
+  // snapshot carries takeoverUi=true; stub both channels the same way.
+  const takeoverUiValue = { takeoverUi: opts.takeoverUi === true }
   const bindSettingsScope = <T,>(spec: { namespace: string }): T => {
     const ns = spec.namespace
-    return { namespace: ns, getSnapshot: () => ({ status: nsStatus[ns] ?? 'ready' }) } as unknown as T
+    return { namespace: ns, getSnapshot: () => ({ status: nsStatus[ns] ?? 'ready', value: takeoverUiValue }) } as unknown as T
   }
   const ctx = {
     effect: (build: () => unknown) => { void build(); return () => {} },
@@ -57,7 +62,7 @@ function collectRegistrations(
       ? {
           get: <T,>(entryId: string) => {
             forms.push(entryId)
-            return { entryId } as unknown as T
+            return { entryId, getSnapshot: () => ({ status: 'ready', value: takeoverUiValue }) } as unknown as T
           },
         }
       : undefined,
@@ -78,16 +83,24 @@ function collectRegistrations(
     // serves whatever the (0.1.7+ generation) host has — modelDirectories and
     // configForms present, settingsScope deliberately absent (that waist path
     // must not register the legacy card here).
+    // The model-seat callback is FLUSHED after apply: on the real host it
+    // fires when `modelDirectories` starts — after the settings services the
+    // takeoverUi gate reads (4.4.0). Mirroring that order here is the point:
+    // the gate must see a bound scope factory, not apply-time undefined.
     inject: (deps: readonly string[], cb: (scope: Record<string, unknown>) => void) => {
-      const scope: Record<string, unknown> = {}
-      for (const dep of deps) {
-        if (dep === 'modelDirectories') scope[dep] = ctx.modelDirectories
-        else if (dep === 'configForms' && ctx.configForms) scope[dep] = { get: ctx.configForms.get }
-        else if (dep === 'settingsScope' && ctx.settingsScope) scope[dep] = ctx.settingsScope
-        else if (dep === 'sessions') scope[dep] = {}
-        else if (dep === 'remote' || dep === 'remote.session') scope[dep] = {}
+      const build = (): void => {
+        const scope: Record<string, unknown> = {}
+        for (const dep of deps) {
+          if (dep === 'modelDirectories') scope[dep] = ctx.modelDirectories
+          else if (dep === 'configForms' && ctx.configForms) scope[dep] = { get: ctx.configForms.get }
+          else if (dep === 'settingsScope' && ctx.settingsScope) scope[dep] = ctx.settingsScope
+          else if (dep === 'sessions') scope[dep] = {}
+          else if (dep === 'remote' || dep === 'remote.session') scope[dep] = {}
+        }
+        cb(scope)
       }
-      cb(scope)
+      if (deps.includes('modelDirectories')) deferred.push(build)
+      else build()
       return () => {}
     },
     slots: {
@@ -116,6 +129,7 @@ function collectRegistrations(
   // the declaration event), so drive the clock to reach the post-election state.
   vi.useFakeTimers()
   apply(ctx as never)
+  for (const run of deferred) run()
   if (opts.advance !== false) vi.advanceTimersByTime(FAMILY_CLAIM_DELAY_MS + 10)
   vi.useRealTimers()
   return { declared, registrations, forms, ledger }
@@ -127,17 +141,32 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
   })
 
   it('registers the composer model panel, the family top-level section and the plugins-page config card', () => {
-    const { declared, registrations } = collectRegistrations()
-    expect(declared).toEqual(['conversation.input.model', 'conversation.input.right', 'settings.section', 'plugins.bundle.config'])
+    const { declared, registrations } = collectRegistrations(true, 'configForms', {}, { takeoverUi: true })
+    // The seat inject is flushed after apply (the real host fires it once
+    // `modelDirectories` starts), so its declaration lands last; the section
+    // registers on the rank timer, so it seats last.
+    expect(declared).toEqual(['conversation.input.right', 'settings.section', 'plugins.bundle.config', 'conversation.input.model'])
     expect(registrations).toHaveLength(4)
-    expect(registrations[0]!.slot).toBe('conversation.input.model')
-    expect(registrations[1]!.slot).toBe('conversation.input.right')
-    expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
-    // The family claim rides the rank ladder, so it lands AFTER the surfaces that
-    // seat synchronously at apply time -- injection ORDER (declared above) is
-    // unchanged, only the registration order moves.
-    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
-    expect(registrations[3]!.slot).toBe('settings.section')
+    expect(registrations.map(r => r.slot)).toEqual([
+      'conversation.input.right',
+      'plugins.bundle.config',
+      'conversation.input.model',
+      'settings.section',
+    ])
+    expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[2]!.options).toMatchObject({ id: 'context-window-model-panel' })
+    expect(registrations[3]!.options).toMatchObject({ id: 'dsh-family' })
+  })
+
+  it('leaves the shipped ModelSelect in place while takeoverUi is off (4.4.0 default)', () => {
+    // The seat declaration still happens (the inject idles harmlessly), but no
+    // replacing entry registers — the official popup (native search, native
+    // render cost) stays. Issues #3/#4 ride this gate.
+    const { declared, registrations } = collectRegistrations()
+    expect(declared).toContain('conversation.input.model')
+    expect(registrations.find(r => r.slot === 'conversation.input.model')).toBeUndefined()
+    // The modern surface still seats.
+    expect(registrations).toHaveLength(3)
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
@@ -169,17 +198,20 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
   })
 
   it('pins the composer model-panel options (identity + inject factory + config-form entry ids)', () => {
-    const { registrations, forms } = collectRegistrations()
-    const { options } = registrations[0]!
+    const { registrations, forms } = collectRegistrations(true, 'configForms', {}, { takeoverUi: true })
+    const { options } = registrations.find(r => r.slot === 'conversation.input.model')!
     expect(options['id']).toBe('context-window-model-panel')
     expect(options['priority']).toBe(-1)
     expect(options['locale']).toBe('thinking-levels')
     expect(typeof options['inject']).toBe('function')
-    // The injected face binds the session's model directory plus the two
-    // cross-plugin config forms by entry id.
+    // The injected face binds the session's model directory, the two
+    // cross-plugin config forms, and the plugin's own settings face (the
+    // chip's user-intent source, issue #5) — all by entry id.
     const face = (options['inject'] as (sessionId: string) => Record<string, unknown>)('session-1')
-    expect(forms).toEqual(['llm-pi-ai', 'llm-deepseek'])
-    expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'piAiScope'])
+    // The seat gate probes the own namespace once before registering, and the
+    // face re-reads it: the modern entry id appears on both sides of the pair.
+    expect(forms).toEqual(['dsh-thinking-levels', 'llm-pi-ai', 'llm-deepseek', 'dsh-thinking-levels'])
+    expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'piAiScope', 'tlScope'])
     expect(face['directory']).toMatchObject({ sessionId: 'session-1' })
   })
 })

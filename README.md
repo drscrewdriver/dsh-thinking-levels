@@ -97,9 +97,15 @@ For hand-declared `llm-pi-ai` models, map each level to the exact value your gat
 
 The model panel's per-line effort `<select>` became a **segment slider**: click a line's effort chip (it shows the effective level, or *Provider default*) and a full-width slider expands under that line. The stop count adapts to what the model advertises — two-stop toggle-only models, the official `off/low/high/max` set, custom gateway wire values; `auto` (when the directory carries the mask) is pinned **leftmost**, then `off`/`on`, then the strength gradient, unknown wire values last.
 
+Since 4.4.0 the selector's own effort chip shows the **user intent**, not the scheduler's resolved level: with the intent `auto` the main label stays **Auto** and the level actually sent in the last step is demoted to a secondary hint (`→ low`). Note: while the model-UI takeover below is off, the *official* selector's chip keeps showing the last resolved level — that is host projection semantics the plugin cannot restyle.
+
 Interaction follows the approved dsh-reasoning-effort visual baseline: the thumb follows the pointer continuously and **snaps on release** (one route write per gesture), the plain thumb is pure white in every theme, the thumb stays fully visible at both endpoints, and ←/→/Home/End step stop-by-stop. The select's *Provider default* reset survives as the ↺ button of the slider row.
 
 DeepSeek lines (the official route, or any gateway model whose id/name says deepseek) run the **whale-girl runner** as the thumb: an 8-frame side-run strip, ping-pong looped (720 ms per direction at rest, 420 ms while dragging), frozen under `prefers-reduced-motion`. Every other model gets the plain knob.
+
+## Model UI takeover (since 4.4.0)
+
+New setting `takeoverUi` (default **off**): the plugin no longer replaces the composer's model popup — search, grouping and loading stay with the shipped selector, and the `auto` mask still arrives through the server-side advertisement; official-model context editing lives on the settings card. Turning it on restores the ModelPanel takeover (per-line editors + popup search). Reload the page after changing.
 
 The strip is community whale-girl artwork sourced from [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) (`assets/chibi-runner-strip.png`); regenerate the inlined asset with `python tools/whale-mascot.py`.
 

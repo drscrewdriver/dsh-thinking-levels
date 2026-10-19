@@ -7,6 +7,17 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.0] — 2026-10-19 (batch issue #2 #3 #4 #5)
+
+### Corretto
+- Scheda capacità (#2): i provider con `api` diversa da `openai-completions` disattivano Thinking / Supports-effort / thinkingFormat con nota esplicativa, invece di far fallire l'intera scrittura providers con un generico `card.writeError` (il gate Responses non offre quei campi modello).
+- Costi di caricamento (#4): la pubblicità `resolveModel` è idempotente (WeakSet) — i `llm/adapters-updated` ripetuti impilavano wrapper, ognuno con una lettura completa delle settings; readout in cache di generazione, invalidato ai commit; il mirror takeover si risincronizza solo per i namespace rilevanti.
+- Chip livello (#5): con `auto` il chip resta su **Auto** e il livello risolto del passo diventa un suggerimento secondario `→ <level>`.
+
+### Aggiunto
+- Impostazione `takeoverUi` (predefinita OFF, #3/#4): il compositore mantiene il popup ufficiale (ricerca e caricamento nativi; la maschera `auto` arriva comunque lato server); il contesto DeepSeek ufficiale si edita sulla scheda impostazioni. Ricaricare la pagina dopo il cambio.
+- Ricerca nel popup ModelPanel (#3): oltre 4 modelli, regola speculare al selettore ufficiale.
+
 ## [4.3.1] — 2026-10-17 (enumerazione host: +0.2.1-rc.1)
 
 ### Fixed
