@@ -1585,12 +1585,11 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                   </div>
                   <div style={rowStyle}>
                     <label htmlFor="plugin-config-thinking-levels-enabled" style={labelStyle}>{t('card.enabled')}</label>
-                    <input
+                    <PillToggle
                       id="plugin-config-thinking-levels-enabled"
-                      type="checkbox"
                       checked={viewValue.enabled ?? true}
                       disabled={readonly}
-                      onChange={(event) => { writeTl('enabled', event.currentTarget.checked) }}
+                      onChange={(next) => { writeTl('enabled', next) }}
                     />
                   </div>
                   <div style={rowStyle}>
@@ -1599,13 +1598,12 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                       style={labelStyle}
                       title={t('card.masterTakeoverHint')}
                     >{t('card.masterTakeover')}</label>
-                    <input
+                    <PillToggle
                       id="plugin-config-thinking-levels-takeover"
-                      type="checkbox"
                       checked={viewValue.takeover ?? false}
                       disabled={readonly}
                       title={t('card.masterTakeoverHint')}
-                      onChange={(event) => { writeTl('takeover', event.currentTarget.checked) }}
+                      onChange={(next) => { writeTl('takeover', next) }}
                     />
                   </div>
                   <div style={rowStyle}>
@@ -1622,24 +1620,25 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                       onChange={(next) => { writeTl('takeoverUi', next) }}
                     />
                   </div>
+                  {/* Visible explainer (user feedback: what enabling actually
+                      buys must be readable without hunting for a tooltip). */}
+                  <p style={{ ...hintStyle, margin: '2px 0 10px' }}>{t('card.takeoverUiHint')}</p>
                   <div style={rowStyle}>
                     <label htmlFor="plugin-config-thinking-levels-downgrade" style={labelStyle}>{t('card.allowDowngrade')}</label>
-                    <input
+                    <PillToggle
                       id="plugin-config-thinking-levels-downgrade"
-                      type="checkbox"
                       checked={viewValue.allowDowngrade ?? true}
                       disabled={readonly || viewValue.level !== 'auto'}
-                      onChange={(event) => { writeTl('allowDowngrade', event.currentTarget.checked) }}
+                      onChange={(next) => { writeTl('allowDowngrade', next) }}
                     />
                   </div>
                   <div style={rowStyle}>
                     <label htmlFor="plugin-config-thinking-levels-upgrade" style={labelStyle}>{t('card.allowUpgrade')}</label>
-                    <input
+                    <PillToggle
                       id="plugin-config-thinking-levels-upgrade"
-                      type="checkbox"
                       checked={viewValue.allowUpgrade ?? false}
                       disabled={readonly || viewValue.level !== 'auto'}
-                      onChange={(event) => { writeTl('allowUpgrade', event.currentTarget.checked) }}
+                      onChange={(next) => { writeTl('allowUpgrade', next) }}
                     />
                   </div>
                   <div style={rowStyle}>

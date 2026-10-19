@@ -194,6 +194,14 @@
 
 ---
 
+## 4.4.2 — 卡片勾选全改乐观药丸 + 接管行可见说明（用户定案，2026-10-19）
+
+- **反馈**：① 接管开关「启用内容不明确」，需补充；② 卡内几个勾选都应为乐观态开关。
+- **修复**：启用/接管主控/允许降档/允许升档/模型界面接管五行统一 `PillToggle`（sr-only 真 checkbox + 绘制轨道旋钮；checked 源全部走 pendingTl 乐观Overlay，写失败回滚+横幅，沿用写即时性既有契约）；接管行下方改为**常驻可见**的 `card.takeoverUiHint` 段落（不再仅悬停 tooltip）。
+- **验证**：typecheck/lint/build 绿；vitest 161/161。
+
+---
+
 ## 通用排查线索
 
 - 插件"已停用/未挂载"无错误：检查 profile 与 `$DSH_HOME/cordis.patch.yml` 的 `disabled` 条目（桌面端可能改写 profile patch 文件）；检查 host 值依赖是否在 profile 解析树内。

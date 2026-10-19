@@ -1,5 +1,10 @@
 # Changelog
 
+## [4.4.2] — 2026-10-19 (card toggles, visible explainer — user feedback)
+
+- The settings-card checkboxes (启用 / 接管主控 / 允许降档 / 允许升档 / 模型界面接管) are now optimistic horizontal pill toggles — click flips instantly, a refused write rolls back.
+- The 模型界面接管 row gained a VISIBLE explainer under the row (previously tooltip-only): what ON replaces, what OFF keeps, and that the auto mask still arrives either way.
+
 ## [4.4.1] — 2026-10-19 (takeoverUi seat watchdog — desktop field report)
 
 - Fixed: `takeoverUi` now applies live, no reload. The 4.4.0 gate read the settings mirror once at seat-inject time; on the real desktop host the model-seat callback can fire BEFORE the settings channel binds or the mirror folds, so with the switch on the panel never seated (and the official popup stayed with no context chips). Seating is now a watchdog re-evaluated whenever the settings waist binds or any settings change lands: flipping the switch seats the ModelPanel — flipping back returns the shipped ModelSelect — immediately.

@@ -7,6 +7,11 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.2] — 2026-10-19 (basculiers de la carte, explication visible — retour utilisateur)
+
+- Les cases de la carte de réglages (Activer / Reprise maître / Abaisser / Relever / Reprise de l'UI modèle) deviennent des piliers horizontaux optimistes : le clic inverse aussitôt, un refus d'écriture revient en arrière.
+- La ligne Reprise de l'UI modèle affiche désormais une explication visible sous la ligne (avant : infobulle seulement) — ce que ON remplace, ce que OFF conserve, et le masque auto arrive dans les deux cas.
+
 ## [4.4.1] — 2026-10-19 (veille du siège takeoverUi — retour terrain desktop)
 
 - Corrigé : `takeoverUi` s'applique désormais sans rechargement. La barrière 4.4.0 lisait le miroir des réglages une seule fois à l'injection du siège ; sur l'hôte réel, le rappel du siège modèle peut précéder la liaison du canal de réglages ou le pliage du miroir — le panneau ne s'asseyait jamais, même interrupteur ON. Désormais une veille ré-évalue à chaque liaison du canal et à chaque changement de réglages.

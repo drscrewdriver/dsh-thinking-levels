@@ -7,6 +7,11 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.2] — 2026-10-19 (Karten-Toggles, sichtbare Erklärung — Nutzerrückmeldung)
+
+- Die Checkboxen der Settings-Karte (Aktivieren / Übernahme-Master / Abstieg / Aufstieg / Modell-UI-Übernahme) sind jetzt optimistische horizontale Pill-Toggles — Klick kippt sofort, ein abgelehnter Write rollt zurück.
+- Unter der Zeile Modell-UI-Übernahme steht nun dauerhaft sichtbar eine Erklärung (vorher nur Tooltip): was ON ersetzt, was OFF behält, und die auto-Maske kommt in beiden Fällen.
+
 ## [4.4.1] — 2026-10-19 (takeoverUi-Sitz-Watchdog — Desktop-Feldbericht)
 
 - Behoben: `takeoverUi` wirkt sofort, ohne Neuladen. Das 4.4.0-Tor las das Settings-Mirror nur einmal beim Seat-Inject; auf dem echten Host konnte der Model-Seat-Callback vor der Settings-Bindung/dem Spiegel-Fold laufen — das Panel seatete trotz ON nie. Jetzt evaluates ein Watchdog bei jeder Settings-Bindung und jeder Änderung erneut.

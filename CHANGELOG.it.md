@@ -7,6 +7,11 @@ Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.2] — 2026-10-19 (toggle della scheda, spiegazione visibile — feedback utente)
+
+- Le caselle della scheda impostazioni (Attiva / Padrone di sostituzione / Consenti discesa / Consenti salita / Sostituzione UI modello) diventano pill toggle orizzontali ottimistici: il clic si capovolge subito, una scrittura rifiutata torna indietro.
+- Sotto la riga Sostituzione UI modello ora c'è una spiegazione sempre visibile (prima solo tooltip): cosa sostituisce ON, cosa conserva OFF, e la maschera auto arriva in entrambi i casi.
+
 ## [4.4.1] — 2026-10-19 (watchdog del seat takeoverUi — riscontro desktop reale)
 
 - Corretto: `takeoverUi` ora si applica senza ricaricare. La guardia 4.4.0 leggeva lo snapshot delle impostazioni una sola volta all'inject del seat; sull'host reale il callback del seat modello può precedere il binding del canale impostazioni o il fold dello specchio, quindi il pannello non si sedeva nemmeno con la levetta ON. Ora un watchdog rivaluta a ogni binding e a ogni modifica delle impostazioni.

@@ -7,6 +7,11 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.2] — 2026-10-19 (toggles de la tarjeta, explicación visible — feedback del usuario)
+
+- Las casillas de la tarjeta de ajustes (Activar / Relevo maestro / Permitir bajar / Permitir subir / Relevo de la UI de modelo) ahora son pill toggles horizontales optimistas: el clic se voltea al instante, una escritura rechazada revierte.
+- Bajo la fila Relevo de la UI de modelo ahora hay una explicación siempre visible (antes solo tooltip): qué reemplaza ON, qué conserva OFF, y la máscara auto llega en ambos casos.
+
 ## [4.4.1] — 2026-10-19 (vigía del asiento takeoverUi — informe de campo desktop)
 
 - Corregido: `takeoverUi` ahora se aplica sin recargar. La barrera 4.4.0 leía el espejo de ajustes una sola vez en el inject del asiento; en el host real el callback del asiento del modelo puede preceder al vínculo del canal de ajustes o al plegado del espejo, por lo que el panel nunca se asentaba aunque el interruptor estuviera ON. Ahora un vigilante reevalúa en cada vínculo y cada cambio de ajustes.
