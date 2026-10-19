@@ -205,6 +205,92 @@ export function apply(ctx: ClientContext): void {
   // with only `modelDirectories` declared that read came back undefined and
   // every `directoryFor` call threw, so the seat entry crashed on first
   // render and the slot boundary abdicated it back to the shipped selector.
+  /**
+   * takeoverUi seat watchdog (4.4.1, desktop field report): the one-shot
+   * mirror read at inject time was not enough — on the real host the seat
+   * callback fires when `modelDirectories` starts, which can precede BOTH the
+   * settings waist binding (`scopeOf` still undefined) and the mirror fold
+   * (status `loading`). A static decision then never seats even with the
+   * switch on, and no reload changes it (the service order is the same every
+   * boot). Seating becomes an evaluation driven by every input that can move
+   * it: the declaration, the waist binding, and each settings change — flip
+   * the switch and the panel seats (or abdicates) immediately, no reload.
+   */
+  let seatDirectories: ModelDirectoriesFace | undefined
+  let seatDeclared = false
+  let seatWatched = false
+  let seatClaimed: (() => void) | undefined
+  let seatWatchOff: (() => void) | undefined
+  let seatHandleMemo: {
+    getSnapshot?: () => { status?: string; value?: unknown }
+    subscribe?: (listener: () => void) => () => void
+  } | undefined
+  const seatHandle = (): typeof seatHandleMemo => {
+    if (seatHandleMemo === undefined && scopeOf !== undefined) {
+      seatHandleMemo = tlSettingsScopeOf(scopeOf) as NonNullable<typeof seatHandleMemo>
+    }
+    return seatHandleMemo
+  }
+  const takeoverUiOn = (): boolean => {
+    const snap = typeof seatHandle()?.getSnapshot === 'function' ? seatHandle()!.getSnapshot!() : undefined
+    return snap?.status === 'ready'
+      && (snap.value as { takeoverUi?: unknown } | undefined)?.takeoverUi === true
+  }
+  const seatOptions = (directories: ModelDirectoriesFace): Record<string, unknown> => ({
+    name: 'conversation.input.model',
+    id: 'context-window-model-panel',
+    priority: -1,
+    locale: NS,
+    inject: (sessionId: string): ModelPanelInjected => {
+      // Entry ids of the target plugins: each dsh llm plugin's composition
+      // entry id matches its settings namespace (`llm-pi-ai` / `llm-deepseek`).
+      // A `directoryFor` failure (odd session shape) must not throw out of
+      // the render: a thrown inject abdicates the seat entry — the whole
+      // takeover — so degrade to the unavailable face instead.
+      let directory: ModelDirectoryFace | undefined
+      try {
+        directory = directories.directoryFor(sessionId)
+      } catch {
+        directory = undefined
+      }
+      return {
+        directory,
+        // Resolved through the generation waist; by the time a session
+        // renders, both deferred injects have long settled.
+        piAiScope: scopeOf?.('llm-pi-ai') as never,
+        deepseekScope: scopeOf?.('llm-deepseek') as never,
+        // The plugin's own settings face: the chip reads the configured
+        // level as the user-intent source (issue #5).
+        tlScope: scopeOf === undefined ? undefined : tlSettingsScopeOf(scopeOf) as never,
+      }
+    },
+  })
+  /** Apply the current intent: seat while on, release the seat while off. */
+  const evaluateSeat = (): void => {
+    if (!seatDeclared || seatDirectories === undefined || scopeOf === undefined) return
+    const on = takeoverUiOn()
+    if (on && seatClaimed === undefined) {
+      try {
+        seatClaimed = ctx.slots.register(seatOptions(seatDirectories) as never, ModelPanel) as unknown as (() => void)
+      } catch {
+        // A host that refuses the late register leaves the shipped selector —
+        // the honest degradation is "no takeover", never a broken composer.
+        seatClaimed = undefined
+      }
+    } else if (!on && seatClaimed !== undefined) {
+      const claim = seatClaimed
+      seatClaimed = undefined
+      claim()
+    }
+  }
+  const startSeatWatch = (): void => {
+    if (seatWatched) return
+    if (scopeOf === undefined || !seatDeclared || seatDirectories === undefined) return
+    seatWatched = true
+    const handle = seatHandle()
+    if (typeof handle?.subscribe === 'function') seatWatchOff = handle.subscribe(() => { evaluateSeat() })
+    evaluateSeat()
+  }
   ;(ctx as unknown as {
     inject: (
       deps: string[],
@@ -216,52 +302,24 @@ export function apply(ctx: ClientContext): void {
   }).inject(['modelDirectories', 'sessions', 'remote', 'remote.session'], (scope) => {
     const directories = scope.modelDirectories
     if (directories === undefined) return
+    seatDirectories = directories
     ctx.slots.inject('conversation.input.model', function* () {
-      // Seat takeover is opt-in since 4.4.0 (issues #3/#4): the settings
-      // snapshot's `takeoverUi` decides. A not-yet-folded mirror (loading),
-      // an absent settings channel, or false all keep the shipped
-      // ModelSelect — native popup, native search, no plugin render cost.
-      // Flipping the switch takes effect on reload (the settings row says so);
-      // reading it late here is deliberately the conservative direction.
-      const tlHandle = scopeOf === undefined
-        ? undefined
-        : tlSettingsScopeOf(scopeOf) as {
-          getSnapshot?: () => { status?: string; value?: unknown }
-          subscribe?: (listener: () => void) => () => void
-        } | undefined
-      const tlSnap = typeof tlHandle?.getSnapshot === 'function' ? tlHandle.getSnapshot() : undefined
-      const takeUi = tlSnap?.status === 'ready'
-        && (tlSnap.value as { takeoverUi?: unknown } | undefined)?.takeoverUi === true
-      if (!takeUi) return
-      yield ctx.slots.register({
-        name: 'conversation.input.model',
-        id: 'context-window-model-panel',
-        priority: -1,
-        locale: NS,
-        inject: (sessionId: string): ModelPanelInjected => {
-          // Entry ids of the target plugins: each dsh llm plugin's composition
-          // entry id matches its settings namespace (`llm-pi-ai` / `llm-deepseek`).
-          // A `directoryFor` failure (odd session shape) must not throw out of
-          // the render: a thrown inject abdicates the seat entry — the whole
-          // takeover — so degrade to the unavailable face instead.
-          let directory: ModelDirectoryFace | undefined
-          try {
-            directory = directories.directoryFor(sessionId)
-          } catch {
-            directory = undefined
-          }
-          return {
-            directory,
-            // Resolved through the generation waist; by the time a session
-            // renders, both deferred injects have long settled.
-            piAiScope: scopeOf?.('llm-pi-ai') as never,
-            deepseekScope: scopeOf?.('llm-deepseek') as never,
-            // The plugin's own settings face: the chip reads the configured
-            // level as the user-intent source (issue #5).
-            tlScope: scopeOf === undefined ? undefined : tlSettingsScopeOf(scopeOf) as never,
-          }
-        },
-      }, ModelPanel)
+      // Reaching the generator proves the seat is declared — late
+      // ctx.slots.register from the watch is then legitimate. The yielded
+      // function is the fiber's teardown: stop watching, give the shipped
+      // ModelSelect back.
+      seatDeclared = true
+      startSeatWatch()
+      yield () => {
+        seatWatchOff?.()
+        seatWatchOff = undefined
+        seatWatched = false
+        if (seatClaimed !== undefined) {
+          const claim = seatClaimed
+          seatClaimed = undefined
+          claim()
+        }
+      }
     })
   })
 
@@ -490,6 +548,9 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     if (forms === undefined) return
     scopeOf = (<T,>(ns: string) => forms.get<T>(ns)) as typeof scopeOf
     registerModernSurface()
+    // The waist may bind AFTER the seat declaration (the desktop boot order
+    // that made the static gate fail) — the watch starts here too.
+    startSeatWatch()
   })
   scopeInject.call(ctx, ['settingsScope'], (scope) => {
     const settingsScope = scope.settingsScope as
@@ -504,5 +565,6 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     // the owner props (tFallback / hooks-compartment polling / direct-mount
     // contributor render).
     registerModernSurface()
+    startSeatWatch()
   })
 }

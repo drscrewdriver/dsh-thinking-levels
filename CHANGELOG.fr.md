@@ -7,6 +7,11 @@ Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.1] — 2026-10-19 (veille du siège takeoverUi — retour terrain desktop)
+
+- Corrigé : `takeoverUi` s'applique désormais sans rechargement. La barrière 4.4.0 lisait le miroir des réglages une seule fois à l'injection du siège ; sur l'hôte réel, le rappel du siège modèle peut précéder la liaison du canal de réglages ou le pliage du miroir — le panneau ne s'asseyait jamais, même interrupteur ON. Désormais une veille ré-évalue à chaque liaison du canal et à chaque changement de réglages.
+- Carte : la ligne takeoverUi devient un pilier horizontal optimiste.
+
 ## [4.4.0] — 2026-10-19 (lot d'issues #2 #3 #4 #5)
 
 ### Corrigé

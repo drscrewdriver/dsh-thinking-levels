@@ -1,5 +1,10 @@
 # Changelog
 
+## [4.4.1] — 2026-10-19 (takeoverUi seat watchdog — desktop field report)
+
+- Fixed: `takeoverUi` now applies live, no reload. The 4.4.0 gate read the settings mirror once at seat-inject time; on the real desktop host the model-seat callback can fire BEFORE the settings channel binds or the mirror folds, so with the switch on the panel never seated (and the official popup stayed with no context chips). Seating is now a watchdog re-evaluated whenever the settings waist binds or any settings change lands: flipping the switch seats the ModelPanel — flipping back returns the shipped ModelSelect — immediately.
+- Card: the takeoverUi row is an optimistic horizontal pill toggle (flips on click, rolls back on a refused write).
+
 ## [4.4.0] — 2026-10-19 (issue batch: #2 #3 #4 #5)
 
 ### Fixed

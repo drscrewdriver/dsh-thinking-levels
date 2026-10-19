@@ -105,7 +105,7 @@ DeepSeek lines (the official route, or any gateway model whose id/name says deep
 
 ## Model UI takeover (since 4.4.0)
 
-New setting `takeoverUi` (default **off**): the plugin no longer replaces the composer's model popup — search, grouping and loading stay with the shipped selector, and the `auto` mask still arrives through the server-side advertisement; official-model context editing lives on the settings card. Turning it on restores the ModelPanel takeover (per-line editors + popup search). Reload the page after changing.
+New setting `takeoverUi` (default **off**): the plugin no longer replaces the composer's model popup — search, grouping and loading stay with the shipped selector, and the `auto` mask still arrives through the server-side advertisement; official-model context editing lives on the settings card. Turning it on restores the ModelPanel takeover (per-line editors + popup search). Changes apply immediately — no reload needed.
 
 The strip is community whale-girl artwork sourced from [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort) (`assets/chibi-runner-strip.png`); regenerate the inlined asset with `python tools/whale-mascot.py`.
 

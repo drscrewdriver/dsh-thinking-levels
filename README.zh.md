@@ -76,7 +76,7 @@ DeepSeek 行（官方路由，或 id/名称含 deepseek 的网关模型）滑钮
 
 ## 模型界面接管（4.4.0 起）
 
-新增设置项「模型界面接管」（`takeoverUi`，缺省关闭）：关闭时不替换官方模型弹窗——搜索、分组、加载都由宿主原生选择器负责，`auto` 档位照常经服务端广告出现；官方模型的上下文编辑在设置卡内完成。开启时恢复本插件的 ModelPanel 接管（逐行上下文/档位编辑 + 弹窗搜索）。更改后需重载页面生效。
+新增设置项「模型界面接管」（`takeoverUi`，缺省关闭）：关闭时不替换官方模型弹窗——搜索、分组、加载都由宿主原生选择器负责，`auto` 档位照常经服务端广告出现；官方模型的上下文编辑在设置卡内完成。开启时恢复本插件的 ModelPanel 接管（逐行上下文/档位编辑 + 弹窗搜索）。切换即时生效，无需重载。
 
 立绘为社区鲸鱼娘二创，来源 [HanaAyane/dsh-reasoning-effort](https://github.com/HanaAyane/dsh-reasoning-effort)（`assets/chibi-runner-strip.png`）；用 `python tools/whale-mascot.py` 可重新生成内联素材。
 

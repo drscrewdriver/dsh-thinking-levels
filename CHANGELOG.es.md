@@ -7,6 +7,11 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.1] — 2026-10-19 (vigía del asiento takeoverUi — informe de campo desktop)
+
+- Corregido: `takeoverUi` ahora se aplica sin recargar. La barrera 4.4.0 leía el espejo de ajustes una sola vez en el inject del asiento; en el host real el callback del asiento del modelo puede preceder al vínculo del canal de ajustes o al plegado del espejo, por lo que el panel nunca se asentaba aunque el interruptor estuviera ON. Ahora un vigilante reevalúa en cada vínculo y cada cambio de ajustes.
+- Tarjeta: la fila takeoverUi pasa a ser un pill toggle horizontal optimista.
+
 ## [4.4.0] — 2026-10-19 (lote de issues #2 #3 #4 #5)
 
 ### Corregido

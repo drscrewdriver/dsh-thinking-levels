@@ -449,6 +449,68 @@ function ChevronIcon({ open }: { open: boolean }): JSX.Element {
 }
 
 /**
+ * Horizontal pill toggle: the real checkbox stays the a11y control (sr-only),
+ * the drawn track/knob reflects `checked` — which the card feeds from its
+ * optimistic overlay, so the pill flips the instant the user clicks and rolls
+ * back on a refused write (same pendingTl contract as every other field).
+ */
+function PillToggle(props: {
+  id: string
+  checked: boolean
+  disabled: boolean
+  title?: string
+  onChange: (next: boolean) => void
+}): JSX.Element {
+  const { id, checked, disabled, title, onChange } = props
+  return (
+    <label
+      htmlFor={id}
+      title={title}
+      style={{ display: 'inline-flex', alignItems: 'center', cursor: disabled ? 'default' : 'pointer' }}
+    >
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        style={{ position: 'absolute', width: 1, height: 1, margin: 0, opacity: 0, pointerEvents: 'none' }}
+      />
+      <span
+        aria-hidden
+        style={{
+          display: 'inline-block',
+          width: '36px',
+          height: '20px',
+          borderRadius: '999px',
+          flex: '0 0 auto',
+          position: 'relative',
+          background: checked
+            ? 'var(--dsw-alias-bg-control-primary, #4d6bfe)'
+            : 'var(--dsw-alias-fill-input-primary, rgba(127,127,127,0.25))',
+          border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))',
+          transition: 'background 0.16s',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: '1px',
+            left: checked ? '17px' : '1px',
+            width: '16px',
+            height: '16px',
+            borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+            transition: 'left 0.16s',
+          }}
+        />
+      </span>
+    </label>
+  )
+}
+
+/**
  * The llm-pi-ai model-capability editor block (dsh-thinking-effort style:
  * provider groups, model rows with badges, per-level wire editors, search and
  * one-click presets).
@@ -1552,13 +1614,12 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                       style={labelStyle}
                       title={t('card.takeoverUiHint')}
                     >{t('card.takeoverUi')}</label>
-                    <input
+                    <PillToggle
                       id="plugin-config-thinking-levels-takeover-ui"
-                      type="checkbox"
                       checked={viewValue.takeoverUi ?? false}
                       disabled={readonly}
                       title={t('card.takeoverUiHint')}
-                      onChange={(event) => { writeTl('takeoverUi', event.currentTarget.checked) }}
+                      onChange={(next) => { writeTl('takeoverUi', next) }}
                     />
                   </div>
                   <div style={rowStyle}>

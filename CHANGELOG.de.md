@@ -7,6 +7,11 @@ Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 
+## [4.4.1] — 2026-10-19 (takeoverUi-Sitz-Watchdog — Desktop-Feldbericht)
+
+- Behoben: `takeoverUi` wirkt sofort, ohne Neuladen. Das 4.4.0-Tor las das Settings-Mirror nur einmal beim Seat-Inject; auf dem echten Host konnte der Model-Seat-Callback vor der Settings-Bindung/dem Spiegel-Fold laufen — das Panel seatete trotz ON nie. Jetzt evaluates ein Watchdog bei jeder Settings-Bindung und jeder Änderung erneut.
+- Karte: takeoverUi-Zeile ist jetzt ein optimistischer horizontales Pill-Toggle.
+
 ## [4.4.0] — 2026-10-19 (Issue-Batch #2 #3 #4 #5)
 
 ### Behoben

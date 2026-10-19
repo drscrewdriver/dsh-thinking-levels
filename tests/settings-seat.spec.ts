@@ -42,18 +42,33 @@ function collectRegistrations(
   generation: 'configForms' | 'settingsScope' | 'both' = 'configForms',
   nsStatus: Record<string, string> = {},
   opts: { throwOnChildren?: boolean; advance?: boolean; takeoverUi?: boolean } = {},
-): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>> } {
+): { declared: string[]; registrations: CapturedRegistration[]; forms: string[]; ledger: Array<Record<string, unknown>>; flipTakeoverUi: (on: boolean) => void; disposals: string[] } {
   const declared: string[] = []
   const registrations: CapturedRegistration[] = []
   const forms: string[] = []
   const ledger: Array<Record<string, unknown>> = []
   const deferred: Array<() => void> = []
+  const listeners: Array<() => void> = []
+  const disposals: string[] = []
   // 4.4.0 seat gate: the model panel only seats when the own-settings
   // snapshot carries takeoverUi=true; stub both channels the same way.
+  // 4.4.1 makes the gate a WATCH: the handle also exposes `subscribe`, so a
+  // flip through `flipTakeoverUi` seats/abdicates without re-running apply.
   const takeoverUiValue = { takeoverUi: opts.takeoverUi === true }
+  const subscribeStub = (listener: () => void): (() => void) => {
+    listeners.push(listener)
+    return () => {
+      const at = listeners.indexOf(listener)
+      if (at >= 0) listeners.splice(at, 1)
+    }
+  }
   const bindSettingsScope = <T,>(spec: { namespace: string }): T => {
     const ns = spec.namespace
-    return { namespace: ns, getSnapshot: () => ({ status: nsStatus[ns] ?? 'ready', value: takeoverUiValue }) } as unknown as T
+    return {
+      namespace: ns,
+      getSnapshot: () => ({ status: nsStatus[ns] ?? 'ready', value: takeoverUiValue }),
+      subscribe: subscribeStub,
+    } as unknown as T
   }
   const ctx = {
     effect: (build: () => unknown) => { void build(); return () => {} },
@@ -62,7 +77,11 @@ function collectRegistrations(
       ? {
           get: <T,>(entryId: string) => {
             forms.push(entryId)
-            return { entryId, getSnapshot: () => ({ status: 'ready', value: takeoverUiValue }) } as unknown as T
+            return {
+              entryId,
+              getSnapshot: () => ({ status: 'ready', value: takeoverUiValue }),
+              subscribe: subscribeStub,
+            } as unknown as T
           },
         }
       : undefined,
@@ -121,7 +140,7 @@ function collectRegistrations(
           throw new Error('slot "dsh-family.tab" is already declared (by an entry in "settings.section")')
         }
         registrations.push({ slot: String(options['name']), options, component })
-        return () => {}
+        return () => { disposals.push(String(options['id'] ?? options['name'])) }
       },
     },
   }
@@ -132,7 +151,17 @@ function collectRegistrations(
   for (const run of deferred) run()
   if (opts.advance !== false) vi.advanceTimersByTime(FAMILY_CLAIM_DELAY_MS + 10)
   vi.useRealTimers()
-  return { declared, registrations, forms, ledger }
+  return {
+    declared,
+    registrations,
+    forms,
+    ledger,
+    disposals,
+    flipTakeoverUi: (on: boolean) => {
+      takeoverUiValue.takeoverUi = on
+      for (const listener of [...listeners]) listener()
+    },
+  }
 }
 
 describe('config-form contract (declarative settings, family shared tab)', () => {
@@ -167,6 +196,24 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(registrations.find(r => r.slot === 'conversation.input.model')).toBeUndefined()
     // The modern surface still seats.
     expect(registrations).toHaveLength(3)
+  })
+
+  it('hot-seats and abdicates on takeoverUi flips without re-running apply (4.4.1 watchdog)', () => {
+    // The desktop field report that made 4.4.0's static gate a reload trap:
+    // the mirror can fold AFTER the seat callback fired. The watch re-evaluates
+    // on every settings change, so a flip seats — and flipping back releases
+    // the claim (the shipped ModelSelect returns via the register disposer).
+    const c = collectRegistrations()
+    expect(c.registrations.find(r => r.slot === 'conversation.input.model')).toBeUndefined()
+    c.flipTakeoverUi(true)
+    expect(c.registrations.filter(r => r.slot === 'conversation.input.model')).toHaveLength(1)
+    // Flipping while already seated must NOT double-claim.
+    c.flipTakeoverUi(true)
+    expect(c.registrations.filter(r => r.slot === 'conversation.input.model')).toHaveLength(1)
+    c.flipTakeoverUi(false)
+    expect(c.disposals).toContain('context-window-model-panel')
+    c.flipTakeoverUi(true)
+    expect(c.registrations.filter(r => r.slot === 'conversation.input.model')).toHaveLength(2)
   })
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {

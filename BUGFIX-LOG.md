@@ -184,6 +184,16 @@
 
 ---
 
+## 4.4.1 — takeoverUi 坐席看门狗（桌面实测反馈，2026-10-19）
+
+- **现象**：桌面端把「模型界面接管」打开后 ModelPanel 没有接管回来，逐行 context 芯片也不显示；重载页面依旧。
+- **根因**：4.4.0 的门控是座位 inject 时的**一次性**镜像读取。真实宿主里 `modelDirectories` 启动可早于配置腰绑定（scopeOf 未绑）与镜像折叠（status loading），两条件任一未满足即永久不坐席；服务启动顺序每次 boot 相同，所以重载也救不了。计划里预留的「重载生效」在真机时序下等于「开关无效」。
+- **修复**：坐席判定改为看门狗（watchdog）：`seatDeclared`/`seatDirectories`/腰绑定三路都触发 `startSeatWatch`，订阅 settings 镜像并在每次变更时 `evaluateSeat`——开→ `ctx.slots.register` 坐席（生成器已证明声明在场，迟到 register 合法）；关→ 调 claim disposer 退位，官方 ModelSelect 回来；重复开不双占（seatClaimed 守卫）。卸载随 fiber disposer 退订。
+- **卡片形式**（用户定案）：takeoverUi 行改为**乐观态横放药丸 toggle**（PillToggle，sr-only 真 checkbox + 绘制轨道/旋钮；checked 源走 pendingTl 乐观Overlay，写失败自动回滚）；9 语 hint 文案同步改为「即时生效，无需重载」。
+- **验证**：typecheck/lint/build 绿；vitest 161/161（新增 hot-flip 用例：off→on 坐席一次、重复 on 不双占、off 退位 disposer 记录、再 on 重坐）。
+
+---
+
 ## 通用排查线索
 
 - 插件"已停用/未挂载"无错误：检查 profile 与 `$DSH_HOME/cordis.patch.yml` 的 `disabled` 条目（桌面端可能改写 profile patch 文件）；检查 host 值依赖是否在 profile 解析树内。
