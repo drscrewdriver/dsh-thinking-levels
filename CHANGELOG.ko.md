@@ -2,6 +2,14 @@
 
 `dsh-thinking-levels`의 주요 변경 사항을 기록합니다.
 
+## [4.4.3] — 2026-10-21 (사고는 모든 프로토콜에서 설정 가능 — issue #6)
+
+- 능력 카드: 사고 체크박스가 openai-completions 외(Responses / Anthropic)에서도 다시 선택 가능합니다. 기록하는 값은 protocol 중립적인 `reasoningEfforts` 이며, 호스트 llm-pi-ai 가 `reasoning: true` + `thinkingLevelMap` 으로 해석하고 pi-ai 가 프로토콜별로 네이티브 변환합니다(에포트 선택의 전제).
+- 비 completions 사고 선언에 completions 전용 `thinkingFormat` 을 더 이상 함께 기록하지 않습니다(모델 계층 기록은 providers 전체 거부를 유발하므로 qwen 형식 자동 채움 생략). `off` 는 실제 값(`none`)을 유지해 Off 가 "미지원"으로 사라지지 않습니다.
+- `thinkingFormat` / 支持 think effort 는 계속 openai-completions 전용(실제로 completions 전용 호환 필드). 카드 안내 문구도 그에 맞게 수정.
+- 호스트 측 호환 동기화: 명시적인 비 completions `api` 를 커스텀 openai-completions 게이트웨이로 판정하지 않음(baseURL 판정은 프로토콜 미지정 시에만).
+- 테스트 168/168 통과.
+
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)

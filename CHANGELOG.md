@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.4.3] — 2026-10-21 (thinking stays configurable on every protocol — issue #6)
+
+### Fixed
+- Capability card: the 思考 (thinking) checkbox is selectable again on every wire protocol, not only openai-completions. It writes the protocol-neutral `reasoningEfforts` (host llm-pi-ai → `reasoning: true` + `thinkingLevelMap`, which pi-ai maps natively per protocol), so the prerequisite the effort selector needs is back on Responses/Anthropic routes too.
+- A non-completions thinking declaration no longer carries the completions-only `thinkingFormat` along: the qwen format autofill is skipped there (a model-level write of it made the host reject the WHOLE providers payload), and `off` keeps a real wire token (`none`) so the Off level stays selectable instead of being marked unsupported by pi-ai.
+- `thinkingFormat` / 支持 think effort remain gated to openai-completions — those two ARE completions-only compat fields — and the card note now says exactly that instead of claiming thinking itself is unconfigurable.
+- Host-side compat sync: an explicitly non-completions `api` is no longer treated as a custom openai-completions gateway (the baseURL heuristic applies only when no protocol is named), so the auto-sync cannot write completions-only compat into a Responses/Anthropic route.
+
+### Tests
+- 168/168: new `writeThinkingRow` protocol matrix (completions / responses / anthropic), the 4.4.x alias, and the sync gateway guard.
+
 ## [4.4.2] — 2026-10-19 (card toggles, visible explainer — user feedback)
 
 - The settings-card checkboxes (启用 / 接管主控 / 允许降档 / 允许升档 / 模型界面接管) are now optimistic horizontal pill toggles — click flips instantly, a refused write rolls back.

@@ -383,16 +383,88 @@ function compatOf(entry: CapabilityEntry): Record<string, unknown> {
 }
 
 /**
- * Whether the model-level thinking-compat fields (`compat.thinkingFormat`,
- * `compat.supportsReasoningEffort`) may be written for this entry's provider
- * (issue #2): the host llm-pi-ai gate offers them ONLY on the
- * openai-completions protocol — a Responses route carrying them fails the
- * WHOLE providers write (`not configurable here`). An absent `api` keeps
- * pi-ai's openai-completions default, so the row stays editable.
- * (exported for the gate's unit regression, issue #2)
+ * Whether this entry's wire protocol takes the model-level
+ * openai-completions compat fields (`compat.thinkingFormat`,
+ * `compat.supportsReasoningEffort`). The host llm-pi-ai gate (`COMPAT_GATES`)
+ * offers them ONLY on openai-completions, and a MODEL-level write carrying one
+ * on a Responses/Anthropic route fails the WHOLE providers payload
+ * (`not configurable here`). An absent `api` keeps pi-ai's
+ * openai-completions default, so the row stays editable.
+ *
+ * Scoped to the FIELD, never to thinking: the thinking DECLARATION
+ * (`reasoningEfforts`) is protocol-neutral and stays editable everywhere — a
+ * non-completions route merely must not carry the completions-only compat
+ * fields alongside it (issue #6).
+ * (exported for the gate's unit regression, issues #2/#6)
  */
-export function effortCompatConfigurable(entry: CapabilityEntry): boolean {
+export function completionsCompatConfigurable(entry: CapabilityEntry): boolean {
   return typeof entry.providerApi !== 'string' || entry.providerApi === 'openai-completions'
+}
+
+/**
+ * The pre-#6 spelling of {@link completionsCompatConfigurable}, kept exported
+ * because the 4.4.x line published it.
+ * @deprecated use {@link completionsCompatConfigurable}.
+ */
+export const effortCompatConfigurable = completionsCompatConfigurable
+
+/**
+ * Write the Thinking checkbox's declaration onto ONE model row (the caller
+ * hands the row inside its cloned providers payload). Protocol-aware on
+ * purpose (issue #6):
+ *
+ * - `reasoningEfforts` is protocol-NEUTRAL: the host llm-pi-ai resolves it to
+ *   `reasoning: true` + `thinkingLevelMap` for every wire protocol, and pi-ai
+ *   then maps the levels natively (Anthropic thinking budget, Responses
+ *   reasoning effort). Thinking is therefore declarable on all three protocol
+ *   families — it is the prerequisite of the effort selector.
+ * - the `off` wire value is where the protocols DIVERGE. `off: null` marks the
+ *   level unsupported to pi-ai (`getSupportedThinkingLevels` drops it), which
+ *   is the completions transport's "send nothing" toggle — fine there, but on
+ *   a pi-ai-served route it would leave thinking un-turn-off-able. A
+ *   non-completions route therefore keeps `off` SELECTABLE with the
+ *   providers' own "no reasoning" token: Anthropic only needs it non-null
+ *   (`thinking: {type:'disabled'}`), Responses sends `effort: 'none'`.
+ * - the qwen `thinkingFormat` autofill is an openai-completions-ONLY compat
+ *   field: writing it on a Responses/Anthropic route makes the host reject the
+ *   whole providers payload, so it is skipped there and the format simply
+ *   stays inherited.
+ * @param entry - the capability entry whose provider protocol decides the gate.
+ * @param row - the model row to mutate.
+ * @param next - the new Thinking state.
+ */
+export function writeThinkingRow(
+  entry: CapabilityEntry,
+  row: Record<string, unknown>,
+  next: boolean,
+): void {
+  if (!next) {
+    // Thinking off: a non-reasoning model never takes an effort.
+    row['reasoningEfforts'] = false
+    return
+  }
+  // Thinking on: a table must exist so the wire drives enable_thinking /
+  // reasoning_effort. Start from the persisted table or the default high
+  // set; a toggle model (no effort) keeps supportsReasoningEffort false.
+  const effortCapable = supportsEffortOf(row)
+  const completions = completionsCompatConfigurable(entry)
+  if (effortCapable) {
+    row['reasoningEfforts'] = effortTableOf({ high: 'high' })
+  } else if (completions) {
+    row['reasoningEfforts'] = { off: null, high: 'high' }
+  } else {
+    row['reasoningEfforts'] = { off: 'none', high: 'high' }
+  }
+  // Toggle-style thinking models need the official qwen format so pi-ai
+  // sends enable_thinking (early vLLM thinking models return no thinking
+  // content without that flag, and reject reasoning_effort). Only fills
+  // an absent format — an explicit choice is never clobbered — and only on
+  // the one protocol whose compat takes the field.
+  if (!effortCapable && completions) {
+    patchCompat(row, (compat) => {
+      if (compat['thinkingFormat'] === undefined) compat['thinkingFormat'] = 'qwen-chat-template'
+    })
+  }
 }
 
 /** Flatten the user-layer providers into capability entries (models arrays only). */
@@ -718,31 +790,14 @@ function ModelCapabilities(props: {
     })
   }
 
-  /** Toggle whether a model is a thinking model (reasoningEfforts table vs false). */
+  /**
+   * Toggle whether a model is a thinking model (`reasoningEfforts` table vs
+   * false). Delegates the row patch to {@link writeThinkingRow}: thinking is
+   * declared on every protocol, only the completions-only format autofill is
+   * protocol-gated.
+   */
   const toggleThinking = (entry: CapabilityEntry, next: boolean): void => {
-    patchModel(entry.providerId, entry.index, (row) => {
-      if (next) {
-        // Thinking on: a table must exist so the wire drives enable_thinking /
-        // reasoning_effort. Start from the persisted table or the default high
-        // set; a toggle model (no effort) keeps supportsReasoningEffort false.
-        const effortCapable = supportsEffortOf(row)
-        row['reasoningEfforts'] = effortCapable
-          ? effortTableOf({ high: 'high' })
-          : { off: null, high: 'high' }
-        // Toggle-style thinking models need the official qwen format so pi-ai
-        // sends enable_thinking (early vLLM thinking models return no thinking
-        // content without that flag, and reject reasoning_effort). Only fills
-        // an absent format — an explicit choice is never clobbered.
-        if (!effortCapable) {
-          patchCompat(row, (compat) => {
-            if (compat['thinkingFormat'] === undefined) compat['thinkingFormat'] = 'qwen-chat-template'
-          })
-        }
-      } else {
-        // Thinking off: a non-reasoning model never takes an effort.
-        row['reasoningEfforts'] = false
-      }
-    })
+    patchModel(entry.providerId, entry.index, (row) => writeThinkingRow(entry, row, next))
   }
 
   /** Toggle whether a model accepts reasoning_effort levels. */
@@ -1019,10 +1074,13 @@ function ModelCapabilities(props: {
                   // route-declared thinking/effort posture shows on every model.
                   const compat = compatOf(entry)
                   const supportsEffort = compat['supportsReasoningEffort'] === true
-                  // Issue #2: a non-completions protocol refuses the thinking-compat
-                  // fields at the write site — grey the three controls out before
-                  // the attempt instead of failing the whole providers payload.
-                  const apiGated = !effortCompatConfigurable(entry)
+                  // Issue #2/#6: a non-completions protocol refuses the
+                  // openai-completions compat FIELDS at the write site — grey
+                  // exactly those out before the attempt instead of failing the
+                  // whole providers payload. The Thinking switch stays live on
+                  // every protocol: it writes protocol-neutral `reasoningEfforts`
+                  // (the prerequisite of the effort selector).
+                  const compatGated = !completionsCompatConfigurable(entry)
                   const meta = summaryOf(entry)
                   const format = typeof compat['thinkingFormat'] === 'string'
                     ? compat['thinkingFormat']
@@ -1058,17 +1116,17 @@ function ModelCapabilities(props: {
                       {modelOpen
                         ? (
                           <div style={{ padding: '4px 10px 10px', borderTop: '1px solid var(--dsw-alias-border-l2)' }}>
-                            {apiGated && <p style={hintStyle}>{t('card.capabilities.apiUnsupported')}</p>}
+                            {compatGated && <p style={hintStyle}>{t('card.capabilities.apiUnsupported')}</p>}
                             {/* Layer 1 — base capabilities: is it a thinking model? A vision model? */}
                             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '2px 0 8px' }}>
                               <label
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-                                title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
+                                title={compatGated ? t('card.capabilities.thinkingNative') : undefined}
                               >
                                 <input
                                   type="checkbox"
                                   checked={thinking}
-                                  disabled={readonly || busy || apiGated}
+                                  disabled={readonly || busy}
                                   onChange={(event) => toggleThinking(entry, event.currentTarget.checked)}
                                 />
                                 <span>{t('card.capabilities.thinking')}</span>
@@ -1110,12 +1168,12 @@ function ModelCapabilities(props: {
                               ? (
                                 <label
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', margin: '0 0 8px' }}
-                                  title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
+                                  title={compatGated ? t('card.capabilities.apiUnsupported') : undefined}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={supportsEffort}
-                                    disabled={readonly || busy || apiGated}
+                                    disabled={readonly || busy || compatGated}
                                     onChange={(event) => toggleEffortCapable(entry, event.currentTarget.checked)}
                                   />
                                   <span>{t('card.capabilities.supportsEffort')}</span>
@@ -1206,8 +1264,8 @@ function ModelCapabilities(props: {
                                 <select
                                   style={controlStyle}
                                   value={format ?? 'inherit'}
-                                  disabled={readonly || busy || apiGated}
-                                  title={apiGated ? t('card.capabilities.apiUnsupported') : undefined}
+                                  disabled={readonly || busy || compatGated}
+                                  title={compatGated ? t('card.capabilities.apiUnsupported') : undefined}
                                   onChange={(event) => {
                                     const next = event.currentTarget.value
                                     patchModel(entry.providerId, entry.index, (row) => {

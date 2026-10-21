@@ -11,6 +11,14 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.4.3] — 2026-10-21（思考は全プロトコルで設定可能 — issue #6）
+
+- 能力カード：思考チェックボックスが openai-completions 以外（Responses / Anthropic）でも再び選択可能に。書き込むのは protocol 非依存の `reasoningEfforts` で、ホスト llm-pi-ai が `reasoning: true` + `thinkingLevelMap` に解決し、pi-ai がプロトコルごとにネイティブ変換します（エフォート選択の前提）。
+- 非 completions の思考宣言に completions 専用の `thinkingFormat` を同梱しなくなりました（モデル階層への書き込みは providers 全体の拒否を招くため、qwen 形式の自動補完はスキップ）。`off` は実値（`none`）を保つため、Off が「未対応」扱いで消えることはありません。
+- `thinkingFormat` / 支持 think effort は従来どおり openai-completions 限定（実際に completions 専用の互換フィールド）。カードの注記もその旨に修正。
+- ホスト側の互換同期：明示的な非 completions `api` を「カスタム openai-completions ゲートウェイ」と判定しないように（baseURL 判定はプロトコル未指定時のみ）。
+- テスト 168/168 グリーン。
+
 ## [4.4.2] — 2026-10-19（カードのトグル・可視説明 — ユーザーフィードバック）
 
 - 設定カードのチェックボックス（有効化／引継ぎマスター／レベル下げ／レベル上げ／モデルUI引き継ぎ）を楽観的な横置きピルトグルに変更（クリックで即時反転、書込拒否時はロールバック）。

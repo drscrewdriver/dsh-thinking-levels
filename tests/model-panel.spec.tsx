@@ -6,13 +6,16 @@
  * - issue #3: the takeover popup carries a search row (>4 models, the shipped
  *   rule) filtering name/id case-insensitively while keeping grouping;
  * - issue #2: the api-type gate helper behind the capability card's disabled
- *   controls (responses protocols refuse the thinking-compat write wholesale).
+ *   controls (responses protocols refuse the thinking-compat write wholesale);
+ * - issue #6: thinking itself is protocol-neutral, so its declaration must be
+ *   writable on every protocol while only the completions-only compat fields
+ *   stay gated.
  */
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
 import { ModelPanel } from '../src/client/model-panel.tsx'
-import { effortCompatConfigurable } from '../src/client/card.tsx'
+import { completionsCompatConfigurable, effortCompatConfigurable, writeThinkingRow } from '../src/client/card.tsx'
 
 // Node environment: the open popup's outside-click listener is the only
 // `document` touch on this render path — a two-method stub keeps the spec off
@@ -173,15 +176,90 @@ describe('ModelPanel popup search (issue #3)', () => {
   })
 })
 
-describe('effortCompatConfigurable (issue #2)', () => {
+describe('completionsCompatConfigurable (issues #2/#6)', () => {
   it('allows openai-completions and the absent-api default', () => {
-    expect(effortCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'openai-completions' })).toBe(true)
-    expect(effortCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm' })).toBe(true)
+    expect(completionsCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'openai-completions' })).toBe(true)
+    expect(completionsCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm' })).toBe(true)
   })
 
   it('gates the responses protocols', () => {
-    expect(effortCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'openai-responses' })).toBe(false)
-    expect(effortCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'azure-openai-responses' })).toBe(false)
-    expect(effortCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'anthropic-messages' })).toBe(false)
+    expect(completionsCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'openai-responses' })).toBe(false)
+    expect(completionsCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'azure-openai-responses' })).toBe(false)
+    expect(completionsCompatConfigurable({ providerId: 'p', index: 0, model: {}, modelId: 'm', providerApi: 'anthropic-messages' })).toBe(false)
+  })
+
+  it('keeps the 4.4.x alias wired to the same gate', () => {
+    expect(effortCompatConfigurable).toBe(completionsCompatConfigurable)
+  })
+})
+
+/**
+ * Issue #6: thinking is the prerequisite of the effort selector, so its
+ * declaration must be writable on all three protocol families. Only the
+ * completions-only `thinkingFormat` autofill is protocol-gated — writing it on
+ * a Responses/Anthropic route would make the host reject the whole providers
+ * payload.
+ */
+describe('writeThinkingRow (issue #6)', () => {
+  const entry = (providerApi?: string): Parameters<typeof writeThinkingRow>[0] => ({
+    providerId: 'p',
+    index: 0,
+    model: {},
+    modelId: 'm',
+    ...(providerApi === undefined ? {} : { providerApi }),
+  })
+
+  it('declares thinking on every protocol through reasoningEfforts', () => {
+    for (const api of ['openai-completions', 'openai-responses', 'anthropic-messages'] as const) {
+      const row: Record<string, unknown> = {}
+      writeThinkingRow(entry(api), row, true)
+      expect(row['reasoningEfforts']).toMatchObject({ high: 'high' })
+    }
+  })
+
+  // `off: null` marks the level UNSUPPORTED to pi-ai (getSupportedThinkingLevels
+  // drops it), which is the completions transport's "send nothing" toggle. On a
+  // pi-ai-served non-completions route that would leave thinking permanently
+  // on, so `off` keeps the providers' own no-reasoning token instead.
+  it('keeps off selectable on non-completions protocols, null on completions', () => {
+    const completions: Record<string, unknown> = {}
+    writeThinkingRow(entry('openai-completions'), completions, true)
+    expect(completions['reasoningEfforts']).toEqual({ off: null, high: 'high' })
+
+    for (const api of ['openai-responses', 'anthropic-messages'] as const) {
+      const row: Record<string, unknown> = {}
+      writeThinkingRow(entry(api), row, true)
+      expect(row['reasoningEfforts']).toEqual({ off: 'none', high: 'high' })
+    }
+  })
+
+  it('writes the completions-only qwen format only on openai-completions', () => {
+    const completions: Record<string, unknown> = {}
+    writeThinkingRow(entry('openai-completions'), completions, true)
+    expect(completions['compat']).toEqual({ thinkingFormat: 'qwen-chat-template' })
+
+    for (const api of ['openai-responses', 'anthropic-messages'] as const) {
+      const row: Record<string, unknown> = {}
+      writeThinkingRow(entry(api), row, true)
+      expect(row['compat']).toBeUndefined()
+    }
+  })
+
+  it('keeps effort-capable rows format-free and never clobbers an explicit format', () => {
+    const explicit: Record<string, unknown> = { compat: { thinkingFormat: 'qwen' } }
+    writeThinkingRow(entry('openai-completions'), explicit, true)
+    expect((explicit['compat'] as Record<string, unknown>)['thinkingFormat']).toBe('qwen')
+
+    const effort: Record<string, unknown> = { compat: { supportsReasoningEffort: true } }
+    writeThinkingRow(entry('openai-completions'), effort, true)
+    expect(effort['reasoningEfforts']).toEqual({ high: 'high' })
+    expect((effort['compat'] as Record<string, unknown>)['thinkingFormat']).toBeUndefined()
+  })
+
+  it('turns thinking off with reasoningEfforts: false and no compat write', () => {
+    const row: Record<string, unknown> = { compat: {} }
+    writeThinkingRow(entry('anthropic-messages'), row, false)
+    expect(row['reasoningEfforts']).toBe(false)
+    expect(row['compat']).toEqual({})
   })
 })

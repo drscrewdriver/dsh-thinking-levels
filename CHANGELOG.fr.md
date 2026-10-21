@@ -2,6 +2,14 @@
 
 Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 
+## [4.4.3] — 2026-10-21 (la réflexion reste configurable sur tous les protocoles — issue #6)
+
+- Carte de capacités : la case 思考 (réflexion) est de nouveau sélectionnable sur tous les protocoles, pas seulement openai-completions. Elle écrit `reasoningEfforts`, neutre au protocole (l'hôte llm-pi-ai le résout en `reasoning: true` + `thinkingLevelMap`, que pi-ai traduit nativement par protocole) : le prérequis du sélecteur d'effort revient donc aussi sur les routes Responses/Anthropic.
+- Une déclaration de réflexion non-completions ne traîne plus le `thinkingFormat` réservé à completions : le remplissage automatique du format qwen y est ignoré (une écriture au niveau modèle faisait rejeter tout le payload providers), et `off` conserve une valeur réelle (`none`) pour que le niveau Off reste sélectionnable au lieu d'être marqué non pris en charge.
+- `thinkingFormat` / 支持 think effort restent limités à openai-completions — ces deux champs SONT propres à completions — et la note de la carte le dit désormais au lieu d'affirmer que la réflexion elle-même n'est pas configurable.
+- Synchronisation de compat côté hôte : un `api` explicitement non-completions n'est plus traité comme une passerelle openai-completions personnalisée (l'heuristique baseURL ne s'applique qu'en l'absence de protocole), donc la synchro ne peut plus écrire de compat completions dans une route Responses/Anthropic.
+- Tests 168/168 verts.
+
 - [Changelog en français](./CHANGELOG.fr.md)
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)

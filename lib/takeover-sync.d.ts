@@ -63,9 +63,17 @@ export interface PiAiSection {
 }
 /**
  * Whether a provider profile targets a CUSTOM openai-completions gateway:
- * explicit `api: openai-completions`, or a baseURL that is not an official
- * host. Catalog routes without either (e.g. xiaomi via pi-ai discovery) are
- * not custom and are left alone.
+ * an explicitly declared `api: openai-completions`, or — only when the profile
+ * names no protocol at all — a baseURL that is not an official host. A catalog
+ * route without either (e.g. xiaomi via pi-ai discovery) is not custom and is
+ * left alone.
+ *
+ * An explicit protocol is AUTHORITATIVE (issue #6): only openai-completions
+ * takes the compat fields this sync writes (`supportsDeveloperRole`,
+ * `thinkingFormat`), and a Responses/Anthropic route on a self-hosted baseURL
+ * would reject the WHOLE providers payload — so the protocol decides before
+ * the baseURL heuristic. Thinking itself is declared through the
+ * protocol-neutral `reasoningEfforts` and needs no route of this shape.
  * @param profile - the provider profile slice.
  * @returns true when the route is a custom openai-completions gateway.
  */

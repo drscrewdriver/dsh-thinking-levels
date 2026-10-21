@@ -2,6 +2,14 @@
 
 Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert.
 
+## [4.4.3] — 2026-10-21 (Thinking bleibt auf jedem Protokoll konfigurierbar — Issue #6)
+
+- Fähigkeitskarte: Der 思考-Schalter (Thinking) ist wieder auf jedem Wire-Protokoll wählbar, nicht nur auf openai-completions. Er schreibt das protokollneutrale `reasoningEfforts` (Host llm-pi-ai löst es zu `reasoning: true` + `thinkingLevelMap` auf, pi-ai übersetzt nativ je Protokoll) — die Voraussetzung des Effort-Selektors ist damit auch auf Responses/Anthropic-Routen zurück.
+- Eine Nicht-completions-Thinking-Deklaration zieht das completions-exklusive `thinkingFormat` nicht mehr mit: die qwen-Format-Autofüllung entfällt dort (ein Schreibvorgang auf Modellebene ließ den Host das gesamte providers-Payload ablehnen), und `off` behält einen echten Wire-Wert (`none`), damit Off wählbar bleibt statt als nicht unterstützt zu gelten.
+- `thinkingFormat` / 支持 think effort bleiben auf openai-completions beschränkt — diese beiden SIND completions-exklusive Kompatibilitätsfelder — und der Kartentext sagt jetzt genau das, statt Thinking selbst als nicht konfigurierbar zu bezeichnen.
+- Host-seitige Kompatibilitäts-Synchronisierung: ein explizit nicht-completions-`api` gilt nicht mehr als eigener openai-completions-Gateway (die baseURL-Heuristik greift nur ohne Protokollangabe), sodass die Sync keine completions-Compat in eine Responses/Anthropic-Route schreibt.
+- Tests 168/168 grün.
+
 - [Changelog auf Deutsch](./CHANGELOG.de.md)
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)

@@ -38,6 +38,16 @@ describe('isCustomOpenAiGateway', () => {
     expect(isCustomOpenAiGateway({ models: [] })).toBe(false)
     expect(isCustomOpenAiGateway(undefined)).toBe(false)
   })
+
+  // Issue #6: an explicit non-completions protocol is authoritative. Writing the
+  // completions-only compat fields (`supportsDeveloperRole`, `thinkingFormat`) on
+  // such a route makes the host reject the WHOLE providers payload, so the
+  // baseURL heuristic must never pull it in.
+  it('an explicit non-completions api is not a custom completions gateway', () => {
+    expect(isCustomOpenAiGateway({ api: 'anthropic-messages', baseURL: 'http://192.168.100.242:8200/v1' })).toBe(false)
+    expect(isCustomOpenAiGateway({ api: 'openai-responses', baseURL: 'http://192.168.100.242:8200/v1' })).toBe(false)
+    expect(isCustomOpenAiGateway({ api: 'azure-openai-responses', baseURL: 'http://192.168.100.242:8200/v1' })).toBe(false)
+  })
 })
 
 describe('declaresThinking', () => {
