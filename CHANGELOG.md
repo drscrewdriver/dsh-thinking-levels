@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.5] — 2026-10-21 (toggle fold is openai-completions-only — issue #9)
+
+### Fixed
+- A taken-over **Responses / Anthropic** route whose model carries a multi-level `reasoningEfforts` table no longer collapses its effort selector to Off/On. The fold lives in `piAiPosture.thinkingOn`, which previously keyed only on "table present + route in the takeover list"; but the physical reason for the fold (pi-ai rejecting a `reasoning_effort` string outside its fixed seven levels) is a completions-only concern, and on a non-completions route the `supportsReasoningEffort` escape hatch cannot even be written (4.4.4). `piAiPosture` now additionally requires the route's `api` to be `openai-completions` (or absent, pi-ai's default) — the same predicate as the card's `completionsCompatConfigurable`. This single gate fixes both the selector advertisement (`advertiseModelCapability`) and the request-time `toggleOnly` stripping (`capabilityResolver`), so a taken-over Responses route keeps its native `thinkingLevelMap` levels end to end.
+
+### Tests
+- 186/186: new `piAiPosture` protocol-gate matrix — Responses/Anthropic taken-over routes do NOT fold, completions (and absent-`api`) routes still DO fold, out-of-takeover Responses never folds, and a completions row declaring `supportsReasoningEffort` is not toggle-only.
+
 ## [4.4.4] — 2026-10-21 (compat fields moved out, effort map opened everywhere — issues #7 #8)
 
 ### Changed

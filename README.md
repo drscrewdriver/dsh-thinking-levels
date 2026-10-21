@@ -228,17 +228,43 @@ Defaults: `{ enabled: true, level: 'auto', allowDowngrade: true, allowUpgrade: f
 
 > Semantics: the model-selector pick outranks the plugin's default level. Pick `auto` (mask) → plugin schedules; pick a wire level → applied directly; pick nothing → the plugin's `level` default is used. `allowDowngrade` / `allowUpgrade` constrain `auto` scheduling only.
 
+## Third-party transport takeover (three protocols)
+
+The settings card's **Third-party takeover** switch (「第三方接管」) adds a route to the
+`dsh-llm-openai-completions` transport's `providers` list. **The transport's name is
+legacy** — since the 4.4.x line it fronts three wire protocols, not just
+`openai-completions`: `openai-completions`, `openai-responses` and `anthropic`. When a
+route is taken over, its model requests are short-circuited through that transport
+(multimodal true-send, modality gate, prompt injection) and `llm-pi-ai` steps out.
+
+The per-level wire editor (`reasoningEfforts`) is **protocol-neutral** since 4.4.4: the
+host turns the table into pi-ai's `thinkingLevelMap`, which every protocol reads
+(Anthropic thinking budget, Responses reasoning effort, completions `reasoning_effort`
+string). The two completions-only compat switches (`支持 think effort` / `思考格式`)
+render *only* on `openai-completions` routes — elsewhere the host rejects them at write
+time, so they are absent from the DOM.
+
+> **Toggle-folding caveat (fixed in 4.4.5).** The Off/On collapse of a thinking model's selector is an
+> `openai-completions`-only behavior: it fires when a route is taken over **and** the
+> model carries a `reasoningEfforts` table **without** `compat.supportsReasoningEffort: true`.
+> That fold exists because pi-ai rejects a `reasoning_effort` string outside its fixed seven
+> levels — a completions-wire concern. On a Responses/Anthropic route the levels map natively
+> (thinking budget / reasoning-effort enum) and `supportsReasoningEffort` cannot be written at
+> all, so through 4.4.4 taking such a route over wrongly folded a multi-level table to Off/On.
+> Since 4.4.5 the fold additionally requires the route's `api` to be `openai-completions` (or
+> absent), so a taken-over Responses/Anthropic route keeps its full level set end to end.
+
 ## Official compat surface: the short-circuit tool is retired (0.7.0-beta.1)
 
 Once custom gateways (vLLM / LM Studio / self-hosted OpenAI-compatible proxies) declare
 thinking, this plugin writes the fixes into the **official `llm-pi-ai` compat surface**
 (introduced in dsh ≥ **v0.1.0-rc.8**, commit `884f7b9c41`) —
 [dsh-llm-openai-completions](https://github.com/drscrewdriver/dsh-llm-openai-completions)
-is no longer needed and should stay uninstalled:
+is no longer needed for the developer-role fix and should stay uninstalled unless you
+explicitly want its three-protocol takeover (see above):
 
-- Scans `llm-pi-ai.providers` for routes that are custom openai-completions gateways
-  (`api: openai-completions` or a non-official baseURL) **and** declare a `reasoningEfforts`
-  table on any model (including `modelOverrides`), then writes:
+- Scans `llm-pi-ai.providers` for routes that are custom gateways **and** declare a
+  `reasoningEfforts` table on any model (including `modelOverrides`), then writes:
   - route-level `compat.supportsDeveloperRole: false` — the system prompt goes out as
     `system`, fixing the vLLM / SGLang `Unexpected message role` 400;
   - model-level `compat.thinkingFormat: 'qwen-chat-template'` on toggle-style thinking rows

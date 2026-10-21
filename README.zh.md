@@ -185,11 +185,32 @@ config:
 
 > 语义说明：模型选择器选择优先于插件默认档位。选 `auto`（mask）→ 插件调度；选线缆档位 → 直接生效；未选择 → 使用插件的 `level` 默认档位。`allowDowngrade` / `allowUpgrade` 只约束 `auto` 调度。
 
+## 第三方传输层接管（三协议）
+
+设置卡的「第三方接管」开关把一条路由加进 `dsh-llm-openai-completions` 传输层的
+`providers` 名单。**传输层的名字是历史遗留**——自 4.4.x 线起它已接管三种线缆协议：
+`openai-completions`、`openai-responses` 与 `anthropic`。路由被接管后，其模型请求短路
+走该传输层（多模态真发 + 模态门禁 + 提示词注入），pi-ai 不再参与。
+
+逐档线上值编辑器（`reasoningEfforts`）自 4.4.4 起**协议中立**：宿主把该表折成 pi-ai 的
+`thinkingLevelMap`，三种协议都读（Anthropic thinking budget、Responses reasoning effort、
+completions `reasoning_effort` 字符串）。两个 completions 专属 compat 开关（`支持 think
+effort` / `思考格式`）**只在 `openai-completions` 路由上渲染**——其他协议下写入会被宿主
+整体拒收，故 DOM 中不出现。
+
+> **toggle 折叠陷阱（4.4.5 已修复）。** 思考模型选择器被折成 Off/On 是 `openai-completions`
+> 专属行为：当一条路由被接管**且**模型带 `reasoningEfforts` 表**但**没有
+> `compat.supportsReasoningEffort: true` 时触发。该折叠的存在理由是 pi-ai 拒收七固定档之外的
+> `reasoning_effort` 字符串——一个 completions 线缆层面的问题。Responses/Anthropic 路由的档位
+> 走原生映射（thinking budget / reasoning-effort 枚举），且 `supportsReasoningEffort` 根本无法写入，
+> 故 4.4.4 及之前把这类路由接管后会误将多档表折成 Off/On。自 4.4.5 起折叠额外要求路由 `api` 为
+> `openai-completions`（或缺省），被接管的 Responses/Anthropic 路由端到端保留完整档位集。
+
 ## 官方 compat 面：短路工具退役（0.7.0-beta.1）
 
-自定义网关（vLLM / LM Studio / 自建 OpenAI 兼容代理）**声明思考功能后**，本插件自动把修复写入 **dsh 官方 `llm-pi-ai` compat 面**（dsh ≥ **v0.1.0-rc.8** 引入，commit `884f7b9c41`）——不再需要 [dsh-llm-openai-completions](https://github.com/drscrewdriver/dsh-llm-openai-completions) 接管路由，短路插件应保持卸载：
+自定义网关（vLLM / LM Studio / 自建 OpenAI 兼容代理）**声明思考功能后**，本插件自动把修复写入 **dsh 官方 `llm-pi-ai` compat 面**（dsh ≥ **v0.1.0-rc.8** 引入，commit `884f7b9c41`）——若仅为 developer 角色 400 修复，[dsh-llm-openai-completions](https://github.com/drscrewdriver/dsh-llm-openai-completions) 已不再需要、应保持卸载；只有当你明确要用它的三协议接管（见上节）时才安装：
 
-- 扫描 `llm-pi-ai.providers`，识别「自定义 openai-completions 网关（`api: openai-completions` 或非官方 baseURL）**且** 任一模型（含 `modelOverrides`）声明 `reasoningEfforts` 表」的路由，自动写入：
+- 扫描 `llm-pi-ai.providers`，识别「自定义网关 **且** 任一模型（含 `modelOverrides`）声明 `reasoningEfforts` 表」的路由，自动写入：
   - 路由级 `compat.supportsDeveloperRole: false`——系统提示词按 `system` 角色发送，修复 vLLM / SGLang 的 `Unexpected message role` 400；
   - toggle 型思考模型（思考表存在、行级无 `supportsReasoningEffort`）自动补模型级 `compat.thinkingFormat: 'qwen-chat-template'`——pi-ai 发 `chat_template_kwargs.enable_thinking`（裸 vLLM 忽略顶层 `enable_thinking`）；
 - 写入走官方设置通道（读 → 纯变换 → 整段 `settings.update('llm-pi-ai', …)`），dsh 的 schema 在**写入处**校验：低于 rc.8 的 dsh 会拒绝并日志告警，绝不静默错配；任何层级的显式值（true/false、已声明格式）永不覆盖；

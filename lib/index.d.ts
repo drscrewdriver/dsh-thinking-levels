@@ -38,6 +38,7 @@ import type { Volatile } from '@deepseek-ai/cosmokit';
 import z from '@deepseek-ai/schemastery';
 import { type EffortId } from './thinking-level.ts';
 import { type PricingPolicy } from './billing-projection.ts';
+import { type PiAiSection } from './takeover-sync.ts';
 /** One configurer-confirmed capability override for a `provider/model` key. */
 export interface ModelCapabilityOverride {
     /** Manual override of the vision-model classification (auto: inputModalities). */
@@ -242,6 +243,30 @@ export declare function advertiseModelCapability(llm: {
     thinkingOn: boolean;
     supportsEffort: boolean;
 } | undefined): void;
+/**
+ * The llm-pi-ai posture of one model, from the live llm-pi-ai section
+ * (the capability card writes `reasoningEfforts` and `compat` there). Absent
+ * when the route/model is not configured.
+ *
+ * A model is toggle-only (Off/On, no effort levels) only when ALL THREE hold:
+ * the model declares a thinking toggle (reasoningEfforts table, no
+ * supportsReasoningEffort), the route is taken over by the transport (it is in
+ * the takeover judgment), AND the route speaks the openai-completions wire
+ * protocol. The Off/On fold exists because a completions toggle model rejects
+ * any `reasoning_effort` string pi-ai does not resolve to its fixed seven
+ * levels; that physical reason does NOT apply to a Responses/Anthropic route,
+ * whose levels pi-ai maps natively (thinking budget / reasoning-effort enum)
+ * and whose `supportsReasoningEffort` compat field the host refuses to write
+ * at all (4.4.4). Folding such a route would silently strip the configured
+ * level set down to Off/On. A route OUTSIDE the takeover judgment is likewise
+ * served by pi-ai with its native reasoning semantics and is NOT folded here.
+ * (exported for the protocol-gate regression, issue #9 — same precedent as
+ * `advertiseModelCapability`)
+ */
+export declare function piAiPosture(piAi: PiAiSection | undefined, provider: string, model: string, takeover: string[] | null): {
+    thinkingOn: boolean;
+    supportsEffort: boolean;
+} | undefined;
 /**
  * Legacy (≤0.1.6) settings registration: on hosts whose settings service
  * carries the imperative face (`register` present, `describe` absent), install
