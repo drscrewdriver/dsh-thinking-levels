@@ -11,6 +11,15 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## [4.4.4] — 2026-10-21（互換フィールドを画面から外す・レベル表は全プロトコルで編集可 — issue #7 #8）
+
+- `支持 think effort` / `思考格式` の 2 スイッチは、他のプロトコルでは「無効化して長文の注記を出す」のをやめ、画面に出さないようにしました。表示条件は「思考モデルと宣言済み」かつ「ルートが openai-completions」の 2 つだけです。思考スイッチ自体は全プロトコルで有効のまま（protocol 非依存の `reasoningEfforts`）。
+- **レベル別 wire エディタは completions に閉じ込められなくなりました**（issue #8）。これは `reasoningEfforts` を編集するもので、ホストが pi-ai の `thinkingLevelMap` に変換し、全プロトコルが読みます（Anthropic の思考予算 / Responses の reasoning effort / completions の reasoning_effort 文字列）。思考モデルならどのプロトコルでもグリッドが開きます。completions の toggle 用ガード（effort 段を出す前に `支持 think effort` が必要）だけは従来どおりです。
+- `toggleEffortCapable` は非 completions のエントリを直接拒否します。
+- 修正：`applyDraft` は非 toggle の段をチェックすると `compat.supportsReasoningEffort: true` を自動書き込みしていました。Responses / Anthropic ではこのフィールドが原因でホストが **providers 全体を拒否**するため、1 クリックで保存が丸ごと失われていました。副作用を completions 限定にしました。
+- 残留検出（`staleThinkingCompatFields`）とワンクリック掃除（`stripThinkingCompat`）を追加。行単位・カード全体の両方から削除でき、兄弟の compat フィールドは保持、空になった `compat` は削除します。
+- テスト 180/180 グリーン（変異検証済み）。
+
 ## [4.4.3] — 2026-10-21（思考は全プロトコルで設定可能 — issue #6）
 
 - 能力カード：思考チェックボックスが openai-completions 以外（Responses / Anthropic）でも再び選択可能に。書き込むのは protocol 非依存の `reasoningEfforts` で、ホスト llm-pi-ai が `reasoning: true` + `thinkingLevelMap` に解決し、pi-ai がプロトコルごとにネイティブ変換します（エフォート選択の前提）。

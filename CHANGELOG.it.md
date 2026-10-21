@@ -2,6 +2,15 @@
 
 Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 
+## [4.4.4] — 2026-10-21 (campi di compat tolti dalla superficie, editor dei livelli aperto ovunque — issue #7 #8)
+
+- I due interruttori esclusivi di openai-completions (`支持 think effort` / `思考格式`) non vengono più MOSTRATI sugli altri protocolli — prima erano disabilitati con una nota lunga. Ora compaiono solo se il modello è **dichiarato thinking** E la rotta parla `openai-completions`; altrove sono assenti dal DOM. Il thinking stesso resta attivo ovunque (`reasoningEfforts`, neutro rispetto al protocollo).
+- **L editor dei valori per livello non è più confinato in completions** (issue #8). Modifica `reasoningEfforts` — la tabella che l host converte nel `thinkingLevelMap` di pi-ai, letta da ogni protocollo (budget thinking Anthropic, reasoning effort Responses, stringa reasoning_effort completions). Un modello thinking apre quindi la griglia su qualsiasi protocollo; resta solo la guardia completions per lo stile toggle.
+- `toggleEffortCapable` rifiuta del tutto una voce non-completions.
+- Corretto: `applyDraft` scriveva automaticamente `compat.supportsReasoningEffort: true` appena si spuntava un livello non-toggle. Su una rotta Responses/Anthropic quel campo fa **rifiutare l intero payload providers** dall host — un clic e il salvataggio intero andava perso. L effetto collaterale è ora solo per completions.
+- Aggiunto: controllo dei residui (`staleThinkingCompatFields`) + pulizia con un clic (`stripThinkingCompat`), per riga e per tutta la card; i campi compat vicini sopravvivono, un `compat` svuotato viene eliminato invece di restare `{}`.
+- Test 180/180 (verificati per mutazione).
+
 ## [4.4.3] — 2026-10-21 (il thinking resta configurabile su ogni protocollo — issue #6)
 
 - Card delle capacità: la casella 思考 (thinking) è di nuovo selezionabile su ogni protocollo, non solo openai-completions. Scrive `reasoningEfforts`, neutro rispetto al protocollo (l host llm-pi-ai lo risolve in `reasoning: true` + `thinkingLevelMap`, che pi-ai traduce nativamente per protocollo): il prerequisito del selettore di effort torna quindi anche sulle rotte Responses/Anthropic.

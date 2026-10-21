@@ -2,6 +2,15 @@
 
 Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 
+## [4.4.4] — 2026-10-21 (champs de compat retirés de la surface, éditeur de niveaux ouvert partout — issues #7 #8)
+
+- Les deux interrupteurs propres à openai-completions (`支持 think effort` / `思考格式`) ne sont plus AFFICHÉS sur les autres protocoles — ils étaient grisés avec une longue note. Ils n'apparaissent plus que si le modèle est **déclaré réflexif** ET que la route parle `openai-completions` ; ailleurs ils sont absents du DOM. La réflexion elle-même reste active partout (`reasoningEfforts`, neutre au protocole).
+- **L'éditeur de valeurs par niveau n'est plus enfermé dans completions** (issue #8). Il édite `reasoningEfforts` — la table que l'hôte transforme en `thinkingLevelMap` de pi-ai, lue par tous les protocoles (budget de réflexion Anthropic, reasoning effort Responses, chaîne reasoning_effort completions). Un modèle réflexif ouvre donc la grille sur n'importe quel protocole ; seul le garde-fou completions (l'interrupteur de style toggle) subsiste.
+- `toggleEffortCapable` refuse désormais une entrée non-completions, donc aucun chemin de code ne peut écrire le champ là où l'hôte le refuserait.
+- Corrigé : `applyDraft` écrivait automatiquement `compat.supportsReasoningEffort: true` dès qu'un niveau non-toggle était coché. Sur une route Responses/Anthropic, ce champ fait **rejeter tout le payload providers** par l'hôte — un clic et la sauvegarde entière était perdue. Cet effet de bord est désormais réservé à completions.
+- Ajout : audit des résidus (`staleThinkingCompatFields`) + nettoyage en un clic (`stripThinkingCompat`), par ligne et pour toute la carte ; les champs compat voisins survivent, un `compat` vidé est supprimé au lieu de rester `{}`.
+- Tests 180/180 (vérifiés par mutation).
+
 ## [4.4.3] — 2026-10-21 (la réflexion reste configurable sur tous les protocoles — issue #6)
 
 - Carte de capacités : la case 思考 (réflexion) est de nouveau sélectionnable sur tous les protocoles, pas seulement openai-completions. Elle écrit `reasoningEfforts`, neutre au protocole (l'hôte llm-pi-ai le résout en `reasoning: true` + `thinkingLevelMap`, que pi-ai traduit nativement par protocole) : le prérequis du sélecteur d'effort revient donc aussi sur les routes Responses/Anthropic.

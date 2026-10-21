@@ -2,6 +2,15 @@
 
 Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 
+## [4.4.4] — 2026-10-21 (campos de compat fuera de la superficie, editor de niveles abierto en todas partes — issues #7 #8)
+
+- Los dos interruptores exclusivos de openai-completions (`支持 think effort` / `思考格式`) ya no se MUESTRAN en otros protocolos — antes aparecían desactivados con una nota larga. Ahora solo aparecen si el modelo está **declarado de thinking** Y la ruta habla `openai-completions`; en el resto no están en el DOM. El thinking en sí sigue activo en todas partes (`reasoningEfforts`, neutral al protocolo).
+- **El editor de valores por nivel ya no queda encerrado en completions** (issue #8). Edita `reasoningEfforts` — la tabla que el host convierte en el `thinkingLevelMap` de pi-ai, que todos los protocolos leen (presupuesto de thinking de Anthropic, reasoning effort de Responses, cadena reasoning_effort de completions). Un modelo de thinking abre la rejilla en cualquier protocolo; solo queda la guarda de completions para el estilo toggle.
+- `toggleEffortCapable` rechaza de plano una entrada que no sea completions.
+- Corregido: `applyDraft` escribía automáticamente `compat.supportsReasoningEffort: true` al marcar cualquier nivel que no fuera toggle. En una ruta Responses/Anthropic ese campo hace que el host **rechace todo el payload de providers** — un clic y se perdía el guardado completo. El efecto secundario ahora es solo de completions.
+- Añadido: auditoría de restos (`staleThinkingCompatFields`) y limpieza en un clic (`stripThinkingCompat`), por fila y para toda la tarjeta; los campos compat vecinos sobreviven, un `compat` vaciado se elimina en vez de quedar como `{}`.
+- Tests 180/180 (verificados por mutación).
+
 ## [4.4.3] — 2026-10-21 (el thinking sigue siendo configurable en todos los protocolos — issue #6)
 
 - Tarjeta de capacidades: la casilla 思考 (thinking) vuelve a ser seleccionable en todos los protocolos, no solo en openai-completions. Escribe `reasoningEfforts`, neutral respecto al protocolo (el host llm-pi-ai lo resuelve en `reasoning: true` + `thinkingLevelMap`, que pi-ai traduce de forma nativa por protocolo): el requisito previo del selector de effort vuelve también a las rutas Responses/Anthropic.

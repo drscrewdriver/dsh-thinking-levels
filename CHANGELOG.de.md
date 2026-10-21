@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert.
 
+## [4.4.4] — 2026-10-21 (Compat-Felder aus der Oberfläche, Level-Editor überall geöffnet — Issues #7 #8)
+
+- Die beiden openai-completions-exklusiven Schalter (`支持 think effort` / `思考格式`) werden auf anderen Protokollen nicht mehr ANGEZEIGT — zuvor waren sie ausgegraut mit einer langen Notiz. Sie erscheinen nur noch, wenn das Modell **als Thinking-Modell deklariert** ist UND die Route `openai-completions` spricht; überall sonst fehlen sie im DOM. Thinking selbst bleibt überall aktiv (protokollneutral `reasoningEfforts`).
+- **Der Editor für die Wire-Werte pro Stufe ist nicht mehr auf completions beschränkt** (Issue #8). Er bearbeitet `reasoningEfforts` — die Tabelle, die der Host in pi-ais `thinkingLevelMap` übersetzt und die jedes Protokoll liest (Anthropic-Thinking-Budget, Responses reasoning effort, completions reasoning_effort-String). Ein Thinking-Modell öffnet das Raster daher auf jedem Protokoll; nur der completions-Toggle-Schutz bleibt.
+- `toggleEffortCapable` lehnt einen Nicht-completions-Eintrag grundsätzlich ab.
+- Behoben: `applyDraft` schrieb automatisch `compat.supportsReasoningEffort: true`, sobald eine Nicht-Toggle-Stufe angehakt wurde. Auf einer Responses/Anthropic-Route lässt dieses Feld den Host das **gesamte providers-Payload ablehnen** — ein Klick und der ganze Speichervorgang war verloren. Der Nebeneffekt ist jetzt auf completions begrenzt.
+- Neu: Reste-Prüfung (`staleThinkingCompatFields`) + Ein-Klick-Bereinigung (`stripThinkingCompat`), pro Zeile und kartenweit; benachbarte compat-Felder bleiben, ein geleertes `compat` wird gelöscht statt als `{}` zu bleiben.
+- Tests 180/180 (mutationsgeprüft).
+
 ## [4.4.3] — 2026-10-21 (Thinking bleibt auf jedem Protokoll konfigurierbar — Issue #6)
 
 - Fähigkeitskarte: Der 思考-Schalter (Thinking) ist wieder auf jedem Wire-Protokoll wählbar, nicht nur auf openai-completions. Er schreibt das protokollneutrale `reasoningEfforts` (Host llm-pi-ai löst es zu `reasoning: true` + `thinkingLevelMap` auf, pi-ai übersetzt nativ je Protokoll) — die Voraussetzung des Effort-Selektors ist damit auch auf Responses/Anthropic-Routen zurück.

@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.4.4] — 2026-10-21 (compat fields moved out, effort map opened everywhere — issues #7 #8)
+
+### Changed
+- The two openai-completions-only switches (`支持 think effort` / `思考格式`) are no longer RENDERED on other protocols — they used to be shown greyed with a long note. They now appear only when the model is **declared a thinking model** AND the route speaks `openai-completions`; everywhere else they are absent from the DOM. Thinking itself stays live on every protocol (protocol-neutral `reasoningEfforts`).
+- The **per-level wire editor is no longer trapped in completions** (issue #8). It edits `reasoningEfforts` — the table the host turns into pi-ai's `thinkingLevelMap`, which every protocol reads (Anthropic thinking budget, Responses reasoning effort, completions reasoning_effort string). A thinking model now opens the grid on any protocol; only the completions toggle-style guard (needs `支持 think effort` before offering effort levels) still applies there.
+- `toggleEffortCapable` refuses a non-completions entry outright, so no code path can write the field where the host would reject it.
+
+### Fixed
+- `applyDraft` used to auto-write `compat.supportsReasoningEffort: true` whenever a non-toggle level was ticked. On a Responses/Anthropic route that field makes the host **reject the WHOLE providers payload** — one tick and the entire save was lost. The side effect is now completions-only, so editing levels outside completions is safe.
+
+### Added
+- Leftover audit (`staleThinkingCompatFields`) + one-click cleanup (`stripThinkingCompat`): a model row still carrying `thinkingFormat` / `supportsReasoningEffort` from an older version (or a hand-edited `cordis.yml`) now shows which fields block the next write, with a per-row and a card-wide sweep. Sibling compat fields survive; an emptied `compat` object is deleted rather than left as `{}`.
+
+### Tests
+- 180/180: the issue-#7 render matrix (absent vs present by protocol × thinking), the issue-#8 grid-on-every-protocol matrix, the write-recorder bomb regression (mutation-verified: removing the guard fails it), the audit, and the strip writer's sibling/empty-object cases.
+
 ## [4.4.3] — 2026-10-21 (thinking stays configurable on every protocol — issue #6)
 
 ### Fixed

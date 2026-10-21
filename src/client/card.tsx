@@ -467,6 +467,55 @@ export function writeThinkingRow(
   }
 }
 
+/**
+ * The two compat switches that exist ONLY on the openai-completions protocol.
+ * Both are model-level writes; on any other protocol the host's
+ * `resolveModelCompat` refuses the entry and fails the WHOLE providers payload
+ * (`model "x" sets compat "…", but its api is "…", which does not take it`).
+ */
+export const THINKING_COMPAT_FIELDS = ['thinkingFormat', 'supportsReasoningEffort'] as const
+
+/**
+ * The openai-completions-only compat fields an entry's OWN model row still
+ * carries while its route speaks another protocol — i.e. leftovers from a
+ * version that offered those switches on every route (4.4.0–4.4.2), or a
+ * hand-edited `cordis.yml`. They are a hard write blocker: the next save of
+ * ANY model switch on this route fails wholesale until they are removed.
+ *
+ * This is the "split the force-written format out and check it" half of issue
+ * #7: the fields are no longer offered on such routes, so what remains is
+ * exactly this audit + one-click cleanup.
+ * @param entry - the capability entry (model row + its route's protocol).
+ * @returns the offending field names, in {@link THINKING_COMPAT_FIELDS} order.
+ */
+export function staleThinkingCompatFields(entry: CapabilityEntry): string[] {
+  if (completionsCompatConfigurable(entry)) return []
+  const own = entry.model['compat']
+  if (typeof own !== 'object' || own === null || Array.isArray(own)) return []
+  const compat = own as Record<string, unknown>
+  return THINKING_COMPAT_FIELDS.filter(field => compat[field] !== undefined)
+}
+
+/**
+ * Remove those leftovers from ONE model row, returning what was removed (empty
+ * when the row was already clean, so the caller can skip the write). Sibling
+ * compat fields survive; an emptied compat object is deleted rather than left
+ * as `{}`.
+ * @param entry - the capability entry whose protocol decides what is stale.
+ * @param row - the model row to mutate.
+ * @returns the removed field names.
+ */
+export function stripThinkingCompat(entry: CapabilityEntry, row: Record<string, unknown>): string[] {
+  const removed = staleThinkingCompatFields({ ...entry, model: row })
+  if (removed.length === 0) return []
+  const own = row['compat'] as Record<string, unknown>
+  const compat = { ...own }
+  for (const field of removed) delete compat[field]
+  if (Object.keys(compat).length === 0) delete row['compat']
+  else row['compat'] = compat
+  return removed
+}
+
 /** Flatten the user-layer providers into capability entries (models arrays only). */
 function entriesOf(providers: Record<string, unknown>): CapabilityEntry[] {
   return Object.entries(providers).flatMap(([providerId, profile]) => {
@@ -800,8 +849,15 @@ function ModelCapabilities(props: {
     patchModel(entry.providerId, entry.index, (row) => writeThinkingRow(entry, row, next))
   }
 
-  /** Toggle whether a model accepts reasoning_effort levels. */
+  /**
+   * Toggle whether a model accepts reasoning_effort levels.
+   *
+   * openai-completions only, by construction: the checkbox is no longer
+   * rendered anywhere else (issue #7), so this writer can never be reached with
+   * a route whose protocol would refuse the field.
+   */
   const toggleEffortCapable = (entry: CapabilityEntry, next: boolean): void => {
+    if (!completionsCompatConfigurable(entry)) return
     patchModel(entry.providerId, entry.index, (row) => {
       patchCompat(row, (compat) => {
         compat['supportsReasoningEffort'] = next
@@ -813,6 +869,35 @@ function ModelCapabilities(props: {
     })
   }
 
+  /** Remove the completions-only compat leftovers from one model row (issue
+   *  #7's cleanup half). The audit lives in {@link staleThinkingCompatFields};
+   *  this is the one-click repair, and it is a no-op when the row is already
+   *  clean. */
+  const stripStaleCompat = (entry: CapabilityEntry): void => {
+    patchModel(entry.providerId, entry.index, (row) => {
+      stripThinkingCompat(entry, row)
+    })
+  }
+
+  /**
+   * Sweep every stale row in one providers write (card-level audit button).
+   * One write instead of N: the host validates the whole payload, so a
+   * half-cleaned section could still be refused by a row the sweep had not
+   * reached yet.
+   */
+  const stripAllStaleCompat = (): void => {
+    commitProviders((current) => {
+      for (const entry of entriesOf(current)) {
+        const profile = current[entry.providerId] as { models?: unknown[] } | undefined
+        if (profile === undefined || !Array.isArray(profile.models)) continue
+        const row = profile.models[entry.index]
+        if (typeof row !== 'object' || row === null) continue
+        stripThinkingCompat(entry, row as Record<string, unknown>)
+      }
+      return current
+    })
+  }
+
   /** Apply one model's wire draft as its `reasoningEfforts` table. */
   const applyDraft = (entry: CapabilityEntry): void => {
     const key = entryKey(entry)
@@ -821,6 +906,13 @@ function ModelCapabilities(props: {
     const table = effortTableOf(draft)
     patchModel(entry.providerId, entry.index, (row) => {
       row['reasoningEfforts'] = table
+      // The `supportsReasoningEffort` side effect is a COMPLETIONS-ONLY concern
+      // (issue #8): it tells pi-ai's completions wire to send a reasoning_effort
+      // string. Anthropic/Responses derive their dispatch from the
+      // thinkingLevelMap alone, and the host refuses the field on those
+      // protocols — writing it here would reject the WHOLE providers payload,
+      // i.e. ticking one level would silently fail the save.
+      if (!completionsCompatConfigurable(entry)) return
       // Mark effort support only when the model already had it or the user
       // ticked a reasoning_effort-only level (minimal/low/medium/xhigh/max).
       // A toggle-only model (Qwen3.6: off/high = enable_thinking) must keep
@@ -977,6 +1069,10 @@ function ModelCapabilities(props: {
       entry.modelId.toLowerCase().includes(needle)
       || entry.providerId.toLowerCase().includes(needle))
   const providerIds = [...new Set(visible.map(entry => entry.providerId))]
+  // Issue #7 audit: rows an older version force-wrote the openai-completions
+  // compat fields onto. They block the NEXT write on that route wholesale, so
+  // the count is surfaced at card level with a route-wide sweep.
+  const staleEntries = allEntries.filter(entry => staleThinkingCompatFields(entry).length > 0)
 
   return (
     <div style={sectionStyle}>
@@ -984,6 +1080,21 @@ function ModelCapabilities(props: {
       <p style={hintStyle}>{t('card.capabilities.hint')}</p>
       {writeError !== null && (
         <p style={{ margin: '0 0 4px', fontSize: '12px', lineHeight: '18px', color: 'var(--dsw-alias-danger, #e5484d)' }} role="status">⚠ {writeError}</p>
+      )}
+      {staleEntries.length > 0 && (
+        <div style={{ margin: '4px 0 6px' }}>
+          <p style={{ ...hintStyle, color: 'var(--dsw-alias-warning, #b7791f)' }}>
+            {t('card.capabilities.staleCompat')}: {staleEntries.length} / {allEntries.length}
+          </p>
+          <button
+            type="button"
+            disabled={readonly || busy}
+            onClick={stripAllStaleCompat}
+            style={{ ...controlStyle, cursor: readonly || busy ? 'default' : 'pointer' }}
+          >
+            {t('card.capabilities.stripStaleCompat')}
+          </button>
+        </div>
       )}
 
       {/* Search + one-click presets */}
@@ -1074,13 +1185,20 @@ function ModelCapabilities(props: {
                   // route-declared thinking/effort posture shows on every model.
                   const compat = compatOf(entry)
                   const supportsEffort = compat['supportsReasoningEffort'] === true
-                  // Issue #2/#6: a non-completions protocol refuses the
-                  // openai-completions compat FIELDS at the write site — grey
-                  // exactly those out before the attempt instead of failing the
-                  // whole providers payload. The Thinking switch stays live on
-                  // every protocol: it writes protocol-neutral `reasoningEfforts`
-                  // (the prerequisite of the effort selector).
+                  // Issue #2/#6/#7: a non-completions protocol refuses the
+                  // openai-completions compat FIELDS at the write site. Issue #7
+                  // moves them OUT of that surface entirely (they are not
+                  // rendered at all) instead of rendering them disabled: the
+                  // fields are only reachable once the model is DECLARED a
+                  // thinking model AND the route speaks completions. The
+                  // Thinking switch stays live on every protocol — it writes
+                  // protocol-neutral `reasoningEfforts`, the prerequisite.
                   const compatGated = !completionsCompatConfigurable(entry)
+                  const compatOffered = thinking && !compatGated
+                  // What an older version force-wrote onto this row (or a
+                  // hand-edited cordis.yml left behind): a hard write blocker
+                  // for the whole route, so it is surfaced with one-click cleanup.
+                  const stale = staleThinkingCompatFields(entry)
                   const meta = summaryOf(entry)
                   const format = typeof compat['thinkingFormat'] === 'string'
                     ? compat['thinkingFormat']
@@ -1117,6 +1235,21 @@ function ModelCapabilities(props: {
                         ? (
                           <div style={{ padding: '4px 10px 10px', borderTop: '1px solid var(--dsw-alias-border-l2)' }}>
                             {compatGated && <p style={hintStyle}>{t('card.capabilities.apiUnsupported')}</p>}
+                            {stale.length > 0 && (
+                              <div style={{ margin: '0 0 8px' }}>
+                                <p style={{ ...hintStyle, color: 'var(--dsw-alias-warning, #b7791f)' }}>
+                                  {t('card.capabilities.staleCompat')}: {stale.join(', ')}
+                                </p>
+                                <button
+                                  type="button"
+                                  disabled={readonly || busy}
+                                  onClick={() => stripStaleCompat(entry)}
+                                  style={{ ...controlStyle, cursor: readonly || busy ? 'default' : 'pointer' }}
+                                >
+                                  {t('card.capabilities.stripStaleCompat')}
+                                </button>
+                              </div>
+                            )}
                             {/* Layer 1 — base capabilities: is it a thinking model? A vision model? */}
                             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '2px 0 8px' }}>
                               <label
@@ -1163,27 +1296,38 @@ function ModelCapabilities(props: {
                                 </label>
                               ))}
                             </div>
-                            {/* Layer 2 — only for thinking models: does it take reasoning_effort levels? */}
-                            {thinking
+                            {/* Layer 2 — openai-completions-only compat switch, and
+                                only once the model is DECLARED a thinking model:
+                                a non-thinking model has no effort wire to declare,
+                                and a non-completions route refuses the field. */}
+                            {compatOffered
                               ? (
                                 <label
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', margin: '0 0 8px' }}
-                                  title={compatGated ? t('card.capabilities.apiUnsupported') : undefined}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={supportsEffort}
-                                    disabled={readonly || busy || compatGated}
+                                    disabled={readonly || busy}
                                     onChange={(event) => toggleEffortCapable(entry, event.currentTarget.checked)}
                                   />
                                   <span>{t('card.capabilities.supportsEffort')}</span>
                                 </label>
                               )
                               : null}
-                            {thinking && supportsEffort
+                            {/* Layer 3 — the per-level wire map (`reasoningEfforts`).
+                                PROTOCOL-NEUTRAL (issue #8): the host turns this table
+                                into pi-ai's `thinkingLevelMap`, which every protocol
+                                reads — Anthropic for its thinking budget, Responses
+                                for its reasoning effort, completions for the
+                                reasoning_effort string. So the editor must open on a
+                                non-completions route too; only the COMPLETIONS
+                                toggle-style guard (needs `supportsReasoningEffort`
+                                before offering reasoning_effort levels) applies. */}
+                            {thinking && (!compatOffered || supportsEffort)
                               ? (
                                 <>
-                                  {/* Per-level wire editor — only for effort-capable thinking models */}
+                                  {/* Per-level wire editor — the reasoningEfforts map */}
                                   <p style={fieldLabelStyle}>{t('card.capabilities.efforts')}</p>
                                   <div style={{ margin: '4px 0 6px' }}>
                                     {CAPABILITY_LEVELS.map(level => {
@@ -1257,15 +1401,18 @@ function ModelCapabilities(props: {
                                 </>
                               )
                               : null}
-                            {/* Layer 4 — thinking format (wire serialization) */}
+                            {/* Layer 4 — thinking format (wire serialization). Same
+                                two conditions as Layer 2: it is a completions-only
+                                compat field describing how a THINKING model's
+                                levels serialize, so it is absent everywhere else. */}
+                            {compatOffered && (
                             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '10px' }}>
                               <label style={fieldStyle}>
                                 <span style={fieldLabelStyle}>{t('card.capabilities.thinkingFormat')}</span>
                                 <select
                                   style={controlStyle}
                                   value={format ?? 'inherit'}
-                                  disabled={readonly || busy || compatGated}
-                                  title={compatGated ? t('card.capabilities.apiUnsupported') : undefined}
+                                  disabled={readonly || busy}
                                   onChange={(event) => {
                                     const next = event.currentTarget.value
                                     patchModel(entry.providerId, entry.index, (row) => {
@@ -1283,6 +1430,7 @@ function ModelCapabilities(props: {
                                 </select>
                               </label>
                             </div>
+                            )}
                             {/* Context-window limit: presets + custom integer (written to llm-pi-ai, live on next request) */}
                             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '10px' }}>
                               <label style={fieldStyle}>

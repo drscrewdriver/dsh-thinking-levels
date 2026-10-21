@@ -2,6 +2,15 @@
 
 `dsh-thinking-levels`의 주요 변경 사항을 기록합니다.
 
+## [4.4.4] — 2026-10-21 (호환 필드를 화면에서 제거·레벨 표는 모든 프로토콜에서 편집 — issue #7 #8)
+
+- `支持 think effort` / `思考格式` 두 스위치는 다른 프로토콜에서 "비활성화 + 긴 안내문" 대신 화면에 아예 표시하지 않습니다. 표시 조건은 "사고 모델로 선언됨" 그리고 "라우트가 openai-completions" 두 가지뿐입니다. 사고 스위치 자체는 모든 프로토콜에서 계속 사용 가능합니다(protocol 중립적 `reasoningEfforts`).
+- **레벨별 wire 편집기가 completions 에 갇히지 않습니다**(issue #8). 이것은 `reasoningEfforts` 를 편집하며, 호스트가 pi-ai 의 `thinkingLevelMap` 으로 변환해 모든 프로토콜이 읽습니다(Anthropic 사고 예산 / Responses reasoning effort / completions reasoning_effort 문자열). 사고 모델이면 어느 프로토콜에서든 그리드가 열립니다. completions 의 toggle 가드(effort 단을 내놓기 전에 `支持 think effort` 필요)만 그대로입니다.
+- `toggleEffortCapable` 은 비 completions 엔트리를 즉시 거부합니다.
+- 수정: `applyDraft` 는 비 toggle 단을 체크할 때 `compat.supportsReasoningEffort: true` 를 자동 기록했습니다. Responses / Anthropic 에서 이 필드 때문에 호스트가 **providers 전체를 거부**하여 한 번의 클릭으로 저장이 통째로 사라졌습니다. 부작용을 completions 전용으로 제한했습니다.
+- 잔여물 검사(`staleThinkingCompatFields`)와 원클릭 정리(`stripThinkingCompat`) 추가. 행 단위·카드 전체에서 제거할 수 있고, 형제 compat 필드는 보존하며, 비게 된 `compat` 은 삭제합니다.
+- 테스트 180/180 통과(변이 검증 완료).
+
 ## [4.4.3] — 2026-10-21 (사고는 모든 프로토콜에서 설정 가능 — issue #6)
 
 - 능력 카드: 사고 체크박스가 openai-completions 외(Responses / Anthropic)에서도 다시 선택 가능합니다. 기록하는 값은 protocol 중립적인 `reasoningEfforts` 이며, 호스트 llm-pi-ai 가 `reasoning: true` + `thinkingLevelMap` 으로 해석하고 pi-ai 가 프로토콜별로 네이티브 변환합니다(에포트 선택의 전제).
