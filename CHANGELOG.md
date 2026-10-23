@@ -1,4 +1,6 @@
 # Changelog
+4.4.5: host enumeration addendum for DSH 0.2.1-rc.3 (declaration-only bump; contract plane zero diff).
+
 
 ## [4.4.5] — 2026-10-21 (toggle fold is openai-completions-only — issue #9)
 

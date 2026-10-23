@@ -21,7 +21,7 @@
 
 > **▼ Prise en charge des versions de DSH**
 >
-> Cette version (4.3.x) fixe les hôtes DSH par une énumération exacte de 13-termes `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2` — chaque rc listé individuellement, sans plages ni carets ; la 0.2.1 stable n'est pas déclarée avant sa sortie.
+> Cette version (4.3.x) fixe les hôtes DSH par une énumération exacte de 13-termes `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3` — chaque rc listé individuellement, sans plages ni carets ; la 0.2.1 stable n'est pas déclarée avant sa sortie.
 >
 > | Version de DSH | Statut | Notes |
 > | --- | --- | --- |

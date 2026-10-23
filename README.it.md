@@ -21,7 +21,7 @@
 
 > **▼ Versioni di DSH supportate**
 >
-> Questa versione (4.3.x) fissa gli host DSH con un enumerazione esatta di 13-termini `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2` — ogni rc elencato singolarmente, senza range o caret; la 0.2.1 stabile non è dichiarata finché non esce.
+> Questa versione (4.3.x) fissa gli host DSH con un enumerazione esatta di 13-termini `0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3` — ogni rc elencato singolarmente, senza range o caret; la 0.2.1 stabile non è dichiarata finché non esce.
 >
 > | Versione DSH | Stato | Note |
 > | --- | --- | --- |
