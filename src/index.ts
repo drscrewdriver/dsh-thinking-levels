@@ -23,12 +23,14 @@
  * - `agent/request` waterfall (packages/core/agent-loop/src/agent.ts
  *   buildRequest): each listener may return a modified GenerateOptions for
  *   the next listener — the sanctioned way to adjust request config.
- * - `session.events` (agent.session) carries the step's tool/call records; the
- *   auto scheduler PULLS the recent calls from there at request time
- *   (`recentToolCalls`). There is no `agent/tool` push event in DSH — the
- *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
- *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
- *   stay a pull from `session.events`.
+ * - `session.events` (agent.session) carried the step's tool/call records up to
+ *   host 0.1.0-rc.8 only; from 0.1.2-rc.1 on the log is read through the
+ *   projection registry instead (`tlAutoSchedule`, issue #6). The deprecated
+ *   synchronous readers (`eventAt/snapshotEvents/ownEvents`) are prohibited for
+ *   new production calls by `packages/core/session/README.md:62`.
+ * - The session's EXPLICIT effort pick is folded from `model/selection` events:
+ *   the host seeds `reasoningEffort` from the previous request header (this
+ *   plugin's own output), so the seed must never be read as a manual pick.
  * - declarative settings (DSH 0.1.7+): the runtime-adjustable `Config` fields
  *   are marked `.volatile()`, the host generates the settings form from the
  *   schema alone, and the plugin reads the live values per request.
@@ -39,6 +41,7 @@ import z from '@deepseek-ai/schemastery'
 import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
 import { buildBillingDefinition, type PricingPolicy } from './billing-projection.ts'
 import { recentToolCalls } from './session-events.ts'
+import { buildAutoScheduleDefinition, readAutoSchedule, requestedEffortOf } from './auto-schedule-projection.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
@@ -622,6 +625,29 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     }
   })
   const current: () => LiveConfig = () => resolveLiveConfig(source())
+  // Auto-schedule projection (issue #6): folds `tool/call` into the scheduler's
+  // sample ring and `model/selection` into the session's explicit pick. Same
+  // soft coupling and same "never poison the fiber" rule as the billing unit
+  // above — a registry that cannot serve `stateOf` is skipped outright rather
+  // than registered blind:
+  // - 0.1.0-rc.8 is the legacy plane-contract registry (`schema`/`view`, no
+  //   `stateOf`), and a unit missing `schema` there poisons every cold session
+  //   load.
+  // - where it is skipped, the scheduler falls back to the legacy
+  //   `session.events` read, which is exactly right for that one host line.
+  ;(ctx as unknown as {
+    inject?: (deps: string[], cb: (scope: { sessionProjections?: unknown }) => void) => void
+  }).inject?.(['sessionProjections'], (scope) => {
+    const registry = scope.sessionProjections as
+      | { register?: (definition: unknown) => void; stateOf?: unknown }
+      | undefined
+    if (typeof registry?.stateOf !== 'function' || typeof registry.register !== 'function') return
+    try {
+      registry.register(buildAutoScheduleDefinition())
+    } catch (error) {
+      console.warn(`[dsh-thinking-levels] tlAutoSchedule register failed (auto falls back to the legacy read): ${error instanceof Error ? error.message : String(error)}`)
+    }
+  })
   ctx.on('loader/volatile-update', () => {
     assertEffortId(resolveLiveConfig(config).level, 'dsh-thinking-levels config.level')
     // A flipped takeover switch mirrors immediately (identity-gated).
@@ -736,11 +762,18 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     // Unsupported fields are stripped, not sent; a resolved low/auto schedule
     // only ever reaches models whose metadata admits the level.
     const capabilityFor = await capability.resolve(seed.provider, seed.model)
-    const calls = recentToolCalls(payload.agent)
+    // Folded projection state (issue #6): recent tool samples + the session's
+    // explicit pick. `undefined` on registries without `stateOf` (0.1.0-rc.8).
+    const session = (payload.agent as { session?: unknown } | undefined)?.session
+    const autoSchedule = readAutoSchedule(ctx, session)
+    const calls = autoSchedule?.samples ?? recentToolCalls(payload.agent)
+    // Intent comes from the session/config, never from the seed: the host
+    // echoes this plugin's own last injection back through the header.
+    const requested = requestedEffortOf(autoSchedule, cfg.level)
     const decision = resolveEffortInjection({
       supportsReasoning: capabilityFor.supportsReasoning,
+      requested,
       seedEffort: seed.reasoningEffort,
-      selected: cfg.level,
       recentCalls: calls,
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
@@ -759,10 +792,15 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       return stripped
     }
     // Summary-only log: individual tool names/arg sizes are workflow metadata
-    // that need not land in the host log; count and decision suffice.
+    // that need not land in the host log; count and decision suffice. `user=`
+    // and `src=` make the runtime proof for issue #6 readable: a healthy
+    // session shows `src=projection`, `calls>0` after tool activity, and
+    // `user=auto` on every request after the first.
     ctx.logger?.info?.(
-      '[thinking-levels] agent/request: model=%s/%s selected=%s calls=%d => level=%s',
-      String(seed.provider), String(seed.model), String(seed.reasoningEffort), calls.length, decision.level,
+      '[thinking-levels] agent/request: model=%s/%s user=%s seed=%s calls=%d => level=%s src=%s',
+      String(seed.provider), String(seed.model), String(requested),
+      String(seed.reasoningEffort), calls.length, decision.level,
+      autoSchedule === undefined ? 'legacy' : 'projection',
     )
     return { ...seed, reasoningEffort: decision.level }
   }, { prepend: true })

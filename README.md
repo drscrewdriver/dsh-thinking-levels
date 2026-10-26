@@ -158,6 +158,8 @@ The hub is `high` (the official default). `auto` schedules between `low` / `high
 
 The scheduling policy is the same source as [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (same simple-tool whitelist / payload thresholds / 75% ratio rule).
 
+**Where the samples come from (4.4.7+).** The scheduler folds `tool/call` events into a Session projection (`tlAutoSchedule`), so it sees real tool history on every host from 0.1.2-rc.1 on; the pre-4.4.7 `session.events` read only ever produced samples on 0.1.0-rc.8. The session's explicit pick is folded from `model/selection` events, so a level the host echoes back can never be mistaken for a manual choice. Known limitation: host `0.1.0-rc.8` exposes no `stateOf` on its projection registry (legacy plane contract), so that one line keeps the old array read — scheduling works there, the echo correction does not.
+
 ## Install
 
 See [INSTALL.md](./INSTALL.md) for the full official-CLI guide (profile discovery, upgrade, migration, verification, troubleshooting). Quick start:

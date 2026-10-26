@@ -2,6 +2,21 @@
 
 Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 
+## [4.4.8] — 2026-10-27 (versioni dei manifest riallineate)
+
+- La 4.4.7 aggiornava solo `package.json`; `dsh.plugin.json` restava a `4.4.6`. La 4.4.8 allinea entrambi a `4.4.8`. Comportamento a runtime identico alla 4.4.7.
+
+## [4.4.7] — 2026-10-27 (il livello auto funziona davvero — campionamento via projection + taglio dell'eco dell'host — issue #6)
+
+### Fixed
+- `auto` non ricade più sempre su `low`. Il campionamento degli strumenti leggeva `agent.session.events`, proprietà array che esiste solo sull'host 0.1.0-rc.8 (rimossa da 0.1.2-rc.1); su 13 delle 14 linee supportate il campione restava `[]`, rendendo `high` / `max` strutturalmente irraggiungibili. Ora il plugin registra la projection `tlAutoSchedule`: `apply` ripiega i `tool/call` in un anello di capacità 8, l'host legge via `stateOf()` in O(1); la prima lettura ripiega l'intero log in memoria, quindi le sessioni riprese e forkate sono complete. L'host vieta nuove chiamate di produzione a `eventAt` / `snapshotEvents` / `ownEvents`, quindi nessun ritorno ai vecchi lettori.
+- `auto` non vale più solo per la prima richiesta di una sessione. A ogni turno l'host riusa il `reasoningEffort` del `request/header` precedente (cioè l'iniezione del plugin) come seme; la vecchia implementazione lo leggeva come scelta manuale e lo lasciava passare, congelando il livello sulla prima decisione. Ora la stessa projection ripiega gli eventi `model/selection` per ottenere la scelta esplicita della sessione (unico scrittore in produzione: il comando di selezione dell'utente; l'iniezione del plugin non scrive mai). Il seme non decide più fra manuale e auto — l'eco scompare per costruzione, senza dover ricordare l'ultima iniezione, e resta corretto dopo resume / fork / compattazione.
+- Priorità dei livelli: scelta esplicita della sessione > configurazione `level` del plugin > scheduler.
+- Limite noto 0.1.0-rc.8: la superficie di registrazione di quella linea non ha `stateOf` (vecchio contratto plan), quindi la registrazione viene saltata e resta il vecchio percorso `session.events` — il campionamento funziona, la correzione dell'eco no.
+
+### Tests
+- 215/215: nuovi casi per reducer della projection, gate di capacità e tolleranza dello schema; `session-events.spec.ts` diventa una **fixture esca** (lo stesso oggetto espone sia un array `events` obsoleto sia lo stato della projection, e l'assert richiede la projection), più una simulazione dell'eco su quattro richieste (prima `low` → carico pesante `max` → scelta esplicita che prevale sullo scheduler).
+
 ## [4.4.4] — 2026-10-21 (campi di compat tolti dalla superficie, editor dei livelli aperto ovunque — issue #7 #8)
 
 - I due interruttori esclusivi di openai-completions (`支持 think effort` / `思考格式`) non vengono più MOSTRATI sugli altri protocolli — prima erano disabilitati con una nota lunga. Ora compaiono solo se il modello è **dichiarato thinking** E la rotta parla `openai-completions`; altrove sono assenti dal DOM. Il thinking stesso resta attivo ovunque (`reasoningEfforts`, neutro rispetto al protocollo).

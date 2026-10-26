@@ -2,6 +2,21 @@
 
 Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert.
 
+## [4.4.8] — 2026-10-27 (Manifest-Versionen wieder synchron)
+
+- 4.4.7 aktualisierte nur `package.json`; `dsh.plugin.json` blieb bei `4.4.6`. 4.4.8 setzt beide auf `4.4.8`. Laufzeitverhalten identisch zu 4.4.7.
+
+## [4.4.7] — 2026-10-27 (auto-Stufe wirkt wirklich — Sampling über eine Projektion + Host-Echo unterbrochen — Issue #6)
+
+### Fixed
+- `auto` fällt nicht mehr dauerhaft auf `low`. Das Werkzeug-Sampling las `agent.session.events`, doch dieses Array-Attribut existiert nur auf Host 0.1.0-rc.8 (ab 0.1.2-rc.1 entfernt); auf 13 der 14 unterstützten Linien blieb die Stichprobe daher `[]` und `high` / `max` waren strukturell unerreichbar. Jetzt registriert das Plugin die Projektion `tlAutoSchedule`: `apply` faltet `tool/call` in einen Ring der Kapazität 8, der Host liest per `stateOf()` in O(1); der erste Lesezugriff faltet das gesamte In-Memory-Log, sodass fortgesetzte und geforkte Sitzungen vollständig sind. Der Host verbietet neue Produktionsaufrufe von `eventAt` / `snapshotEvents` / `ownEvents`, daher keine Rückkehr zu den alten Lesern.
+- `auto` wirkt nicht mehr nur beim ersten Request einer Sitzung. Der Host setzt in jeder Runde das `reasoningEffort` des vorherigen `request/header` (also die eigene Injektion des Plugins) als Seed; die alte Implementierung hielt das für eine manuelle Wahl und reichte es durch, wodurch die Stufe dauerhaft auf der ersten Entscheidung einfror. Jetzt faltet dieselbe Projektion `model/selection`-Ereignisse zur expliziten Sitzungswahl (einziger Produktionsschreiber ist der Auswahlbefehl des Nutzers; Plugin-Injektionen schreiben nie). Der Seed entscheidet nicht mehr über manuell/auto — das Echo verschwindet strukturell, ohne sich die letzte Injektion merken zu müssen, und bleibt nach resume / fork / Kompaktierung korrekt.
+- Stufenpriorität: explizite Sitzungswahl > Plugin-Konfiguration `level` > Scheduler.
+- Bekannte Einschränkung 0.1.0-rc.8: Die Registrierungsoberfläche dieser Linie hat kein `stateOf` (alter Plane-Vertrag), daher wird die Projektion übersprungen und der alte `session.events`-Pfad bleibt — Sampling funktioniert, die Echo-Korrektur greift dort nicht.
+
+### Tests
+- 215/215: neue Fälle für Projektions-Reducer, Fähigkeits-Gate und Schema-Toleranz; `session-events.spec.ts` wurde zur **Köder-Fixture** (dasselbe Objekt liefert zugleich ein veraltetes `events`-Array und den Projektionszustand; die Assertion verlangt die Projektion), dazu ein Echo-Simulationslauf über vier Requests (erst `low` → schwere Last `max` → explizite Wahl überstimmt den Scheduler).
+
 ## [4.4.4] — 2026-10-21 (Compat-Felder aus der Oberfläche, Level-Editor überall geöffnet — Issues #7 #8)
 
 - Die beiden openai-completions-exklusiven Schalter (`支持 think effort` / `思考格式`) werden auf anderen Protokollen nicht mehr ANGEZEIGT — zuvor waren sie ausgegraut mit einer langen Notiz. Sie erscheinen nur noch, wenn das Modell **als Thinking-Modell deklariert** ist UND die Route `openai-completions` spricht; überall sonst fehlen sie im DOM. Thinking selbst bleibt überall aktiv (protokollneutral `reasoningEfforts`).

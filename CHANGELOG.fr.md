@@ -2,6 +2,21 @@
 
 Tous les changements notables de `dsh-thinking-levels` sont documentés ici.
 
+## [4.4.8] — 2026-10-27 (versions des manifestes resynchronisées)
+
+- La 4.4.7 n'a mis à jour que `package.json` ; `dsh.plugin.json` restait en `4.4.6`. La 4.4.8 aligne les deux sur `4.4.8`. Comportement d'exécution identique à la 4.4.7.
+
+## [4.4.7] — 2026-10-27 (le niveau auto fonctionne vraiment — échantillonnage via une projection + coupure de l'écho de l'hôte — issue #6)
+
+### Fixed
+- `auto` ne retombe plus systématiquement sur `low`. L'échantillonnage des outils lisait `agent.session.events`, propriété tableau qui n'existe que sur l'hôte 0.1.0-rc.8 (retirée depuis 0.1.2-rc.1) ; sur 13 des 14 lignes prises en charge l'échantillon restait `[]`, rendant `high` / `max` structurellement inatteignables. Le plugin enregistre désormais la projection `tlAutoSchedule` : `apply` replie les `tool/call` dans un anneau de capacité 8, l'hôte lit via `stateOf()` en O(1) ; la première lecture replie tout le journal en mémoire, donc les sessions reprises et forkées sont complètes. L'hôte interdit tout nouvel appel de production à `eventAt` / `snapshotEvents` / `ownEvents`, d'où le refus de revenir aux anciens lecteurs.
+- `auto` ne s'applique plus uniquement à la première requête d'une session. À chaque tour, l'hôte reprend le `reasoningEffort` du `request/header` précédent (donc l'injection du plugin) comme graine ; l'ancienne implémentation y voyait un choix manuel et le laissait passer, figeant le niveau sur la première décision. Désormais la même projection replie les événements `model/selection` pour obtenir le choix explicite de la session (unique écrivain en production : la commande de sélection de l'utilisateur ; l'injection du plugin n'écrit jamais). La graine ne décide plus du mode manuel/auto — l'écho disparaît structurellement, sans mémoriser la dernière injection, et reste correct après resume / fork / compaction.
+- Priorité des niveaux : choix explicite de la session > configuration `level` du plugin > ordonnanceur.
+- Limite connue 0.1.0-rc.8 : la surface d'enregistrement de cette ligne n'a pas `stateOf` (ancien contrat plan), l'enregistrement est donc ignoré et l'ancien chemin `session.events` subsiste — l'échantillonnage fonctionne, la correction de l'écho non.
+
+### Tests
+- 215/215 : nouveaux cas pour le reducer de projection, le verrou de capacité et la tolérance du schéma ; `session-events.spec.ts` devient une **fixture leurre** (le même objet fournit à la fois un tableau `events` périmé et l'état de projection, l'assertion exige la projection), plus une simulation d'écho sur quatre requêtes (d'abord `low` → charge lourde `max` → choix explicite qui prime sur l'ordonnanceur).
+
 ## [4.4.4] — 2026-10-21 (champs de compat retirés de la surface, éditeur de niveaux ouvert partout — issues #7 #8)
 
 - Les deux interrupteurs propres à openai-completions (`支持 think effort` / `思考格式`) ne sont plus AFFICHÉS sur les autres protocoles — ils étaient grisés avec une longue note. Ils n'apparaissent plus que si le modèle est **déclaré réflexif** ET que la route parle `openai-completions` ; ailleurs ils sont absents du DOM. La réflexion elle-même reste active partout (`reasoningEfforts`, neutre au protocole).

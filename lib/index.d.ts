@@ -23,12 +23,14 @@
  * - `agent/request` waterfall (packages/core/agent-loop/src/agent.ts
  *   buildRequest): each listener may return a modified GenerateOptions for
  *   the next listener — the sanctioned way to adjust request config.
- * - `session.events` (agent.session) carries the step's tool/call records; the
- *   auto scheduler PULLS the recent calls from there at request time
- *   (`recentToolCalls`). There is no `agent/tool` push event in DSH — the
- *   scope-event registry (`packages/core/scope/src/scoped-events.generated.ts`)
- *   lists no such name in 0.1.1-rc.2 or 0.1.2-rc.1, so tool recognition must
- *   stay a pull from `session.events`.
+ * - `session.events` (agent.session) carried the step's tool/call records up to
+ *   host 0.1.0-rc.8 only; from 0.1.2-rc.1 on the log is read through the
+ *   projection registry instead (`tlAutoSchedule`, issue #6). The deprecated
+ *   synchronous readers (`eventAt/snapshotEvents/ownEvents`) are prohibited for
+ *   new production calls by `packages/core/session/README.md:62`.
+ * - The session's EXPLICIT effort pick is folded from `model/selection` events:
+ *   the host seeds `reasoningEffort` from the previous request header (this
+ *   plugin's own output), so the seed must never be read as a manual pick.
  * - declarative settings (DSH 0.1.7+): the runtime-adjustable `Config` fields
  *   are marked `.volatile()`, the host generates the settings form from the
  *   schema alone, and the plugin reads the live values per request.
@@ -107,7 +109,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
-    defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "volatile-defined">;
+    defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -126,7 +128,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
-    defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "volatile-defined">;
+    defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -153,7 +155,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
-    defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "defined">;
+    defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;
@@ -172,7 +174,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowUpgrade: z<boolean, boolean, "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
-    defaultPricing: z<"estimate" | "cn" | "global" | "custom" | "off", "estimate" | "cn" | "global" | "custom" | "off", "defined">;
+    defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;
     models: z<import("@deepseek-ai/cosmokit").Dict<{
         vision?: boolean | null | undefined;
         thinking?: boolean | null | undefined;

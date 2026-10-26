@@ -129,6 +129,8 @@ Il perno è `high` (il predefinito ufficiale). `auto` pianifica tra `low` / `hig
 
 La politica di pianificazione condivide la stessa origine di [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (stessa whitelist di strumenti semplici / stesse soglie di payload / stessa regola del 75%).
 
+**Da dove vengono i campioni (4.4.7+).** Lo scheduler ripiega gli eventi `tool/call` in una projection di Session (`tlAutoSchedule`) e vede quindi la cronologia reale degli strumenti su ogni host da 0.1.2-rc.1 in poi; la lettura `session.events` precedente alla 4.4.7 produceva campioni solo su 0.1.0-rc.8. La scelta esplicita della sessione viene ripiegata dagli eventi `model/selection`, così un livello restituito in eco dall'host non può mai passare per una scelta manuale. Limite noto: l'host `0.1.0-rc.8` non espone `stateOf` sulla superficie di registrazione (vecchio contratto plan); quella linea mantiene la vecchia lettura ad array — lo scheduling funziona, la correzione dell'eco no.
+
 ## Installazione
 
 Vedi [INSTALL.md](./INSTALL.it.md) per la guida completa alla CLI ufficiale (scoperta del profilo, aggiornamento, migrazione, verifica, risoluzione dei problemi). Avvio rapido:

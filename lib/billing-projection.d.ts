@@ -133,11 +133,11 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     flat: "flat";
                 }>>;
                 source: z.ZodEnum<{
+                    off: "off";
+                    custom: "custom";
                     estimate: "estimate";
                     cn: "cn";
                     global: "global";
-                    custom: "custom";
-                    off: "off";
                     "catalog-miss": "catalog-miss";
                 }>;
                 priced: z.ZodBoolean;
@@ -212,7 +212,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
                 catalogKey: string | null;
@@ -289,7 +289,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
                 catalogKey: string | null;
@@ -365,7 +365,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 output: number;
                 currency: "CNY" | "USD";
                 tier: "peak" | "offPeak" | "flat" | null;
-                source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+                source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
                 catalogKey: string | null;
@@ -460,11 +460,11 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             step: z.ZodNullable<z.ZodNumber>;
             priced: z.ZodBoolean;
             pricingSource: z.ZodNullable<z.ZodEnum<{
+                off: "off";
+                custom: "custom";
                 estimate: "estimate";
                 cn: "cn";
                 global: "global";
-                custom: "custom";
-                off: "off";
                 "catalog-miss": "catalog-miss";
             }>>;
             estimated: z.ZodBoolean;
@@ -514,7 +514,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     output: number;
                     currency: "CNY" | "USD";
                     tier: "peak" | "offPeak" | "flat" | null;
-                    source: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+                    source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                     priced: boolean;
                     estimated: boolean;
                     catalogKey: string | null;
@@ -644,7 +644,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             turn: number;
             step: number;
             priced: boolean;
-            pricingSource: "estimate" | "cn" | "global" | "custom" | "off" | "catalog-miss";
+            pricingSource: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
             estimated: boolean;
             catalogKey: string | null;
             catalogLabel: string | null;

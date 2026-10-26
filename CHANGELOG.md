@@ -2,6 +2,22 @@
 4.4.5: host enumeration addendum for DSH 0.2.1-rc.3 (declaration-only bump; contract plane zero diff).
 
 
+## [4.4.8] — 2026-10-27 (双清单同串修正)
+
+### Fixed
+- 4.4.7 发版时只改了 `package.json`，`dsh.plugin.json` 的 `version` 仍停在 4.4.6（并行会话所写），两份清单不同串。4.4.8 将两份统一到 `4.4.8`；`engines.dsh`、`peerDependencies` 与运行时行为与 4.4.7 完全一致，仅元数据对齐。
+
+## [4.4.7] — 2026-10-27 (auto 档真正生效：采样改投影 + 打断宿主回灌 — issue #6)
+
+### Fixed
+- `auto` 档不再恒落 `low`。工具采样原先读 `agent.session.events`，而该数组属性只在宿主 0.1.0-rc.8 存在（0.1.2-rc.1 起移除），因此在 14 条支持线中的 13 条上采样恒为 `[]`、`high` / `max` 结构性不可达。现改为注册 `tlAutoSchedule` 投影单元：`apply` 把 `tool/call` 折进容量 8 的环形，宿主侧 `stateOf()` O(1) 读取；首次读会自动 fold 整条内存日志，恢复 / 分叉会话同样完整。宿主已明令禁止新增 `eventAt` / `snapshotEvents` / `ownEvents` 生产调用，故不回绑旧读法。
+- `auto` 档不再只在会话首个请求生效。宿主每轮把上一轮 `request/header` 的 `reasoningEffort`（即本插件自己的注入值）当作下一轮种子，旧实现视其为“手动选档”直接透传，档位由此被首轮决定永久锁死。现改为同一投影折入 `model/selection` 事件取会话内的显式选择（该事件唯一生产写点即用户选档命令，插件注入永不写入），种子不再参与手动 / 自动判定 —— 回灌在结构上消失，无需记忆上一轮注入值，resume / fork / 压缩后同样正确。
+- 档位来源优先级：会话内显式选择 > 插件配置 `level` > 调度器。
+- 0.1.0-rc.8 已知限制：该线注册面无 `stateOf`（旧平面契约），跳过投影注册并继续走 `session.events` 老读法 —— 采样照常，但“回灌”修正不生效。
+
+### Tests
+- 215/215：新增投影 reducer、能力门控与 schema 容错用例；`session-events.spec.ts` 改为**诱饵夹具**（同一对象同时提供过期 `events` 数组与投影状态，断言优先取投影），并新增跨四轮会话的回灌仿真（首轮 `low` → 重负载 `max` → 显式选档压住调度）。
+
 ## [4.4.5] — 2026-10-21 (toggle fold is openai-completions-only — issue #9)
 
 ### Fixed

@@ -130,6 +130,8 @@ El eje es `high` (el oficial predeterminado). `auto` programa entre `low` / `hig
 
 La política de programación comparte la misma fuente que [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (la misma lista blanca de herramientas simples / los mismos umbrales de carga / la misma regla del 75 %).
 
+**De dónde salen las muestras (4.4.7+).** El planificador pliega los eventos `tool/call` en una proyección de Session (`tlAutoSchedule`) y por tanto ve el historial real de herramientas en cualquier host desde 0.1.2-rc.1; la lectura `session.events` anterior a 4.4.7 solo producía muestras en 0.1.0-rc.8. La elección explícita de la sesión se pliega desde eventos `model/selection`, así que un nivel devuelto en eco por el host nunca puede confundirse con una elección manual. Límite conocido: el host `0.1.0-rc.8` no expone `stateOf` en su superficie de registro (contrato plano antiguo); esa línea mantiene la lectura antigua del array — la planificación funciona, la corrección del eco no.
+
 ## Instalación
 
 Consulta [INSTALL.md](./INSTALL.es.md) para la guía completa de la CLI oficial (descubrimiento del perfil, actualización, migración, verificación, resolución de problemas). Inicio rápido:

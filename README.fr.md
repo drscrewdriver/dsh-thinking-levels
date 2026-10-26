@@ -130,6 +130,8 @@ Le pivot est `high` (l'officiel par défaut). `auto` planifie entre `low` / `hig
 
 La politique de planification partage la même source que [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (même liste blanche d'outils simples / mêmes seuils de charge / même règle des 75 %).
 
+**D'où viennent les échantillons (4.4.7+).** L'ordonnanceur replie les événements `tool/call` dans une projection de Session (`tlAutoSchedule`) et voit donc l'historique réel des outils sur tout hôte depuis 0.1.2-rc.1 ; la lecture `session.events` antérieure à 4.4.7 ne produisait des échantillons que sur 0.1.0-rc.8. Le choix explicite de la session est replié depuis les événements `model/selection`, si bien qu'un niveau renvoyé en écho par l'hôte ne peut jamais passer pour une sélection manuelle. Limite connue : l'hôte `0.1.0-rc.8` n'expose pas `stateOf` sur sa surface d'enregistrement (ancien contrat plan) ; cette ligne conserve l'ancienne lecture de tableau — l'ordonnancement y fonctionne, la correction de l'écho non.
+
 ## Installation
 
 Voir [INSTALL.md](./INSTALL.fr.md) pour le guide complet de la CLI officielle (découverte du profil, mise à niveau, migration, vérification, dépannage). Démarrage rapide :

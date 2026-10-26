@@ -1,11 +1,16 @@
 /**
  * Session tool-call sampling for dsh-thinking-levels.
  *
- * Pulled out of the plugin body so the extraction logic — the part most
- * exposed to dsh event-shape drift — is unit-testable in isolation, with
- * explicit guards instead of naked type assertions. If a future dsh version
- * reshapes `session.events`, the failure shows up in the tests, not as a
- * silently wrong effort decision.
+ * Two readers, one extraction:
+ * - {@link toolSampleOf} normalizes a single raw Session event and is shared
+ *   with the `tlAutoSchedule` projection (`auto-schedule-projection.ts`), so
+ *   the `tool/call` wire shape lives in exactly one place.
+ * - {@link recentToolCalls} is the LEGACY pull path. `session.events` only
+ *   ever existed on hosts up to 0.1.0-rc.8 (verified: `get events()` present at
+ *   `dsh-v0.1.0-rc.8`, zero hits from `dsh-v0.1.2-rc.1` on), so on every newer
+ *   line it returns `[]` — which is exactly the issue #6 defect. It survives
+ *   only as the 0.1.0-rc.8 fallback for hosts whose projection registry
+ *   predates `stateOf`.
  */
 
 import type { ToolCallSample } from './thinking-level.ts'
@@ -24,14 +29,30 @@ function isToolCallEvent(event: unknown): event is { data: Record<string, unknow
 }
 
 /** Approximate argument size in characters (payload heft); unknown shapes read as 0. */
-function argsSizeOf(argumentsValue: unknown): number {
+export function argsSizeOf(argumentsValue: unknown): number {
   return typeof argumentsValue === 'string' ? argumentsValue.length : 0
 }
 
 /**
- * Recent tool calls of a session's current step, oldest first.
- * Non-tool events and malformed records are skipped; at most
- * {@link TOOL_SAMPLE_WINDOW} samples are returned.
+ * Normalize one raw Session event into a tool-call sample.
+ *
+ * @param event - any committed Session event.
+ * @returns the sample, or undefined for any other event / malformed record.
+ */
+export function toolSampleOf(event: unknown): ToolCallSample | undefined {
+  if (!isToolCallEvent(event)) return undefined
+  const data = event.data
+  const name = typeof data.name === 'string' && data.name.length > 0 ? data.name : 'tool'
+  return { name, argsSize: argsSizeOf(data.arguments) }
+}
+
+/**
+ * LEGACY: recent tool calls off `agent.session.events`, oldest first.
+ *
+ * Only 0.1.0-rc.8 carries that array property; every host from 0.1.2-rc.1 on
+ * drops it in favour of `eventAt()/snapshotEvents()/ownEvents()`, so this
+ * returns `[]` there. Callers must treat `[]` as "no samples available" and
+ * prefer the projection read.
  *
  * @param agent - the `payload.agent` value from the `agent/request` waterfall.
  * @returns the sampled tool calls, or `[]` for a fresh prompt / unknown shape.
@@ -43,11 +64,8 @@ export function recentToolCalls(agent: unknown): ToolCallSample[] {
 
   const samples: ToolCallSample[] = []
   for (let index = session.events.length - 1; index >= 0 && samples.length < TOOL_SAMPLE_WINDOW; index -= 1) {
-    const event = session.events[index]
-    if (!isToolCallEvent(event)) continue
-    const data = event.data
-    const name = typeof data.name === 'string' && data.name.length > 0 ? data.name : 'tool'
-    samples.push({ name, argsSize: argsSizeOf(data.arguments) })
+    const sample = toolSampleOf(session.events[index])
+    if (sample !== undefined) samples.push(sample)
   }
   return samples.reverse()
 }

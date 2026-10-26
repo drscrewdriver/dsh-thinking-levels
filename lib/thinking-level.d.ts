@@ -88,10 +88,24 @@ export declare function reasoningEffortSupported(reasoning: unknown): boolean;
 export interface EffortInjectionInput {
     /** Whether the target model advertises reasoning-effort support. */
     supportsReasoning: boolean;
-    /** The `reasoningEffort` already present on the request seed, if any. */
+    /**
+     * The level this request was ASKED for: the session's explicit pick (folded
+     * from `model/selection`) when present, else the plugin-configured default.
+     *
+     * Never derive this from the request seed. From dsh 0.1.2-rc.1 on, the host
+     * seeds `reasoningEffort` from the previous `request/header` — which is this
+     * plugin's own output (`core/agent-loop/src/agent.ts:573-581`). Reading it as
+     * a manual pick made `auto` resolve once and then stay frozen for the rest of
+     * the session (issue #6, bug 2).
+     */
+    requested: EffortId;
+    /**
+     * The `reasoningEffort` already present on the request seed (host echo of a
+     * previous header, or route inheritance). Used ONLY to recognise the `on`
+     * toggle and to strip an inherited effort from a model that cannot take one —
+     * never as a manual-pick signal.
+     */
     seedEffort: unknown;
-    /** Plugin-configured default level when the seed carries none. */
-    selected: EffortId;
     /** Recent tool calls of the step, for the auto scheduler. */
     recentCalls: readonly ToolCallSample[];
     /** Scheduler preference: allow the scheduler to drop below `high`. */
@@ -133,18 +147,21 @@ export declare function clampToEfforts(level: EffortId, efforts: readonly string
  * - A model without reasoning support never receives the field: dsh would
  *   throw UNSUPPORTED_REASONING_EFFORT, so the seed's inherited effort (from a
  *   previous route or session header) is stripped.
- * - A manual wire selection passes through unchanged when the model advertises
- *   it; an unsupported manual pick is stripped rather than clamped (the user
- *   asked for that exact level).
+ * - A manual wire selection (`requested`) passes through unchanged when the
+ *   model advertises it; an unsupported manual pick is stripped rather than
+ *   clamped (the user asked for that exact level).
  * - `on` is the enable-thinking toggle, never a wire level: on a toggle-only
  *   model it injects the advertised thinking level (`high`), which the wire
  *   serializes as enable_thinking without a reasoning_effort; an
  *   effort-capable model does not advertise `on`, so it is stripped.
- * - `auto` (or no selection) resolves through the scheduler; the result is
- *   clamped to the model's advertised levels, so a scheduled `low` on a model
- *   that only takes off/high (Qwen3.6) becomes `high` instead of an error.
+ * - `auto` resolves through the scheduler; the result is clamped to the
+ *   model's advertised levels, so a scheduled `low` on a model that only takes
+ *   off/high (Qwen3.6) becomes `high` instead of an error.
  *
- * @param input - model capability plus the seed's current effort.
+ * The manual/auto branch reads `requested` only. The seed no longer influences
+ * it, so a header echoed back by the host cannot masquerade as a user pick.
+ *
+ * @param input - model capability plus the requested level and the seed's effort.
  * @returns whether to inject and the level to set.
  */
 export declare function resolveEffortInjection(input: EffortInjectionInput): EffortInjectionDecision;

@@ -130,8 +130,8 @@ describe('resolveEffortInjection — model capability guard', () => {
   const FULL_EFFORTS = ['off', 'low', 'high', 'max', 'auto']
   const base = (over: Partial<EffortInjectionInput>): EffortInjectionInput => ({
     supportsReasoning: true,
+    requested: 'auto',
     seedEffort: undefined,
-    selected: 'auto',
     recentCalls: [],
     allowDowngrade: true,
     allowUpgrade: true,
@@ -143,72 +143,92 @@ describe('resolveEffortInjection — model capability guard', () => {
   it('strips the effort entirely for a model without reasoning support', () => {
     // A custom openai-completions route (e.g. Qwen3.6 without reasoningEfforts)
     // must never receive a reasoning_effort: dsh rejects it per request.
-    const decision = resolveEffortInjection(base({ supportsReasoning: false, seedEffort: 'low', selected: 'low' }))
+    const decision = resolveEffortInjection(base({ supportsReasoning: false, requested: 'low', seedEffort: 'low' }))
     expect(decision).toEqual({ inject: false })
   })
 
   it('passes a manual low selection through unchanged on a supporting model', () => {
     // dsh rc.7+ advertises low natively; the plugin neither rewrites it nor
     // re-schedules it.
-    expect(resolveEffortInjection(base({ seedEffort: 'low' }))).toEqual({ inject: true, level: 'low' })
-    expect(resolveEffortInjection(base({ seedEffort: 'max' }))).toEqual({ inject: true, level: 'max' })
+    expect(resolveEffortInjection(base({ requested: 'low' }))).toEqual({ inject: true, level: 'low' })
+    expect(resolveEffortInjection(base({ requested: 'max' }))).toEqual({ inject: true, level: 'max' })
   })
 
   it('resolves auto through the scheduler, which may still pick low', () => {
     // The capability guard already stripped unsupported models, so a scheduled
     // low only reaches models that advertise it.
-    expect(resolveEffortInjection(base({ seedEffort: undefined }))).toEqual({ inject: true, level: 'low' })
+    expect(resolveEffortInjection(base({ requested: 'auto' }))).toEqual({ inject: true, level: 'low' })
     const heavy = [{ name: 'mcp__docs', argsSize: 4000 }]
-    expect(resolveEffortInjection(base({ seedEffort: 'auto', recentCalls: heavy }))).toEqual({ inject: true, level: 'max' })
+    expect(resolveEffortInjection(base({ requested: 'auto', recentCalls: heavy }))).toEqual({ inject: true, level: 'max' })
   })
 
-  it('falls back to the configured default when the seed carries no effort', () => {
-    expect(resolveEffortInjection(base({ seedEffort: undefined, selected: 'high' }))).toEqual({ inject: true, level: 'high' })
+  it('keeps scheduling when the seed echoes the plugin\u2019s own last level (issue #6 bug 2)', () => {
+    // The host seeds `reasoningEffort` from the previous request header, i.e.
+    // from this plugin's own output (core/agent-loop/src/agent.ts:573-581).
+    // Treating that seed as a manual pick froze `auto` after the first request
+    // of every session. `requested` must win over the echoed seed.
+    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'low' })))
+      .toEqual({ inject: true, level: 'low' })
+    const heavy = [{ name: 'mcp__docs', argsSize: 4000 }]
+    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'low', recentCalls: heavy })))
+      .toEqual({ inject: true, level: 'max' })
   })
 
-  it('clamps a scheduled low to the model’s highest thinking level', () => {
+  it('lets an explicit manual request win over an echoing seed', () => {
+    expect(resolveEffortInjection(base({ requested: 'high', seedEffort: 'low' })))
+      .toEqual({ inject: true, level: 'high' })
+  })
+
+  it('falls back to the configured default when the session never picked', () => {
+    // `requested` already carries cfg.level when the session has no pick.
+    expect(resolveEffortInjection(base({ requested: 'high' }))).toEqual({ inject: true, level: 'high' })
+  })
+
+  it('clamps a scheduled low to the model\u2019s highest thinking level', () => {
     // A model advertising no low (e.g. off/minimal/max) lifts a scheduled low
     // to its highest thinking level instead of erroring.
     const narrow = { efforts: ['off', 'minimal', 'max'], toggleOnly: false }
-    expect(resolveEffortInjection(base({ ...narrow, seedEffort: undefined }))).toEqual({ inject: true, level: 'max' })
+    expect(resolveEffortInjection(base({ ...narrow, requested: 'auto' }))).toEqual({ inject: true, level: 'max' })
   })
 
   it('strips an unsupported manual pick instead of clamping it', () => {
     // A manual low on a model that advertises no low is the user asking for an
     // exact level the API cannot take; the request must not fail per-round.
-    expect(resolveEffortInjection(base({ efforts: ['off', 'high', 'max'], seedEffort: 'low' })))
+    expect(resolveEffortInjection(base({ efforts: ['off', 'high', 'max'], requested: 'low' })))
       .toEqual({ inject: false })
   })
 
   it('toggle-only Off injects the off level (providers map it to thinking disabled)', () => {
     const toggle = { efforts: ['off', 'high'], toggleOnly: true }
-    expect(resolveEffortInjection(base({ ...toggle, seedEffort: 'off' }))).toEqual({ inject: true, level: 'off' })
+    expect(resolveEffortInjection(base({ ...toggle, requested: 'off' }))).toEqual({ inject: true, level: 'off' })
   })
 
   it('toggle-only On injects high (the explicit thinking-on signal)', () => {
-    // `on` / any non-off seed on a toggle-only model injects `high` — the
+    // `on` / any non-off request on a toggle-only model injects `high` — the
     // advertised toggle level. The short-circuit adapter serializes a non-off
     // effort as enable_thinking true; an absent effort is ambiguous (some
     // gateways treat it as off), so the explicit signal is required.
     const toggle = { efforts: ['off', 'high'], toggleOnly: true }
-    expect(resolveEffortInjection(base({ ...toggle, seedEffort: 'on' }))).toEqual({ inject: true, level: 'high' })
-    expect(resolveEffortInjection(base({ ...toggle, seedEffort: 'high' }))).toEqual({ inject: true, level: 'high' })
-    expect(resolveEffortInjection(base({ ...toggle, seedEffort: undefined }))).toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ ...toggle, requested: 'on' }))).toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ ...toggle, requested: 'high' }))).toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ ...toggle, requested: 'auto' }))).toEqual({ inject: true, level: 'high' })
   })
 
   it('a stray On on an effort-capable model is stripped, never lifted', () => {
-    // An effort-capable model advertises no `on`: a stray manual pick is
-    // stripped, not lifted to high.
-    expect(resolveEffortInjection(base({ efforts: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], seedEffort: 'on' })))
-      .toEqual({ inject: false })
+    // An effort-capable model advertises no `on`: a stray pick is stripped, not
+    // lifted to high — whether it arrives as the request or only on the seed.
+    const efforts = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+    expect(resolveEffortInjection(base({ efforts, requested: 'on' }))).toEqual({ inject: false })
+    expect(resolveEffortInjection(base({ efforts, requested: 'auto', seedEffort: 'on' }))).toEqual({ inject: false })
   })
 
   it('passes the extended wire levels through when the model advertises them', () => {
     // A custom gateway may declare minimal / medium / xhigh in reasoningEfforts;
     // the manual pick then passes through unchanged (custom wire mapping).
-    expect(resolveEffortInjection(base({ efforts: ['off', 'minimal', 'medium', 'high', 'xhigh', 'max'], seedEffort: 'medium' })))
+    const efforts = ['off', 'minimal', 'medium', 'high', 'xhigh', 'max']
+    expect(resolveEffortInjection(base({ efforts, requested: 'medium' })))
       .toEqual({ inject: true, level: 'medium' })
-    expect(resolveEffortInjection(base({ efforts: ['off', 'minimal', 'medium', 'high', 'xhigh', 'max'], seedEffort: 'xhigh' })))
+    expect(resolveEffortInjection(base({ efforts, requested: 'xhigh' })))
       .toEqual({ inject: true, level: 'xhigh' })
   })
 })

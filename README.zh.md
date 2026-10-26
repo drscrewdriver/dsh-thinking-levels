@@ -116,6 +116,8 @@ auto 调度对支持的模型仍可选出 `low`——由上面的能力守卫负
 
 调度策略与 [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) 同源（同一套简单工具白名单 / 载荷阈值 / 75% 比例规则）。
 
+**采样来源（4.4.7+）**：调度器把 `tool/call` 事件折入 Session 投影（`tlAutoSchedule`），因此在 0.1.2-rc.1 起的宿主上都能看到真实工具历史；4.4.7 之前读的 `session.events` 只在 0.1.0-rc.8 上产出过样本。会话内的显式选档由 `model/selection` 事件折入，宿主回灌的档位不会被误判为手动选择。已知限制：宿主 `0.1.0-rc.8` 的投影注册面没有 `stateOf`（旧平面契约），该线继续走旧的数组读法 —— 调度照常，回灌修正不生效。
+
 ## 安装
 
 完整流程（profile 确认、升级、迁移、验证、排查）见 [INSTALL.zh.md](./INSTALL.zh.md)。快速开始：

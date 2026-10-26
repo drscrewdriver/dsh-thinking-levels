@@ -130,6 +130,8 @@ Der Hub ist `high` (der offizielle Standard). `auto` plant zwischen `low` / `hig
 
 Die Planungspolitik stammt aus derselben Quelle wie [dsh-tool-turbo](https://github.com/drscrewdriver/dsh-tool-turbo) (dieselbe Simple-Tool-Whitelist / dieselben Payload-Schwellen / dieselbe 75-%-Regel).
 
+**Woher die Stichproben kommen (4.4.7+):** Der Scheduler faltet `tool/call`-Ereignisse in eine Session-Projektion (`tlAutoSchedule`) und sieht damit auf jedem Host ab 0.1.2-rc.1 echte Werkzeughistorie; das frühere `session.events`-Lesen lieferte nur auf 0.1.0-rc.8 Stichproben. Die explizite Sitzungswahl wird aus `model/selection`-Ereignissen gefaltet, sodass ein vom Host zurückgespiegeltes Level nie als manuelle Wahl gilt. Bekannte Einschränkung: Host `0.1.0-rc.8` hat kein `stateOf` an seiner Registrierungsoberfläche (alter Plane-Vertrag); diese Linie behält das alte Array-Lesen — Scheduling funktioniert dort, die Echo-Korrektur nicht.
+
 ## Installation
 
 Siehe [INSTALL.md](./INSTALL.de.md) für die vollständige Anleitung der offiziellen CLI (Profil-Erkennung, Upgrade, Migration, Verifikation, Fehlerbehebung). Schnellstart:
