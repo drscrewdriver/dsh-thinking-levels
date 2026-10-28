@@ -1,4 +1,14 @@
 # Changelog
+4.4.9: per-model PDF input declaration + host enumeration addendum for DSH 0.2.1-rc.4.
+
+## [4.4.9] — 2026-10-28 (模型级 PDF 输入声明 + rc.4 枚举)
+
+### 新增
+- **模型能力卡「PDF 输入」勾选**：`toggleModelModality` 模态扩为 `video|audio|pdf`，声明写接管传输层 `extraInputs`（宿主模型行 input 枚举仅 text|image）；勾选后该 `provider/model` 可收 PDF，按上传件渲染原生 OpenAI `file` 内容块；能力行增 PDF 徽章；9 语 `card.capabilities.pdf`。
+
+### 元数据
+- `engines.dsh` 与全部 dsh peer 同串追加 `0.2.1-rc.4`（15 档枚举；宿主契约面 rc.3↔rc.4 零 diff，声明式 bump）。
+
 4.4.5: host enumeration addendum for DSH 0.2.1-rc.3 (declaration-only bump; contract plane zero diff).
 
 
