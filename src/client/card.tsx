@@ -797,10 +797,10 @@ function ModelCapabilities(props: {
   const modelExtrasOf = (providerId: string, modelId: string): string[] =>
     extraInputsOf(viewOc)[`${providerId}/${modelId}`] ?? []
 
-  /** Toggle one model's video/audio declaration on the transport's extraInputs.
+  /** Toggle one model's video/audio/pdf declaration on the transport's extraInputs.
    *  The host pi-ai schema caps model-row `input` at text|image, so omni
    *  modalities live here — effective only while the route is taken over. */
-  const toggleModelModality = (providerId: string, modelId: string, modality: 'video' | 'audio', next: boolean): void => {
+  const toggleModelModality = (providerId: string, modelId: string, modality: 'video' | 'audio' | 'pdf', next: boolean): void => {
     if (ocScope === undefined || !ocWritable) return
     const current = extraInputsOf(viewOc)
     const modelKey = `${providerId}/${modelId}`
@@ -1228,6 +1228,7 @@ function ModelCapabilities(props: {
                         <span style={badgeStyle} title="image">{meta.image ? 'IMG' : '–'}</span>
                         {modelExtrasOf(entry.providerId, entry.modelId).includes('video') && <span style={badgeStyle} title="video (extraInputs)">VID</span>}
                         {modelExtrasOf(entry.providerId, entry.modelId).includes('audio') && <span style={badgeStyle} title="audio (extraInputs)">AUD</span>}
+                        {modelExtrasOf(entry.providerId, entry.modelId).includes('pdf') && <span style={badgeStyle} title="pdf (extraInputs)">PDF</span>}
                         {meta.context !== null && <span style={badgeStyle}>{meta.context}</span>}
                         {thinking && !supportsEffort && <span style={badgeStyle}>On/Off</span>}
                       </div>
@@ -1278,9 +1279,11 @@ function ModelCapabilities(props: {
                                 />
                                 <span>{t('card.capabilities.vision')}</span>
                               </label>
-                              {/* Video/audio declarations live on the taken-over transport
-                                  (extraInputs): the host model-row input enum caps at text|image. */}
-                              {(['video', 'audio'] as const).map(modality => (
+                              {/* Video/audio/pdf declarations live on the taken-over transport
+                                  (extraInputs): the host model-row input enum caps at text|image.
+                                  `pdf` is accepted by the transport schema (audio|video|pdf) and
+                                  renders uploaded PDFs as native OpenAI `file` parts. */}
+                              {(['video', 'audio', 'pdf'] as const).map(modality => (
                                 <label
                                   key={modality}
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: takeoverActiveOf(viewOc, entry.providerId) ? undefined : 'var(--dsw-alias-label-disabled, var(--dsw-alias-label-caption))' }}
