@@ -42,6 +42,12 @@ import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type 
 import { buildBillingDefinition, type PricingPolicy } from './billing-projection.ts'
 import { recentToolCalls } from './session-events.ts'
 import { buildAutoScheduleDefinition, readAutoSchedule, requestedEffortOf } from './auto-schedule-projection.ts'
+import {
+  effortOfSelection,
+  planStrictStep,
+  type StrictStepMemory,
+  type StrictStepPlan,
+} from './strict-step-schedule.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
@@ -751,7 +757,191 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   // the adapter registry changes (a route's reasoning metadata can move).
   const capability = capabilityResolver(ctx)
 
+  /* ── Strict line (dsh 0.2.2+): schedule ONE STEP AHEAD ─────────────────────
+   * From 0.2.2-alpha.2 the host fixes provider/model/`reasoningEffort` during
+   * step preparation and THROWS when an `agent/request` listener changes one
+   * (`packages/core/agent-loop/src/agent.ts` prepareRequest —
+   * `agent/request proposed reasoning effort "low" after step preparation
+   * fixed "adapter default"; use agent.model.select() before step
+   * preparation`). The sanctioned replacement is `agent.model.select()` before
+   * prompt assembly, which the loop reads for the NEXT step — the accepted
+   * one-step lag (`strict-step-schedule.ts`).
+   *
+   * The gate is the payload/agent SHAPE, not a version string: only hosts on
+   * that line give the Agent a public `model` controller and capture the
+   * step's selection before `agent/pre-step`, and shape detection is the
+   * policy the rest of this plugin already follows (`installLegacySection`).
+   * A version string would add a second source of truth for forks, shims and
+   * re-packaged builds that report the same version with different behaviour.
+   */
+  type StrictAgentLike = {
+    session?: unknown
+    model?: { select?: (selection: unknown) => void; current?: () => unknown }
+  }
+  const strictAgents = new WeakSet<object>()
+  const strictMemory = new WeakMap<object, StrictStepMemory>()
+  const onEvent = ctx.on as unknown as (
+    event: string,
+    handler: (payload: Record<string, unknown>, next?: () => Promise<unknown>) => unknown,
+  ) => void
+
+  /** Resolve the route's capability, then plan the step's level. */
+  const strictPlanFor = async (
+    agent: StrictAgentLike,
+    provider: string,
+    model: string,
+    selectionEffort: unknown,
+  ): Promise<StrictStepPlan> => {
+    const capabilityFor = await capability.resolve(provider, model)
+    const state = readAutoSchedule(ctx, agent.session)
+    const cfg = current()
+    return planStrictStep({
+      selectionEffort,
+      memory: strictMemory.get(agent as object),
+      cfgLevel: cfg.level,
+      samples: state?.samples ?? [],
+      allowDowngrade: cfg.allowDowngrade,
+      allowUpgrade: cfg.allowUpgrade,
+      supportsReasoning: capabilityFor.supportsReasoning,
+      efforts: capabilityFor.efforts,
+      toggleOnly: capabilityFor.toggleOnly,
+    })
+  }
+
+  /** Write the NEXT step's level through the documented API (one-step lag). */
+  const strictSelectNext = (
+    agent: StrictAgentLike,
+    provider: string,
+    model: string,
+    write: { level?: EffortId; clear: boolean },
+  ): boolean => {
+    const select = agent.model?.select
+    if (typeof select !== 'function') return false
+    select.call(
+      agent.model,
+      write.clear ? { provider, model } : { provider, model, reasoningEffort: write.level },
+    )
+    return true
+  }
+
+  /**
+   * Apply the plan to the step the host ALREADY fixed.
+   *
+   * `payload.modelSelection` is the very object the loop captured and will hand
+   * to `prepareRequest` (`core/agent-loop/src/agent.ts`: the payload field and
+   * `decision.selection` are one reference), so writing its `reasoningEffort`
+   * takes effect on THIS step. That matters for more than latency: on the
+   * strict line a plugin mask (`auto`, `on`) is not a wire level, and nothing
+   * may rewrite it at request time any more — it has to be resolved before the
+   * adapter binds or the request fails downstream.
+   *
+   * `agent.model.select()` stays the FALLBACK and the durable record. If a host
+   * copies the selection instead of passing it through (or freezes it), the
+   * write cannot land on this step and the documented API takes over one step
+   * later — the accepted lag.
+   *
+   * @returns how the plan was applied, for the runtime log.
+   */
+  const strictApplyStep = (
+    agent: StrictAgentLike,
+    provider: string,
+    model: string,
+    selection: { reasoningEffort?: unknown },
+    plan: StrictStepPlan,
+  ): 'step' | 'next' | 'none' => {
+    strictMemory.set(agent as object, plan.memory)
+    const write = plan.select
+    if (write === undefined) return 'none'
+    try {
+      if (write.clear) delete selection.reasoningEffort
+      else selection.reasoningEffort = write.level
+      if (effortOfSelection(selection.reasoningEffort) === (write.clear ? null : write.level)) return 'step'
+    } catch {
+      // Frozen or otherwise non-writable selection: fall back below.
+    }
+    return strictSelectNext(agent, provider, model, write) ? 'next' : 'none'
+  }
+
+  /**
+   * Schedule the step the host just fixed.
+   */
+  onEvent('agent/pre-step', async (payload, next) => {
+    const decision = await next?.()
+    const agent = payload.agent as StrictAgentLike | undefined
+    const selection = payload.modelSelection as
+      | { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
+      | undefined
+    if (agent === undefined || selection === undefined) return decision
+    if (typeof agent.model?.select !== 'function') return decision
+    const provider = selection.provider
+    const model = selection.model
+    if (typeof provider !== 'string' || typeof model !== 'string') return decision
+    // Marked even when disabled: the request hook must keep hands off on this
+    // line regardless, or a stale injection throws the turn.
+    strictAgents.add(agent)
+    if (!current().enabled) return decision
+    try {
+      const fixed = effortOfSelection(selection.reasoningEffort)
+      const plan = await strictPlanFor(agent, provider, model, selection.reasoningEffort)
+      const applied = strictApplyStep(agent, provider, model, selection, plan)
+      const write = plan.select
+      ctx.logger?.info?.(
+        '[thinking-levels] agent/pre-step: model=%s/%s fixed=%s intent=%s => %s=%s',
+        provider, model, fixed ?? 'adapter default', plan.intent,
+        applied === 'step' ? 'applied' : applied === 'next' ? 'deferred-next-step' : 'unchanged',
+        write === undefined ? '-' : write.clear ? 'clear' : String(write.level),
+      )
+    } catch (error) {
+      ctx.logger?.warn?.('[thinking-levels] agent/pre-step schedule skipped: %s', String(error))
+    }
+    return decision
+  })
+
+  /**
+   * Step 1: the host fixed the selection before any step could observe it, and
+   * `agent/created` is a SERIAL dispatch (`dsh-agent`: `ctx.serial(...,
+   * 'agent/created', ...)`) awaited before the Agent becomes live, so a write
+   * here is in place before the first request — deterministically, not by
+   * racing.
+   *
+   * Only a route with NO effort at all is touched: a resumed or forked session
+   * keeps its recorded choice, which is also what seeds the baseline so it
+   * never reads back as a user change. One `model/selection` write is retired
+   * by the first `request/header`, so the recorded pick does not linger.
+   */
+  onEvent('agent/created', async (payload) => {
+    const agent = payload.agent as StrictAgentLike | undefined
+    if (agent === undefined || typeof agent.model?.select !== 'function') return
+    try {
+      if (!current().enabled) return
+      const opening = agent.model?.current?.() as
+        | { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
+        | undefined
+      if (opening === undefined) return
+      if (effortOfSelection(opening.reasoningEffort) !== null) return
+      const provider = opening.provider
+      const model = opening.model
+      if (typeof provider !== 'string' || typeof model !== 'string') return
+      strictAgents.add(agent)
+      const plan = await strictPlanFor(agent, provider, model, opening.reasoningEffort)
+      strictMemory.set(agent as object, plan.memory)
+      const write = plan.select
+      const applied = write !== undefined && strictSelectNext(agent, provider, model, write)
+      ctx.logger?.info?.(
+        '[thinking-levels] agent/created: model=%s/%s opening step at %s',
+        provider, model, applied && write !== undefined ? String(write.level) : 'adapter default',
+      )
+    } catch (error) {
+      ctx.logger?.warn?.('[thinking-levels] agent/created schedule skipped: %s', String(error))
+    }
+  })
+
   on('agent/request', async (payload, next) => {
+    // Strict line: the selection was fixed before this waterfall and the host
+    // rejects any change here; `agent/pre-step` already recorded the next
+    // step's level through `agent.model.select()`. Pass the seed through.
+    const gatedAgent = payload.agent as object | undefined
+    if (gatedAgent !== undefined && strictAgents.has(gatedAgent)) return next()
     const seed = await next() as { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
     const cfg = current()
     // `enabled` may flip at runtime through the settings namespace.

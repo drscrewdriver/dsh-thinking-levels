@@ -202,6 +202,20 @@
 
 ---
 
+## 4.4.12 — dsh 0.2.2 严格契约：档位改为一律「准备前定死」，首步固定在 high（2026-11-06）
+
+- **现象**：桌面端 0.2.2-rc.1 上每一轮在首个模型请求前直接失败：`agent "session-…": agent/request proposed reasoning effort "low" after step preparation fixed "adapter default"; use agent.model.select() before step preparation`。手动选 off/low 反而能跑（插件算出的值与宿主已固定的值刚好相等），auto 一开必炸。
+- **根因（宿主换代）**：`dsh-v0.2.2-alpha.2` 起 `agent-loop/src/agent.ts` 的 `prepareRequest` 在 step 准备时固定 provider/model/`reasoningEffort`，`agent/request` 瀑布里任何改写都直接 throw。逐 tag 实测：`0.2.0-rc.2`～`0.2.1-rc.4` 无此校验，`0.2.2-alpha.2` 起出现；官方迁移指南（`docs/upgrade-guide/v0.2.1-alpha.4/session-model-selection`）写明替代路径是 `agent.model.select()`。插件原有的「请求时注入」设计在这条线上整体作废，`engines.dsh` 已列 0.2.2-rc.1 属声明与实现不符。
+- **修复（双线，形状门控而非版本号）**：
+  1. **能力门控**：以 `agent.model.select` 是否存在 + `agent/pre-step` 是否带 `modelSelection` 判定严格线；命中即在 `agent/request` 原样透传（标记 WeakSet，防止残留注入再炸轮次）。
+  2. **严格线改为一步提前**：新增 `src/strict-step-schedule.ts` 纯函数 `planStrictStep`，在 `agent/pre-step` 观察宿主已固定的选择，算出本步应处的档位。写入优先落在**本步的 selection 对象**上（`payload.modelSelection` 与 `prepareRequest` 的 `selection` 为同一引用，实测可写、未冻结）→ 本步即时生效，且 `auto`/`on` 这类插件掩码不会漏到适配器；对象若被复制/冻结则回退到官方 `agent.model.select()`，一步滞后（已确认可接受）。
+  3. **意图判据换基线差分**：插件自己开始写 `model/selection` 之后，折叠出的 `userEffort` 无法再区分「用户选 auto」与「插件上一步写了 low」，改为对每个 Agent 记住上一次观测/写入值（WeakMap `baseline` + `intent`），观测值偏离基线才认作用户改动；resume/fork 的首个观测天然等于日志里的既有值 → 只播种基线，不误判成用户改动。
+  4. **首步固定 high**：`agent/created` 是 serial 派发、在 Agent 上线前被 await，所以在没有任何 effort 的路由上写一次 `high`，首请求即确定（新会话首个 `request/header` 会回收该 pending，不会长期污染选择器）。同时把调度器的无样本分支从 `low` 改为 `high`（旧行为首步 low 会让整轮计划建立在欠思考上），`low` 降为「有简单工具证据才可降」的地板。
+- **验证**：vitest 228/228（新增 `strict-step-schedule.spec.ts` 13 例，含 resume 播种基线、用户改动夺权、无 effort 路由清除、toggle 模型映射）；typecheck/build/lint 全绿。真包契约探针（`@deepseek-ai/dsh-agent@0.2.2-rc.1` + `dsh-session@0.2.2-rc.1` 实装 npm 包，非手工夹具）9 项全 PASS：`current()` 非冻结且可写、`select()` 落为 pending 且出现在 `snapshotEvents()` 的 `model/selection`、匹配的 `request/header` 回收 pending、后续 `select()` 继续移动下一步。
+- **未覆盖**：headless profile 无 API key（`MISSING_CREDENTIAL`），进程级两 step 实跑未在本轮完成；桌面 profile 仍是 4.4.11，需重装 + 重启宿主才生效。
+
+---
+
 ## 通用排查线索
 
 - 插件"已停用/未挂载"无错误：检查 profile 与 `$DSH_HOME/cordis.patch.yml` 的 `disabled` 条目（桌面端可能改写 profile patch 文件）；检查 host 值依赖是否在 profile 解析树内。

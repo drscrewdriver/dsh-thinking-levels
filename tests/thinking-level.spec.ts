@@ -31,11 +31,14 @@ describe('manual levels pass through unchanged', () => {
 })
 
 describe('auto scheduler', () => {
-  it('sends a fresh prompt (pure chat) to low — cheap rounds stay cheap', () => {
-    expect(decideEffort(base({ selected: 'auto' }))).toBe('low')
+  it('opens the session at the high hub — the first step sets the plan', () => {
+    // No tool history exists yet, so no evidence justifies a downgrade. Starting
+    // at `low` is what made the first step under-think the task.
+    expect(decideEffort(base({ selected: 'auto' }))).toBe('high')
+    expect(decideEffort(base({ selected: 'auto', allowDowngrade: false }))).toBe('high')
   })
 
-  it('sends simple deterministic tool chains to low', () => {
+  it('sends simple deterministic tool chains to low — the scheduler floor', () => {
     const recentCalls = [
       { name: 'bash', argsSize: 40 },
       { name: 'fs_read', argsSize: 20 },
@@ -59,8 +62,14 @@ describe('auto scheduler', () => {
     expect(decideEffort(base({ selected: 'auto', recentCalls, allowUpgrade: false }))).toBe('high')
   })
 
-  it('respects the downgrade toggle: fresh prompt stays at the hub', () => {
+  it('ignores the downgrade toggle before any tool evidence exists', () => {
+    // Both settings agree on the first request: `allowDowngrade` only decides
+    // what the scheduler may do once samples exist.
     expect(decideEffort(base({ selected: 'auto', allowDowngrade: false }))).toBe('high')
+    expect(decideEffort(base({ selected: 'auto', allowDowngrade: true }))).toBe('high')
+    const simple = [{ name: 'bash', argsSize: 10 }]
+    expect(decideEffort(base({ selected: 'auto', allowDowngrade: false, recentCalls: simple }))).toBe('high')
+    expect(decideEffort(base({ selected: 'auto', allowDowngrade: true, recentCalls: simple }))).toBe('low')
   })
 
   it('never resolves to off or auto (scheduler output is a wire level)', () => {
@@ -154,10 +163,15 @@ describe('resolveEffortInjection — model capability guard', () => {
     expect(resolveEffortInjection(base({ requested: 'max' }))).toEqual({ inject: true, level: 'max' })
   })
 
-  it('resolves auto through the scheduler, which may still pick low', () => {
-    // The capability guard already stripped unsupported models, so a scheduled
-    // low only reaches models that advertise it.
-    expect(resolveEffortInjection(base({ requested: 'auto' }))).toEqual({ inject: true, level: 'low' })
+  it('opens the session at the hub, and only evidence may downgrade it', () => {
+    // The session's first request has no tool history, so it starts at the hub
+    // regardless of `allowDowngrade`: an under-thought first step sets the plan
+    // the rest of the turn inherits. `low` therefore needs tool evidence.
+    expect(resolveEffortInjection(base({ requested: 'auto' }))).toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ requested: 'auto', allowDowngrade: false })))
+      .toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ requested: 'auto', recentCalls: [{ name: 'bash', argsSize: 20 }] })))
+      .toEqual({ inject: true, level: 'low' })
     const heavy = [{ name: 'mcp__docs', argsSize: 4000 }]
     expect(resolveEffortInjection(base({ requested: 'auto', recentCalls: heavy }))).toEqual({ inject: true, level: 'max' })
   })
@@ -167,10 +181,12 @@ describe('resolveEffortInjection — model capability guard', () => {
     // from this plugin's own output (core/agent-loop/src/agent.ts:573-581).
     // Treating that seed as a manual pick froze `auto` after the first request
     // of every session. `requested` must win over the echoed seed.
-    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'low' })))
+    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'high' })))
+      .toEqual({ inject: true, level: 'high' })
+    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'high', recentCalls: [{ name: 'bash', argsSize: 20 }] })))
       .toEqual({ inject: true, level: 'low' })
     const heavy = [{ name: 'mcp__docs', argsSize: 4000 }]
-    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'low', recentCalls: heavy })))
+    expect(resolveEffortInjection(base({ requested: 'auto', seedEffort: 'high', recentCalls: heavy })))
       .toEqual({ inject: true, level: 'max' })
   })
 

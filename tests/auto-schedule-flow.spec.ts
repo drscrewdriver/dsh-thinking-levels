@@ -55,12 +55,13 @@ describe('auto schedule across a session (issue #6 end to end)', () => {
     const host = makeHost()
     fold(host, selection('auto'))
 
-    // Request #1 — fresh prompt, no tool calls yet: the scheduler picks low.
-    expect(request(host, 'auto')).toEqual({ inject: true, level: 'low' })
+    // Request #1 — fresh prompt, no tool calls yet: the session opens at the
+    // hub. No evidence exists to justify a downgrade yet.
+    expect(request(host, 'auto')).toEqual({ inject: true, level: 'high' })
 
-    // The host now echoes `low` back as the seed. Before the fix this looked
-    // like a manual pick and the level stayed low for the rest of the session.
-    expect(host.lastHeaderEffort).toBe('low')
+    // The host now echoes `high` back as the seed. Before the fix this looked
+    // like a manual pick and the level stayed fixed for the rest of the session.
+    expect(host.lastHeaderEffort).toBe('high')
 
     // Request #2 — light tool activity, still low.
     fold(host, { type: 'tool/call', data: { name: 'bash', arguments: 'ls' } })
@@ -80,7 +81,7 @@ describe('auto schedule across a session (issue #6 end to end)', () => {
   it('honours an explicit pick, and returns to scheduling when auto is re-picked', () => {
     const host = makeHost()
     fold(host, selection('auto'))
-    expect(request(host, 'auto')).toEqual({ inject: true, level: 'low' })
+    expect(request(host, 'auto')).toEqual({ inject: true, level: 'high' })
 
     // User picks high mid-session (only `model/selection` records this).
     fold(host, selection('high'))
@@ -99,7 +100,7 @@ describe('auto schedule across a session (issue #6 end to end)', () => {
     // `model/selection` cannot confuse the two.
     const host = makeHost()
     fold(host, selection('auto'))
-    expect(request(host, 'auto')).toEqual({ inject: true, level: 'low' })
+    expect(request(host, 'auto')).toEqual({ inject: true, level: 'high' })
     fold(host, selection('low'))
     expect(request(host, 'auto')).toEqual({ inject: true, level: 'low' })
     // Heavy history must NOT lift the level while `low` is explicitly picked.
