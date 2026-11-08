@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Niveaux de réflexion",
+    "description": "Choisissez Auto dans le sélecteur de modèle : le plugin planifie low / high / max selon l\\'historique des appels d\\'outils avant de soumettre l\\'effort à l\\'API. Configurez ici le niveau par défaut, les limites du planificateur et les capacités par modèle (niveau → valeur envoyée à la passerelle)."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Niveles de razonamiento",
+    "description": "Elige Auto en el selector de modelo: el plugin planifica low / high / max según el historial de llamadas de herramientas antes de enviar el effort a la API. Aquí configuras el nivel predeterminado, los límites del planificador y las capacidades por modelo (nivel → valor wire enviado al gateway)."
+  }
+}

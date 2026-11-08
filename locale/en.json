@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Thinking Levels",
+    "description": "Pick Auto in the model selector: the plugin schedules low / high / max per tool round before submitting the API effort. Here you configure the default level, scheduler bounds, and per-model capabilities (level → gateway wire value mapping)."
+  }
+}

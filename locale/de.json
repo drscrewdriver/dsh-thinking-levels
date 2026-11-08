@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Denkstufen",
+    "description": "Wählen Sie Auto im Modellselektor: Das Plugin plant low / high / max anhand des Tool-Aufrufverlaufs, bevor der API-Aufwand übermittelt wird. Hier konfigurieren Sie die Standardstufe, Planer-Grenzen und Modellfähigkeiten (Stufe → Gateway-Drahtwert-Zuordnung)."
+  }
+}

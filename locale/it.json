@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Livelli di ragionamento",
+    "description": "Scegli Auto nel selettore del modello: il plugin pianifica low / high / max in base alla cronologia delle chiamate degli strumenti prima di inviare l\\'effort all\\'API. Qui configuri il livello predefinito, i limiti dello scheduler e le capacità per modello (livello → valore wire inviato al gateway)."
+  }
+}
