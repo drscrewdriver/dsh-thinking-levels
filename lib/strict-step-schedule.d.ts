@@ -64,6 +64,8 @@ export interface StrictStepInput {
     allowDowngrade: boolean;
     /** Scheduler preference: may lift above the hub to `max`. */
     allowUpgrade: boolean;
+    /** Extra tool names merged into the built-in cheap-and-deterministic set (issue #8 `Config.simpleTools`). */
+    extraSimpleTools?: readonly string[];
     /** Whether the target model advertises reasoning-effort support at all. */
     supportsReasoning: boolean;
     /** The model's advertised effort ids (including plugin masks like `auto`). */

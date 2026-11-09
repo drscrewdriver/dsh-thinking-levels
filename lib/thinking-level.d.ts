@@ -63,6 +63,12 @@ export interface EffortDecisionInput {
     allowDowngrade: boolean;
     /** User preference: allow the scheduler to lift above the hub to `max`. */
     allowUpgrade: boolean;
+    /**
+     * Extra tool names treated as cheap-and-deterministic, merged with the
+     * built-in set (each matched after the `ops_` namespace strip). Empty/omitted
+     * leaves the built-in classification untouched (issue #8 `Config.simpleTools`).
+     */
+    extraSimpleTools?: readonly string[];
 }
 /**
  * Map the user's selected level to the level injected into the next
@@ -112,6 +118,11 @@ export interface EffortInjectionInput {
     allowDowngrade: boolean;
     /** Scheduler preference: allow lifting above `high` to `max`. */
     allowUpgrade: boolean;
+    /**
+     * Extra tool names merged into the built-in cheap-and-deterministic set for
+     * the `auto` scheduler (issue #8 `Config.simpleTools`).
+     */
+    extraSimpleTools?: readonly string[];
     /** The model's advertised effort ids (including plugin masks like `auto`). */
     efforts: readonly string[];
     /**

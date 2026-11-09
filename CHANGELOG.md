@@ -1,4 +1,18 @@
 # Changelog
+4.4.14: auto 档简单工具判定修复（issue #8）+ 可配置追加名单 `Config.simpleTools`。
+
+## [4.4.14] — 2026-11-10 (auto 降档：命名空间剥离 + shell/pwsh 内置 + 可配置追加名单)
+
+### 修复
+- **issue #8：auto 档在带命名空间工具名宿主恒降不到 `low`**。`SIMPLE_TOOL_RE` 词首锚定导致 `ops_bash`/`ops_grep`/`ops_read_files` 一律判非简单 → `simpleRatio()` 恒 0 → 恒 `high`。新增 `TOOL_NAMESPACE_RE` 先剥 `ops_` 前缀再判（`ops_` 系 dsh-ops 插件族的工具前缀，非宿主通用包装）。
+- **命令工具名缺项**：内置简单工具表补 `shell`/`pwsh`/`cmd`/`sh`（此前仅 `bash`/`terminal`），使以 `shell`/`pwsh` 为命令入口的宿主（dsh-bash-terminal-ts、官方 pwsh）短调用也能降 `low`。
+
+### 新增
+- **`Config.simpleTools`（追加名单，volatile 热生效）**：逗号/空格分隔的工具名并入内置匹配，同样先剥 `ops_` 再按词边界判定；设置面在「模型能力」块上方新增文本框；9 语 `card.simpleTools`/`card.simpleToolsHint`。
+
+### 测试
+- 新增 5 条：shell/pwsh→low、ops_shell→low、配置追加名→low、ops_web_fetch 经剥离→low、词边界仍守 codebase_reader 判 high。全量 234/234。
+
 4.4.9: per-model PDF input declaration + host enumeration addendum for DSH 0.2.1-rc.4.
 
 ## [4.4.9] — 2026-10-28 (模型级 PDF 输入声明 + rc.4 枚举)

@@ -1694,16 +1694,21 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
     takeover: boolean
     takeoverUi: boolean
     defaultPricing: PricingPolicy
+    simpleTools: string[]
   }>
   // Optimistic overlay for this card's own writes (plan §E): same contract as
   // the capability card's overlay — clear on resolve(true), roll back + banner
   // on resolve(false).
-  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; takeoverUi: boolean; defaultPricing: PricingPolicy }>>({})
+  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; takeoverUi: boolean; defaultPricing: PricingPolicy; simpleTools: string[] }>>({})
   const [writeErrorTl, setWriteErrorTl] = useState<string | null>(null)
+  // The simple-tool allowlist is edited as free text (comma/space separated) and
+  // written back as a deduped string[]; the local text is the source of truth for
+  // the input so typing a trailing comma does not fight the persisted array.
+  const [simpleToolsText, setSimpleToolsText] = useState<string>((value.simpleTools ?? []).join(', '))
   const viewValue = { ...value, ...pendingTl }
   const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
   const defaultPricing = PRICING_OPTIONS.includes(viewValue.defaultPricing as PricingPolicy) ? viewValue.defaultPricing as PricingPolicy : 'estimate'
-  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
+  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'simpleTools' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
     setPendingTl((cur) => ({ ...cur, [field]: v as never }))
     void setWithRetry(scope, field, v).then(({ ok }) => {
       setPendingTl((cur) => {
@@ -1867,6 +1872,26 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                         <option key={option} value={option}>{t(`card.defaultPricing.${option}`)}</option>
                       ))}
                     </select>
+                  </div>
+                  <div style={fieldStyle}>
+                    <div style={rowStyle}>
+                      <label htmlFor="plugin-config-thinking-levels-simple-tools" style={labelStyle}>{t('card.simpleTools')}</label>
+                      <input
+                        id="plugin-config-thinking-levels-simple-tools"
+                        type="text"
+                        style={controlStyle}
+                        disabled={readonly}
+                        value={simpleToolsText}
+                        placeholder="shell, pwsh, web_fetch"
+                        onChange={(event) => {
+                          const raw = event.currentTarget.value
+                          setSimpleToolsText(raw)
+                          const parsed = Array.from(new Set(raw.split(/[,\s]+/).map(token => token.trim()).filter(token => token !== '')))
+                          writeTl('simpleTools', parsed)
+                        }}
+                      />
+                    </div>
+                    <p style={{ ...hintStyle, margin: '2px 0 10px' }}>{t('card.simpleToolsHint')}</p>
                   </div>
                   {writeErrorTl !== null && (
                     <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-danger, #e5484d)' }} role="status">⚠ {writeErrorTl}</p>

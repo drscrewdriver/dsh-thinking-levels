@@ -72,6 +72,12 @@ export interface ThinkingLevelsConfig {
     /** Scheduler preference: allow lifting above the `high` hub to `max`. */
     allowUpgrade: boolean | Volatile<boolean>;
     /**
+     * Extra tool names the auto scheduler also treats as cheap-and-deterministic,
+     * merged with the built-in set (issue #8). Each is matched after the `ops_`
+     * namespace strip, exactly like a built-in token.
+     */
+    simpleTools: string[] | Volatile<string[]>;
+    /**
      * Master takeover switch: mirrored into the openai-completions transport's
      * own section (`llm-openai-completions.enabled`) when it flips. The
      * transport's dispatch judgment stays single-source in ITS section; this
@@ -107,6 +113,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
@@ -126,6 +133,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
+    simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
@@ -153,6 +161,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
+    simpleTools: z<string[], string[], "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;
@@ -172,6 +181,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
+    simpleTools: z<string[], string[], "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;

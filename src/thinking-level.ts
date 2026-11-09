@@ -81,19 +81,71 @@ export interface EffortDecisionInput {
   allowDowngrade: boolean
   /** User preference: allow the scheduler to lift above the hub to `max`. */
   allowUpgrade: boolean
+  /**
+   * Extra tool names treated as cheap-and-deterministic, merged with the
+   * built-in set (each matched after the `ops_` namespace strip). Empty/omitted
+   * leaves the built-in classification untouched (issue #8 `Config.simpleTools`).
+   */
+  extraSimpleTools?: readonly string[]
 }
 
-/** Deterministic tool names that are cheap to reason about (word-boundary anchored). */
-const SIMPLE_TOOL_RE = /^(?:fs|bash|terminal|code|text|todo|job|skill|read|list|search|write|grep|glob|edit|ls|cat|rm|mv|cp|touch|mkdir|pwd|head|tail)(?:_|$)/i
+/**
+ * Deterministic tool names that are cheap to reason about (word-boundary
+ * anchored). `shell`/`pwsh`/`cmd`/`sh` sit alongside `bash`/`terminal` — every
+ * one of them is a "run this command" entry, so a step made only of short calls
+ * to any of them is cheap-and-deterministic (issue #8 follow-up: on hosts whose
+ * command tool is named `shell`/`pwsh` rather than `bash`, auto used to sit
+ * permanently on `high`).
+ */
+const SIMPLE_TOOL_RE = /^(?:fs|bash|terminal|shell|pwsh|cmd|sh|code|text|todo|job|skill|read|list|search|write|grep|glob|edit|ls|cat|rm|mv|cp|touch|mkdir|pwd|head|tail)(?:_|$)/i
+
+/**
+ * Known tool-wrapper namespaces (issue #8). `ops_` is the prefix the dsh-ops
+ * plugin family puts on its tools (`ops_bash`, `ops_grep`, `ops_shell`,
+ * `ops_read_files`); the wrapped tool is just as cheap-and-deterministic as its
+ * bare name, so the prefix is stripped before the simple-tool check. Only an
+ * explicit table is stripped: a generic `word_` catch-all would misread
+ * look-alike heavy names such as `codebase_search` as simple (see the
+ * classification-boundary test).
+ */
+const TOOL_NAMESPACE_RE = /^(?:ops_)+/i
 
 /** Hefty payloads signal non-trivial work no matter the tool name. */
 const HEAVY_ARGS = 800
 
+/** Escape a user-supplied token for embedding in a RegExp source. */
+function escapeRe(source: string): string {
+  return source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Compiled `extraSimpleTools` matchers, memoised by content. The config array
+ * may be a fresh reference on every read (volatile `.get()`), so key on the
+ * joined names rather than identity to avoid recompiling per request.
+ */
+const EXTRA_SIMPLE_RE_CACHE = new Map<string, RegExp | null>()
+function compileExtraSimpleTools(tokens: readonly string[] | undefined): RegExp | null {
+  if (tokens === undefined || tokens.length === 0) return null
+  const key = tokens.join('\u0000')
+  const hit = EXTRA_SIMPLE_RE_CACHE.get(key)
+  if (hit !== undefined) return hit
+  const cleaned = tokens.map(token => token.trim()).filter(token => token !== '')
+  const re = cleaned.length === 0 ? null : new RegExp(`^(?:${cleaned.map(escapeRe).join('|')})(?:_|$)`, 'i')
+  EXTRA_SIMPLE_RE_CACHE.set(key, re)
+  return re
+}
+
+/** Whether a tool name (namespace prefix removed) looks cheap-and-deterministic. */
+function isSimpleToolName(name: string, extra?: RegExp | null): boolean {
+  const bare = name.replace(TOOL_NAMESPACE_RE, '')
+  return SIMPLE_TOOL_RE.test(bare) || (extra !== undefined && extra !== null && extra.test(bare))
+}
+
 /** Count how many of the recent calls look cheap-and-deterministic. */
-function simpleRatio(calls: readonly ToolCallSample[]): number {
+function simpleRatio(calls: readonly ToolCallSample[], extra?: RegExp | null): number {
   if (calls.length === 0) return 1
   const simple = calls.filter(call =>
-    SIMPLE_TOOL_RE.test(call.name) && call.argsSize < HEAVY_ARGS,
+    isSimpleToolName(call.name, extra) && call.argsSize < HEAVY_ARGS,
   ).length
   return simple / calls.length
 }
@@ -130,12 +182,13 @@ function scheduleEffort(
   calls: readonly ToolCallSample[],
   allowDowngrade: boolean,
   allowUpgrade: boolean,
+  extra?: RegExp | null,
 ): AutoEffort {
   // The no-sample branch is the first request of the session: start at the hub
   // regardless of `allowDowngrade` (see the rationale above).
   if (calls.length === 0) return 'high'
 
-  const ratio = simpleRatio(calls)
+  const ratio = simpleRatio(calls, extra)
   const heaviest = calls.reduce((max, call) => Math.max(max, call.argsSize), 0)
 
   if (ratio >= 0.75 && allowDowngrade) return 'low'
@@ -153,9 +206,9 @@ function scheduleEffort(
  * @returns The level to inject; `auto` is resolved before returning.
  */
 export function decideEffort(input: EffortDecisionInput): EffortId {
-  const { recentCalls, selected, allowDowngrade, allowUpgrade } = input
+  const { recentCalls, selected, allowDowngrade, allowUpgrade, extraSimpleTools } = input
   if (selected !== 'auto') return selected
-  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade)
+  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade, compileExtraSimpleTools(extraSimpleTools))
 }
 
 /**
@@ -201,6 +254,11 @@ export interface EffortInjectionInput {
   allowDowngrade: boolean
   /** Scheduler preference: allow lifting above `high` to `max`. */
   allowUpgrade: boolean
+  /**
+   * Extra tool names merged into the built-in cheap-and-deterministic set for
+   * the `auto` scheduler (issue #8 `Config.simpleTools`).
+   */
+  extraSimpleTools?: readonly string[]
   /** The model's advertised effort ids (including plugin masks like `auto`). */
   efforts: readonly string[]
   /**
@@ -294,6 +352,7 @@ export function resolveEffortInjection(input: EffortInjectionInput): EffortInjec
     selected: 'auto',
     allowDowngrade: input.allowDowngrade,
     allowUpgrade: input.allowUpgrade,
+    extraSimpleTools: input.extraSimpleTools,
   })
   const clamped = clampToEfforts(level, efforts)
   return clamped === undefined ? { inject: false } : { inject: true, level: clamped }

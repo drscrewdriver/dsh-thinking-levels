@@ -91,6 +91,12 @@ export interface ThinkingLevelsConfig {
   /** Scheduler preference: allow lifting above the `high` hub to `max`. */
   allowUpgrade: boolean | Volatile<boolean>
   /**
+   * Extra tool names the auto scheduler also treats as cheap-and-deterministic,
+   * merged with the built-in set (issue #8). Each is matched after the `ops_`
+   * namespace strip, exactly like a built-in token.
+   */
+  simpleTools: string[] | Volatile<string[]>
+  /**
    * Master takeover switch: mirrored into the openai-completions transport's
    * own section (`llm-openai-completions.enabled`) when it flips. The
    * transport's dispatch judgment stays single-source in ITS section; this
@@ -142,6 +148,7 @@ export const Config = z.object({
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto').volatile(),
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
+  simpleTools: z.array(z.string()).default([]).volatile(),
   takeover: z.boolean().default(false).volatile(),
   takeoverUi: z.boolean().default(false).volatile(),
   defaultPricing: defaultPricingSchema.volatile(),
@@ -160,6 +167,7 @@ export const LegacyConfig = z.object({
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto'),
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
+  simpleTools: z.array(z.string()).default([]),
   takeover: z.boolean().default(false),
   takeoverUi: z.boolean().default(false),
   defaultPricing: defaultPricingSchema,
@@ -172,6 +180,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   level: 'auto',
   allowDowngrade: true,
   allowUpgrade: false,
+  simpleTools: [],
   takeover: false,
   takeoverUi: false,
   defaultPricing: 'estimate',
@@ -212,6 +221,7 @@ interface LiveConfig {
   level: EffortId
   allowDowngrade: boolean
   allowUpgrade: boolean
+  simpleTools: string[]
   takeover: boolean
   takeoverUi: boolean
   defaultPricing: PricingPolicy
@@ -230,6 +240,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     level: readVolatile(config.level, 'auto'),
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
+    simpleTools: readVolatile(config.simpleTools, []),
     takeover: readVolatile(config.takeover, false),
     takeoverUi: readVolatile(config.takeoverUi, false),
     defaultPricing: readVolatile(config.defaultPricing, 'estimate'),
@@ -555,6 +566,7 @@ export function installLegacySection(
         level: readVolatile(config.level, 'auto'),
         allowDowngrade: readVolatile(config.allowDowngrade, true),
         allowUpgrade: readVolatile(config.allowUpgrade, false),
+        simpleTools: readVolatile(config.simpleTools, []),
         takeover: readVolatile(config.takeover, false),
         takeoverUi: readVolatile(config.takeoverUi, false),
         models: config.models,
@@ -802,6 +814,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       samples: state?.samples ?? [],
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
+      extraSimpleTools: cfg.simpleTools,
       supportsReasoning: capabilityFor.supportsReasoning,
       efforts: capabilityFor.efforts,
       toggleOnly: capabilityFor.toggleOnly,
@@ -967,6 +980,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       recentCalls: calls,
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
+      extraSimpleTools: cfg.simpleTools,
       efforts: capabilityFor.efforts,
       toggleOnly: capabilityFor.toggleOnly,
     })

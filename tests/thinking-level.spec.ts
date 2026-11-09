@@ -112,6 +112,56 @@ describe('simple-tool classification boundary', () => {
     ]
     expect(decideEffort(base({ selected: 'auto', recentCalls: lookAlike }))).toBe('high')
   })
+
+  it('strips known host namespaces so ops_* chains can still drop to low (issue #8)', () => {
+    const opsCalls = [
+      { name: 'ops_bash', argsSize: 40 },
+      { name: 'ops_grep', argsSize: 20 },
+      { name: 'ops_read_files', argsSize: 120 },
+    ]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: opsCalls }))).toBe('low')
+    // The wrapper must not smuggle a look-alike heavy name into the simple set:
+    // `ops_` + a heavy bare name stays heavy.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_codebase_search', argsSize: 40 }] }))).toBe('high')
+  })
+
+  it('treats shell/pwsh/cmd/sh as simple alongside bash/terminal (issue #8 follow-up)', () => {
+    const shellCalls = [
+      { name: 'shell', argsSize: 40 },
+      { name: 'pwsh', argsSize: 20 },
+      { name: 'cmd', argsSize: 30 },
+      { name: 'sh', argsSize: 15 },
+    ]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: shellCalls }))).toBe('low')
+    // dsh-ops namespaced shell resolves through the strip too.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_shell', argsSize: 40 }] }))).toBe('low')
+  })
+})
+
+describe('Config.simpleTools extra allowlist', () => {
+  it('leaves an unrecognised host tool on high until it is configured simple', () => {
+    const calls = [{ name: 'web_fetch', argsSize: 40 }]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: calls }))).toBe('high')
+    // Merging it via extraSimpleTools drops the step to low.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleTools: ['web_fetch'] }))).toBe('low')
+  })
+
+  it('applies the namespace strip to configured names too (ops_web_fetch)', () => {
+    const calls = [{ name: 'ops_web_fetch', argsSize: 40 }]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleTools: ['web_fetch'] }))).toBe('low')
+  })
+
+  it('honours the word-boundary rule for configured names (no look-alike smuggling)', () => {
+    // `read` configured simple must not drag `codebase_reader` in as a prefix match.
+    const calls = [{ name: 'codebase_reader', argsSize: 40 }]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleTools: ['read'] }))).toBe('high')
+    // ...but a real boundary hit (read_*) does match.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'read_note', argsSize: 40 }], extraSimpleTools: ['read'] }))).toBe('low')
+  })
+
+  it('ignores blank/whitespace tokens without disabling the built-in set', () => {
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'bash', argsSize: 40 }], extraSimpleTools: ['', '  '] }))).toBe('low')
+  })
 })
 
 describe('toolDurationMs', () => {
