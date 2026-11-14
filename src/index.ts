@@ -58,6 +58,7 @@ import {
   type PiAiSection,
 } from './takeover-sync.ts'
 import { describeSettings, readSection, readSectionOf, resolveNamespaceOf } from './settings-read.ts'
+import { registerThinkCommand, type ThinkCommandDeps } from './tui-command.ts'
 
 /** One configurer-confirmed capability override for a `provider/model` key. */
 export interface ModelCapabilityOverride {
@@ -643,6 +644,46 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     }
   })
   const current: () => LiveConfig = () => resolveLiveConfig(source())
+
+  // ── dsh-tui 终端面：`/think` ───────────────────────────────────────────
+  // TUI 不加载 slider/tab/设置卡，HUD 也没有 effort —— 档位在终端里既看不见也改不了。
+  // 命令层只读 live config；写走 settings.update（带 revision 围栏）。
+  const thinkDeps: ThinkCommandDeps = {
+    state: () => {
+      const live = current()
+      return {
+        enabled: live.enabled,
+        level: live.level,
+        allowDowngrade: live.allowDowngrade,
+        allowUpgrade: live.allowUpgrade,
+        takeover: live.takeover,
+        source: source() === config ? 'composition-entry' : 'registered-section',
+      }
+    },
+    write: async (level) => {
+      const settings = (ctx as unknown as {
+        get?: (name: string) => unknown
+      }).get?.('settings') as {
+        describe?: () => unknown
+        update?: (ns: string, patch: unknown, revision: number) => unknown
+      } | undefined
+      if (typeof settings?.update !== 'function') {
+        return { ok: false, reason: 'settings 服务不可用（≤0.1.6 老线请在设置页改）' }
+      }
+      // 节名用自己的 composition id；宿主改名时回落到「value 里带 level 的节」。
+      const descriptors = describeSettings(ctx as unknown as Parameters<typeof describeSettings>[0])
+      const hit = descriptors?.find((entry) => entry.ns === '@deepseek-ai/dsh-thinking-levels')
+        ?? descriptors?.find((entry) => typeof (entry.value as { level?: unknown } | null)?.level === 'string')
+      if (hit === undefined) return { ok: false, reason: '找不到本插件的设置节（未进入 profile 文档）' }
+      await settings.update(hit.ns, { level }, hit.revision)
+      return { ok: true }
+    },
+  }
+  ;(ctx as unknown as {
+    inject?: (deps: string[], cb: (scope: Context) => void) => void
+  }).inject?.(['commands'], (scope) => {
+    registerThinkCommand(scope, thinkDeps)
+  })
   // Auto-schedule projection (issue #6): folds `tool/call` into the scheduler's
   // sample ring and `model/selection` into the session's explicit pick. Same
   // soft coupling and same "never poison the fiber" rule as the billing unit

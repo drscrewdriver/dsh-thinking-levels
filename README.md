@@ -309,3 +309,15 @@ Semantics note: a pricing or policy change only affects samples booked after the
 ## License
 
 MIT
+
+## TUI 终端面（dsh-tui）
+
+dsh-tui 不加载插件的 client 半边（面板/卡片/设置页），也调不到插件自有 RPC；工具调用只显示一行摘要。人可读、人可操作的面只剩宿主斜杠命令。输出约定：单行 ≤100 字符、总行 ≤40、无 ANSI、两空格对齐；写操作默认 dry、加 `--yes` 才执行；`--json` 输出单行 JSON。
+
+| 命令 | 作用 |
+|---|---|
+| `/think` | 当前档位、source、auto/降升开关、takeover |
+| `/think <level>` | 切换档位（默认 dry，`--yes` 落盘） |
+| `/think auto` | 每步自动调度 |
+
+命令由插件自己在宿主侧注册（`ctx.inject(['commands'], …)`）：命令服务缺席的老宿主线上不激活、不报错。
