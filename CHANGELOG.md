@@ -1,4 +1,8 @@
 # Changelog
+
+## 4.4.16
+
+- 终端面（dsh-tui / Desktop 命令面板同源）：/think 终端面（当前档 + 切换默认 dry，--yes 才写）。
 4.4.14: auto 档简单工具判定修复（issue #8）+ 可配置追加名单 `Config.simpleTools`。
 
 ## [4.4.14] — 2026-11-10 (auto 降档：命名空间剥离 + shell/pwsh 内置 + 可配置追加名单)
