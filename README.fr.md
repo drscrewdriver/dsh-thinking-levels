@@ -7,15 +7,18 @@
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)
 - [한국어 README](./README.ko.md)
+- [README em português](./README.pt.md)
 - [Guide d'installation en français](./INSTALL.fr.md)
 - [Installation guide](./INSTALL.md)
 - [中文安装指南](./INSTALL.zh.md)
 - [日本語インストールガイド](./INSTALL.ja.md)
 - [한국어 설치 안내](./INSTALL.ko.md)
+- [Guia de instalação em português](./INSTALL.pt.md)
 - [Changelog en français](./CHANGELOG.fr.md)
 - [Changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 
 > **v0.7.0-beta.1 (2026-09-06) : la voie court-circuit est retirée.** Cette version ne dépend plus de `dsh-llm-openai-completions` — les correctifs pour passerelles personnalisées empruntent la surface compat officielle `llm-pi-ai` (nécessite **dsh ≥ v0.1.2-alpha.1**) ; laissez le plugin adaptateur désinstallé. Voir le [CHANGELOG](./CHANGELOG.md).
 

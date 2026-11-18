@@ -7,15 +7,18 @@
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)
 - [한국어 README](./README.ko.md)
+- [README em português](./README.pt.md)
 - [Руководство по установке на русском](./INSTALL.ru.md)
 - [Installation guide](./INSTALL.md)
 - [中文安装指南](./INSTALL.zh.md)
 - [日本語インストールガイド](./INSTALL.ja.md)
 - [한국어 설치 안내](./INSTALL.ko.md)
+- [Guia de instalação em português](./INSTALL.pt.md)
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 
 > **v0.7.0-beta.1 (2026-09-06): short-circuit-маршрут выведен из эксплуатации.** Эта версия больше не зависит от `dsh-llm-openai-completions` — исправления для пользовательских шлюзов едут через официальную compat-поверхность `llm-pi-ai` (требуется **dsh ≥ v0.1.2-alpha.1**); плагин-адаптер держите неустановленным. См. [CHANGELOG](./CHANGELOG.md).
 

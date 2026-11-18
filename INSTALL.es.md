@@ -3,6 +3,7 @@
 Esta guía usa únicamente el comando oficial `dsh plugin`. El comando instala la dependencia en un perfil y sincroniza `dsh.profile.bundles`. No lo sustituyas por un simple `npm install`, un `pnpm add` directo en el perfil ni ediciones manuales del manifiesto del perfil.
 
 - [Guía de instalación en español](./INSTALL.es.md)
+- [Guia de instalação em português](./INSTALL.pt.md)
 - [English installation guide](./INSTALL.md)
 - [中文安装指南](./INSTALL.zh.md)
 - [日本語インストールガイド](./INSTALL.ja.md)
@@ -11,9 +12,11 @@ Esta guía usa únicamente el comando oficial `dsh plugin`. El comando instala l
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)
 - [한국어 README](./README.ko.md)
+- [README em português](./README.pt.md)
 - [Changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 
 Los marcadores de posición de esta guía son:
 

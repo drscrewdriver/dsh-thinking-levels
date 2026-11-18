@@ -2,6 +2,7 @@
 
 ## 4.4.16
 
+- i18n: add Portuguese (pt-BR) locale — runtime dictionary, package metadata and README/INSTALL/CHANGELOG mirrors.
 - 终端面（dsh-tui / Desktop 命令面板同源）：/think 终端面（当前档 + 切换默认 dry，--yes 才写）。
 4.4.14: auto 档简单工具判定修复（issue #8）+ 可配置追加名单 `Config.simpleTools`。
 
@@ -117,6 +118,7 @@ All notable changes to `dsh-thinking-levels` are documented here.
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 - [Changelog en français](./CHANGELOG.fr.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 - [Changelog auf Deutsch](./CHANGELOG.de.md)
 - [Changelog in italiano](./CHANGELOG.it.md)
 - [Список изменений на русском](./CHANGELOG.ru.md)

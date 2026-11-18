@@ -38,6 +38,7 @@
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
 - [Changelog en français](./CHANGELOG.fr.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 - [Changelog auf Deutsch](./CHANGELOG.de.md)
 - [Changelog in italiano](./CHANGELOG.it.md)
 - [Список изменений на русском](./CHANGELOG.ru.md)

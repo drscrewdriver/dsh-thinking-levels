@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-levels",
-  "version": "4.4.16",
+  "version": "4.4.17",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -25,6 +25,7 @@
     "README.it.md",
     "README.ru.md",
     "README.es.md",
+    "README.pt.md",
     "INSTALL.md",
     "INSTALL.zh.md",
     "INSTALL.ja.md",
@@ -34,6 +35,7 @@
     "INSTALL.it.md",
     "INSTALL.ru.md",
     "INSTALL.es.md",
+    "INSTALL.pt.md",
     "CHANGELOG.md",
     "CHANGELOG.ja.md",
     "CHANGELOG.ko.md",
@@ -42,6 +44,7 @@
     "CHANGELOG.it.md",
     "CHANGELOG.ru.md",
     "CHANGELOG.es.md",
+    "CHANGELOG.pt.md",
     "locale"
   ],
   "main": "lib/index.js",

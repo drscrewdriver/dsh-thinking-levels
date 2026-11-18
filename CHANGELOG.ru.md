@@ -35,6 +35,7 @@
 - Тесты 168/168 зелёные.
 
 - [Список изменений на русском](./CHANGELOG.ru.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)

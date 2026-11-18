@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Níveis de raciocínio",
+    "description": "Escolha Auto no seletor de modelo: o plugin programa low / high / max conforme o histórico de chamadas de ferramentas antes de enviar o effort à API. Aqui você configura o nível padrão, os limites do agendador e as capacidades por modelo (nível → valor wire enviado ao gateway)."
+  }
+}

@@ -35,6 +35,7 @@ Todos los cambios notables de `dsh-thinking-levels` se documentan aquí.
 - Tests 168/168 en verde.
 
 - [Changelog en español](./CHANGELOG.es.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 - [English changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)

@@ -3,6 +3,7 @@
 **Control del nivel de razonamiento (`reasoning_effort`) por ronda para [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness): elige `Auto` (una máscara) en el selector de modelo de la sesión y el plugin programa `low` / `high` / `max` a partir del historial reciente de llamadas a herramientas antes de enviar el effort a la API — o fija manualmente un nivel wire (el nivel que realmente se envía a la API: `off` / `on` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`). Las rondas de herramientas baratas siguen siendo baratas; el trabajo pesado nunca se queda sin razonamiento.**
 
 - [README en español](./README.es.md)
+- [README em português](./README.pt.md)
 - [English README](./README.md)
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)
@@ -12,10 +13,12 @@
 - [中文安装指南](./INSTALL.zh.md)
 - [日本語インストールガイド](./INSTALL.ja.md)
 - [한국어 설치 안내](./INSTALL.ko.md)
+- [Guia de instalação em português](./INSTALL.pt.md)
 - [Changelog en español](./CHANGELOG.es.md)
 - [Changelog](./CHANGELOG.md)
 - [日本語 changelog](./CHANGELOG.ja.md)
 - [한국어 changelog](./CHANGELOG.ko.md)
+- [Changelog em português](./CHANGELOG.pt.md)
 
 > **v0.7.0-beta.1 (2026-09-06): la vía de cortocircuito se retira.** Esta versión ya no depende de `dsh-llm-openai-completions` — las correcciones para pasarelas personalizadas viajan por la superficie compat oficial `llm-pi-ai` (requiere **dsh ≥ v0.1.2-alpha.1**); el plugin adaptador debe permanecer desinstalado. Consulta el [CHANGELOG](./CHANGELOG.md).
 
