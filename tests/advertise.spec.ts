@@ -4,6 +4,15 @@
  * `resolveModel` again, so a model resolution replayed the post-processing
  * (including a full settings readout via `piAiFor`) once per stacked layer —
  * the O(models x layers) cost the slow model page measured.
+ *
+ * Issue #10 changed WHERE the wrapper lives: the advertisement now replaces the
+ * registry entry with a forwarding facade instead of assigning onto the
+ * adapter a third party owns (that assignment deadlocks against
+ * `dsh-providers-hub`'s write-through Proxy and throws against
+ * `dsh-vision-router`'s read-only one). These tests therefore resolve through
+ * the registered adapter — the object the host actually calls — rather than the
+ * bare stub. The assertions themselves are unchanged: one post-processing pass
+ * per resolution, `auto` advertised exactly once.
  */
 import { describe, expect, it } from 'vitest'
 import { advertiseModelCapability, piAiPosture } from '../src/index.ts'
@@ -17,6 +26,11 @@ function stubAdapter(): { resolveModel: (provider: string, model: string, signal
   }
 }
 
+/** The adapter the host would call for `route` — the facade the advertisement installed. */
+function registered<T>(llm: { adapters: Map<string, { adapter: unknown }> }, route: string): T {
+  return llm.adapters.get(route)?.adapter as T
+}
+
 describe('advertiseModelCapability idempotence (issue #4)', () => {
   it('re-running the advertisement does not stack wrappers', async () => {
     const adapter = stubAdapter()
@@ -28,7 +42,7 @@ describe('advertiseModelCapability idempotence (issue #4)', () => {
     advertiseModelCapability(llm as never, overrideFor, piAiFor as never)
     advertiseModelCapability(llm as never, overrideFor, piAiFor as never)
     piAiCalls = 0
-    const info = await adapter.resolveModel('p', 'm')
+    const info = await registered<ReturnType<typeof stubAdapter>>(llm, 'route').resolveModel('p', 'm')
     // One wrapper layer => exactly one post-processing pass per resolution.
     // Stacked layers would inflate this to the layer count.
     expect(piAiCalls).toBe(1)
@@ -43,10 +57,10 @@ describe('advertiseModelCapability idempotence (issue #4)', () => {
     const second = stubAdapter()
     llm.adapters.set('b', { adapter: second })
     advertiseModelCapability(llm as never, () => undefined, () => undefined)
-    const info = await second.resolveModel('p', 'm')
+    const info = await registered<ReturnType<typeof stubAdapter>>(llm, 'b').resolveModel('p', 'm')
     // The late-registering adapter is advertised once...
     expect((info.reasoning?.efforts ?? []).filter(effort => effort.id === 'auto')).toHaveLength(1)
-    const infoFirst = await first.resolveModel('p', 'm')
+    const infoFirst = await registered<ReturnType<typeof stubAdapter>>(llm, 'a').resolveModel('p', 'm')
     // ...and the already-marked one still resolves through exactly one layer.
     expect((infoFirst.reasoning?.efforts ?? []).filter(effort => effort.id === 'auto')).toHaveLength(1)
   })
@@ -57,7 +71,7 @@ describe('advertiseModelCapability idempotence (issue #4)', () => {
     }
     const llm = { adapters: new Map([['route', { adapter }]]) }
     advertiseModelCapability(llm as never, () => undefined, () => undefined)
-    const info = await adapter.resolveModel('p', 'm')
+    const info = await registered<typeof adapter>(llm, 'route').resolveModel('p', 'm')
     expect(info).toEqual({})
   })
 })

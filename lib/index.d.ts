@@ -218,16 +218,34 @@ declare module '@deepseek-ai/cordis' {
 export declare function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T): T;
 /** Minimal face of the llm service's adapter registrations (typed locally to avoid a host-package value import). */
 interface LlmRegistration {
-    adapter: {
-        resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
-            reasoning?: {
-                efforts?: {
-                    id: string;
-                    name: string;
-                }[];
-            };
-        }>;
-    };
+    adapter: AdapterLike;
+}
+/**
+ * The adapter members the host actually calls (`@deepseek-ai/dsh-llm`:
+ * `providerInfo` / `providerRetryPolicy` / `imageRequestPricing` /
+ * `imageRequestTarget` / `listModels` / `resolveModel` / `prepareCall` /
+ * `stream`, per the `LlmAdapter` declaration in dsh-tool-cordis' API catalog).
+ *
+ * The facade must forward ALL of them: dropping one silently breaks that
+ * provider's feature (e.g. a missing `imageRequestTarget` fails image
+ * requests). `resolveModel` is the only member we rewrite.
+ */
+interface AdapterLike {
+    providerInfo?: (provider: string) => unknown;
+    providerRetryPolicy?: (provider: string) => unknown;
+    imageRequestPricing?: (provider: string, model: string) => unknown;
+    imageRequestTarget?: (provider: string, model: string, image: unknown) => unknown;
+    listModels?: (provider: string) => Promise<readonly unknown[]>;
+    resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
+        reasoning?: {
+            efforts?: {
+                id: string;
+                name: string;
+            }[];
+        };
+    }>;
+    prepareCall?: (provider: string, model: string, signal?: unknown) => Promise<unknown>;
+    stream?: (options: unknown) => unknown;
 }
 /**
  * Advertise `auto` (and, for configurer-confirmed rc.6-era models, `low`) in

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.4.18
+
+- **修复 issue #10（同时覆盖 #9 的形态）：与第三方 adapter 包装器同开时 `resolveModel` 互递归爆栈 / 改写报错。**
+  旧实现把 `adapter.resolveModel = wrapper` 直接写在第三方拥有的 adapter 对象上，遇到两种真实插件即失效：
+  - `dsh-providers-hub` 用**只有 `get` 陷阱**的 Proxy 包装 adapter，其 `resolveModel` 包装器虽缓存但**每次调用重读** `target.resolveModel`。我们的赋值穿透 Proxy 写到裸 adapter，于是 hub 包装器调到我们的包装器、我们的包装器又调回它捕获的 hub 包装器 → 无限互递归（`RangeError: Maximum call stack size exceeded`，issue #10）。
+  - `dsh-vision-router` 用**只读** Proxy 包装（`getOwnPropertyDescriptor` 一律报 `writable: false`），赋值在严格模式下抛 `TypeError: Cannot redefine property: resolveModel`（issue #9）。
+  现改为**替换 `llm.adapters` 的注册表条目**（宿主每次调用都即时 `adapters.get(provider)`，无跨调用缓存，故替换对宿主透明），不再向第三方对象写入任何属性。新门面是普通对象而非 Proxy，八个宿主调用成员（`providerInfo` / `providerRetryPolicy` / `imageRequestPricing` / `imageRequestTarget` / `listModels` / `resolveModel` / `prepareCall` / `stream`）全部透传且 `this` 绑定为原 adapter；同一 adapter 服务多个 provider 时共用一份门面（宿主 `forAdapter` 按身份比较决定 replay state 是否保留）。
+  #4 的幂等语义保留（同一 inner adapter 只包一次），Off/On 折叠、`low` 门控、非推理模型不动等行为逐字不变。新增 `tests/adapter-facade.spec.ts`（9 例）覆盖两种 Proxy 形态、透传完整性、`this` 绑定、多 provider 身份一致、重跑不套娃、第三方换新实例后重新包装。
+
 ## 4.4.16
 
 - i18n: add Portuguese (pt-BR) locale — runtime dictionary, package metadata and README/INSTALL/CHANGELOG mirrors.

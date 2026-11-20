@@ -269,22 +269,124 @@ const LOW_EFFORT: { id: 'low'; name: 'Low' } = { id: 'low', name: 'Low' }
 
 /** Minimal face of the llm service's adapter registrations (typed locally to avoid a host-package value import). */
 interface LlmRegistration {
-  adapter: {
-    resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
-      reasoning?: { efforts?: { id: string; name: string }[] }
-    }>
-  }
+  adapter: AdapterLike
 }
 
 /**
- * Adapters whose `resolveModel` is already wrapped — the per-adapter
+ * The adapter members the host actually calls (`@deepseek-ai/dsh-llm`:
+ * `providerInfo` / `providerRetryPolicy` / `imageRequestPricing` /
+ * `imageRequestTarget` / `listModels` / `resolveModel` / `prepareCall` /
+ * `stream`, per the `LlmAdapter` declaration in dsh-tool-cordis' API catalog).
+ *
+ * The facade must forward ALL of them: dropping one silently breaks that
+ * provider's feature (e.g. a missing `imageRequestTarget` fails image
+ * requests). `resolveModel` is the only member we rewrite.
+ */
+interface AdapterLike {
+  providerInfo?: (provider: string) => unknown
+  providerRetryPolicy?: (provider: string) => unknown
+  imageRequestPricing?: (provider: string, model: string) => unknown
+  imageRequestTarget?: (provider: string, model: string, image: unknown) => unknown
+  listModels?: (provider: string) => Promise<readonly unknown[]>
+  resolveModel: (provider: string, model: string, signal?: unknown) => Promise<{
+    reasoning?: { efforts?: { id: string; name: string }[] }
+  }>
+  prepareCall?: (provider: string, model: string, signal?: unknown) => Promise<unknown>
+  stream?: (options: unknown) => unknown
+}
+
+/**
+ * Marks a TL-built facade, so a re-run of the advertisement can tell "this
+ * registration already carries my facade" from "this is a third party's
+ * wrapper". Not enumerable: it must never leak into a `for...in` /
+ * `Object.keys` sweep a host or plugin performs on the adapter.
+ */
+const TL_FACADE = Symbol('dsh-thinking-levels/adapter-facade')
+
+/** Every member name the facade must forward; `resolveModel` is handled separately. */
+const FORWARDED_ADAPTER_MEMBERS = [
+  'providerInfo',
+  'providerRetryPolicy',
+  'imageRequestPricing',
+  'imageRequestTarget',
+  'listModels',
+  'prepareCall',
+  'stream',
+] as const
+
+/** Facade per inner adapter: one identity per adapter, however many providers it serves. */
+const facades = new WeakMap<object, AdapterLike>()
+
+/**
+ * Adapters whose `resolveModel` is already advertised — the per-adapter
  * idempotence issue #4 proves was missing: re-running the advertisement on
  * every `llm/adapters-updated` stacked a new wrapper per pass, and every
  * stacked layer re-ran the post-processing on each resolveModel call.
- * Keyed on the adapter object itself, so a genuinely new adapter is wrapped
- * once and retired ones need no cleanup.
+ *
+ * Keyed on the **inner** adapter (the one a third party registered), not on
+ * the facade we put into the registry — see {@link advertiseModelCapability}.
  */
 const advertisedAdapters = new WeakSet<object>()
+
+/**
+ * Build a forwarding facade over `inner` that rewrites `resolveModel`'s
+ * result. Issue #10 (and its sibling #9) is why this exists at all.
+ *
+ * ## Why a facade instead of assigning onto `adapter.resolveModel`
+ *
+ * The old implementation did `adapter.resolveModel = wrapper`, which is an
+ * in-place mutation of an object a THIRD PARTY owns. Two real plugins turn
+ * that into a failure:
+ *
+ * - `dsh-providers-hub` wraps the adapter in a Proxy whose `get` trap returns
+ *   a CACHED `resolveModel` wrapper that nevertheless re-reads
+ *   `target.resolveModel` on every call, and which has **no `set` trap**. Our
+ *   assignment wrote through to the bare adapter, so the hub wrapper called
+ *   back into ours, which called the hub wrapper it had captured: unbounded
+ *   mutual recursion (`RangeError: Maximum call stack size exceeded`, issue
+ *   #10).
+ * - `dsh-vision-router` wraps the adapter in a read-only Proxy whose
+ *   `getOwnPropertyDescriptor` reports `writable: false`, so the assignment
+ *   throws `TypeError: Cannot redefine property: resolveModel` (issue #9).
+ *
+ * A facade writes nothing to the third party's object, so neither shape can
+ * fire. We instead replace the **registry entry** — and the host reads
+ * `adapters.get(provider)` fresh on every call (`dsh-llm` has no cached
+ * adapter reference across calls), so the swap is transparent to it.
+ *
+ * ## Why a plain object and not a Proxy
+ *
+ * The Proxy behaviours above are exactly the trap semantics we want to stay
+ * away from. A plain object also keeps `this` honest: every forwarded member
+ * is bound to `inner`, never to the facade (a facade-bound `this` would make
+ * an adapter's internal `this.stream` call loop back through the facade).
+ * @param inner - the adapter a third party registered; never mutated.
+ * @param postProcess - the capability advertisement applied to each result.
+ * @returns the facade to place in the registry entry.
+ */
+function adapterFacade(
+  inner: AdapterLike,
+  postProcess: (info: Awaited<ReturnType<AdapterLike['resolveModel']>>, provider: string, model: string) => unknown,
+): AdapterLike {
+  const facade: AdapterLike = {
+    // Rewritten: resolve through the inner adapter, then advertise on the result.
+    async resolveModel(provider, model, signal) {
+      const info = await inner.resolveModel.call(inner, provider, model, signal)
+      return postProcess(info, provider, model) as Awaited<ReturnType<AdapterLike['resolveModel']>>
+    },
+  }
+  // Forwarded: `this` MUST be `inner`, and the function identity must be stable
+  // (downstream code caches by function identity).
+  const forwarded = facade as unknown as Record<string, unknown>
+  const source = inner as unknown as Record<string, unknown>
+  for (const member of FORWARDED_ADAPTER_MEMBERS) {
+    const value = source[member]
+    if (typeof value !== 'function') continue
+    forwarded[member] = (value as (...args: unknown[]) => unknown).bind(inner)
+  }
+  Object.defineProperty(facade, TL_FACADE, { value: true, enumerable: false })
+  return facade
+}
 
 /**
  * Advertise `auto` (and, for configurer-confirmed rc.6-era models, `low`) in
@@ -311,17 +413,38 @@ export function advertiseModelCapability(
   overrideFor: (provider: string, model: string) => ModelCapabilityOverride | undefined,
   piAiFor: (provider: string, model: string) => { thinkingOn: boolean; supportsEffort: boolean } | undefined,
 ): void {
-  for (const registration of llm?.adapters?.values() ?? []) {
-    const adapter = registration.adapter
+  const adapters = llm?.adapters
+  if (adapters === undefined) return
+  // Snapshot the entries first: the loop REPLACES map entries, and a live
+  // iterator would then visit the replacements.
+  for (const [route, registration] of [...adapters]) {
+    const inner = registration.adapter
+    // A registration already carrying our facade needs nothing (this is what a
+    // re-run sees). Checked before the WeakSet because the WeakSet is keyed on
+    // the INNER adapter, which the registry entry no longer points at.
+    if ((inner as unknown as Record<symbol, unknown>)[TL_FACADE] === true) continue
     // Issue #4: the re-run on every `llm/adapters-updated` must NOT stack
     // wrappers — each stacked layer re-ran the post-processing (and a full
-    // describeSettings) on every resolveModel call. This WeakSet is the
-    // idempotence the JSDoc has always promised.
-    if (advertisedAdapters.has(adapter)) continue
-    advertisedAdapters.add(adapter)
-    const original = adapter.resolveModel.bind(adapter)
-    adapter.resolveModel = async (provider, model, signal) => {
-      const info = await original(provider, model, signal)
+    // describeSettings) on every resolveModel call. Keyed on the inner adapter
+    // so a third party's re-registration of the same instance is still
+    // recognised, while our own facade is not mistaken for a fresh adapter.
+    //
+    // NOTE: a cached facade must still be INSTALLED on this route — one adapter
+    // commonly serves several providers, and the first route's pass would
+    // otherwise leave the others pointing at the bare adapter (no `auto`).
+    const cachedFacade = facades.get(inner)
+    if (cachedFacade !== undefined) {
+      adapters.set(route, { ...registration, adapter: cachedFacade })
+      continue
+    }
+    if (advertisedAdapters.has(inner)) continue
+    advertisedAdapters.add(inner)
+
+    const postProcess = (
+      info: Awaited<ReturnType<AdapterLike['resolveModel']>>,
+      provider: string,
+      model: string,
+    ): unknown => {
       const reasoning = info.reasoning
       if (reasoning === undefined) return info
       const piCap = piAiFor(provider, model)
@@ -356,6 +479,21 @@ export function advertiseModelCapability(
       info.reasoning = { ...reasoning, efforts }
       return info
     }
+
+    // Issue #10 / #9: replace the REGISTRY ENTRY rather than mutating the
+    // adapter a third party owns. See `adapterFacade` for why an in-place
+    // `adapter.resolveModel = ...` deadlocks against hub's write-through Proxy
+    // and throws against vision-router's read-only one.
+    //
+    // One facade per INNER adapter, shared across every route it serves: the
+    // host compares `adapters.get(provider).adapter` by identity to decide
+    // whether a message's replay state survives (`dsh-llm`'s `forAdapter`), so
+    // per-route facades would make the same adapter look like two different
+    // ones. The provider is passed per call, so one facade serves them all.
+    const existing = facades.get(inner)
+    const facade = existing ?? adapterFacade(inner, postProcess)
+    if (existing === undefined) facades.set(inner, facade)
+    adapters.set(route, { ...registration, adapter: facade })
   }
 }
 
