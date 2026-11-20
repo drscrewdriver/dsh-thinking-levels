@@ -47,15 +47,30 @@ export interface AutoScheduleState {
   samples: readonly ToolCallSample[]
   /** Effort explicitly picked in this session, or null when never picked. */
   userEffort: string | null
+  /**
+   * The effort the last request ACTUALLY carried, folded from the committed
+   * `request/header` (the host writes the effective value there —
+   * `dsh-llm/lib/index.js:2298-2308`).
+   *
+   * Issue #11: with `auto` selected the UI showed "Auto" while every request
+   * went out as a concrete level, so the user could not tell what was really
+   * sent. The host's `modelSelection.lastUsed` cannot answer that either (it is
+   * rewritten on every header, i.e. it holds our own output — see the module
+   * doc), so the answer has to come from this projection.
+   *
+   * `null` until the session's first committed request.
+   */
+  lastEffective: string | null
 }
 
 const stateSchema = z.object({
   samples: z.array(z.object({ name: z.string(), argsSize: z.number() })),
   userEffort: z.string().nullable(),
+  lastEffective: z.string().nullable(),
 })
 
 /** Initial folded state (also the shape every cold read starts from). */
-const initAutoSchedule = (): AutoScheduleState => ({ samples: [], userEffort: null })
+const initAutoSchedule = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null })
 
 /**
  * Fold one committed Session event into the auto-schedule state.
@@ -88,6 +103,23 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
     const userEffort = typeof raw === 'string' && raw.length > 0 ? raw : null
     return userEffort === state.userEffort ? state : { ...state, userEffort }
   }
+  if (type === 'request/header') {
+    // Issue #11: the header carries the effort this request actually went out
+    // with — the host resolves and commits the effective value here, so it is
+    // the only durable record of what `auto` turned into.
+    const data = (event as { data?: unknown }).data
+    const header = typeof data === 'object' && data !== null
+      ? (data as { header?: unknown }).header
+      : undefined
+    const config = typeof header === 'object' && header !== null
+      ? (header as { config?: unknown }).config
+      : undefined
+    const raw = typeof config === 'object' && config !== null
+      ? (config as { reasoningEffort?: unknown }).reasoningEffort
+      : undefined
+    const lastEffective = typeof raw === 'string' && raw.length > 0 ? raw : null
+    return lastEffective === state.lastEffective ? state : { ...state, lastEffective }
+  }
   return state
 }
 
@@ -100,7 +132,11 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
 export function buildAutoScheduleDefinition() {
   return {
     key: AUTO_SCHEDULE_KEY,
-    stateVersion: 1,
+    // Bumped 1 → 2 when `lastEffective` joined the state (issue #11): the host
+    // validates against `stateSchema` per version, so a shape change must raise
+    // it. Historical sessions are not lost — the state is a fold over the log,
+    // so a cold read rebuilds samples/userEffort/lastEffective from the events.
+    stateVersion: 2,
     stateSchema,
     init: initAutoSchedule,
     apply: applyAutoSchedule,

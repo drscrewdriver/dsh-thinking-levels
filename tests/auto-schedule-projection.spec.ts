@@ -9,7 +9,7 @@ import {
 } from '../src/auto-schedule-projection.ts'
 import { TOOL_SAMPLE_WINDOW } from '../src/session-events.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null })
 
 /** The real wire shape (`packages/core/session/src/types.ts`): name + arguments. */
 const toolCall = (name: string, args = '') => ({ type: 'tool/call', data: { turn: 1, step: 1, callId: 'c', name, arguments: args } })
@@ -93,9 +93,9 @@ describe('buildAutoScheduleDefinition', () => {
   it('declares a versioned unit with a parseable schema', () => {
     const definition = buildAutoScheduleDefinition()
     expect(definition.key).toBe(AUTO_SCHEDULE_KEY)
-    expect(definition.stateVersion).toBe(1)
+    expect(definition.stateVersion).toBe(2)
     const initial = definition.init()
-    expect(initial).toEqual({ samples: [], userEffort: null })
+    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null })
     expect(definition.stateSchema.parse(initial)).toEqual(initial)
   })
 
@@ -104,16 +104,17 @@ describe('buildAutoScheduleDefinition', () => {
     const parsed = definition.stateSchema.parse({
       samples: [{ name: 'bash', argsSize: 3 }],
       userEffort: 'auto',
+      lastEffective: null,
       // a field a future version might drop — must not poison the cache row
       legacyField: true,
     })
-    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto' })
+    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null })
   })
 })
 
 describe('readAutoSchedule — capability gate', () => {
   it('reads the folded state when the registry serves stateOf', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto' }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null }
     const service = { stateOf: (_session: unknown, key: string) => (key === AUTO_SCHEDULE_KEY ? state : undefined) }
     expect(readAutoSchedule(ctxWith(service), {})).toEqual(state)
   })
@@ -133,7 +134,7 @@ describe('readAutoSchedule — capability gate', () => {
   })
 
   it('returns undefined without a session', () => {
-    const service = { stateOf: () => ({ samples: [], userEffort: null }) }
+    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null }) }
     expect(readAutoSchedule(ctxWith(service), undefined)).toBeUndefined()
     expect(readAutoSchedule(ctxWith(service), null)).toBeUndefined()
   })
@@ -141,18 +142,74 @@ describe('readAutoSchedule — capability gate', () => {
 
 describe('requestedEffortOf', () => {
   it('prefers the session pick over the configured default', () => {
-    expect(requestedEffortOf({ samples: [], userEffort: 'high' }, 'auto')).toBe('high')
-    expect(requestedEffortOf({ samples: [], userEffort: 'auto' }, 'low')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null }, 'auto')).toBe('high')
+    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null }, 'low')).toBe('auto')
   })
 
   it('falls back when the session never picked', () => {
     expect(requestedEffortOf(undefined, 'auto')).toBe('auto')
-    expect(requestedEffortOf({ samples: [], userEffort: null }, 'low')).toBe('low')
+    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null }, 'low')).toBe('low')
   })
 
   it('falls back for a value the plugin does not understand', () => {
     // A gateway-specific wire value is not a plugin level: it keeps the
     // pre-existing behaviour (scheduler decides) instead of being passed on.
-    expect(requestedEffortOf({ samples: [], userEffort: 'ultra' }, 'auto')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null }, 'auto')).toBe('auto')
+  })
+})
+
+/**
+ * Issue #11: the selector showed "Auto" while every request went out as a
+ * concrete level, so the user could not tell what was actually sent. The
+ * committed `request/header` carries the effective value (the host resolves it
+ * before committing — `dsh-llm/lib/index.js:2298-2308`), so the projection folds
+ * it into `lastEffective`.
+ */
+describe('lastEffective — the level the last request actually carried (issue #11)', () => {
+  const header = (reasoningEffort?: unknown) => ({
+    type: 'request/header',
+    data: { header: { provider: 'deepseek-account', model: 'deepseek-flash', config: reasoningEffort === undefined ? {} : { reasoningEffort } } },
+  })
+
+  it('folds the effective effort out of a committed header', () => {
+    const next = applyAutoSchedule(empty(), header('high'))
+    expect(next.lastEffective).toBe('high')
+  })
+
+  it('records null when the header carries no effort (non-reasoning model)', () => {
+    expect(applyAutoSchedule(empty(), header()).lastEffective).toBeNull()
+  })
+
+  it('records null for a non-string effort instead of trusting the wire', () => {
+    expect(applyAutoSchedule(empty(), header(42)).lastEffective).toBeNull()
+    expect(applyAutoSchedule(empty(), header('')).lastEffective).toBeNull()
+  })
+
+  it('returns the SAME reference when the value did not move', () => {
+    // The registry gates its change feed on Object.is; rebuilding on every
+    // header would wake every client-visible unit on each request.
+    const once = applyAutoSchedule(empty(), header('high'))
+    expect(applyAutoSchedule(once, header('high'))).toBe(once)
+    expect(applyAutoSchedule(once, header('low'))).not.toBe(once)
+  })
+
+  it('leaves samples and userEffort untouched', () => {
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null }
+    const next = applyAutoSchedule(state, header('low'))
+    expect(next.samples).toBe(state.samples)
+    expect(next.userEffort).toBe('auto')
+    expect(next.lastEffective).toBe('low')
+  })
+
+  it('rebuilds from a cold read: samples, userEffort and lastEffective all fold', () => {
+    // Resume/fork replays the log through init+apply, so the effective level
+    // survives a restart even though the projection is not stored separately.
+    let state = buildAutoScheduleDefinition().init()
+    for (const event of [toolCall('bash', 'x'), selection('auto'), header('high')]) {
+      state = applyAutoSchedule(state, event)
+    }
+    expect(state.samples).toHaveLength(1)
+    expect(state.userEffort).toBe('auto')
+    expect(state.lastEffective).toBe('high')
   })
 })

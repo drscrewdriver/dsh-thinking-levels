@@ -218,6 +218,8 @@ export function apply(ctx: ClientContext): void {
    * the switch and the panel seats (or abdicates) immediately, no reload.
    */
   let seatDirectories: ModelDirectoriesFace | undefined
+  /** The `sessions` face, kept for the chip's projection read (issue #11). */
+  let sessionsRef: SessionsFace | undefined
   let seatDeclared = false
   let seatWatched = false
   let seatClaimed: (() => void) | undefined
@@ -231,6 +233,41 @@ export function apply(ctx: ClientContext): void {
       seatHandleMemo = tlSettingsScopeOf(scopeOf) as NonNullable<typeof seatHandleMemo>
     }
     return seatHandleMemo
+  }
+  /**
+   * The level the session's last committed request actually carried, read from
+   * this plugin's own `tlAutoSchedule` projection (issue #11).
+   *
+   * Why not the directory's `current.reasoningEffort`: the host derives it from
+   * `modelSelection.next` — the selection the NEXT step uses, i.e. the user's
+   * intent (`dsh-client-ui-model-selection/src/client/directory.ts:178`). With
+   * `auto` picked, `next.reasoningEffort` stays `'auto'` for the whole session,
+   * so the chip had no way to show what was really sent. The projection folds
+   * the committed `request/header`, which carries the resolved level.
+   *
+   * Returns `undefined` — never throws — when the projection channel or the
+   * projection itself is absent (older hosts, cold sessions). The chip then
+   * degrades to the plain intent label.
+   * @param sessions - the sessions face captured from the scope inject.
+   * @param sessionId - the owning session.
+   * @returns the last effective effort id, or undefined.
+   */
+  const lastEffectiveOf = (sessions: SessionsFace | undefined, sessionId: string): string | undefined => {
+    try {
+      const face = sessions?.binding(sessionId)?.session?.projections?.faceOf?.('tlAutoSchedule')
+      const snapshot = typeof face?.getSnapshot === 'function' ? face.getSnapshot() : undefined
+      const value = typeof snapshot === 'object' && snapshot !== null
+        ? (snapshot as { value?: unknown }).value
+        : undefined
+      const raw = typeof value === 'object' && value !== null
+        ? (value as { lastEffective?: unknown }).lastEffective
+        : undefined
+      return typeof raw === 'string' && raw.length > 0 ? raw : undefined
+    } catch {
+      // A thrown inject abdicates the seat entry and the shipped selector comes
+      // back — never let a cosmetic read do that.
+      return undefined
+    }
   }
   const takeoverUiOn = (): boolean => {
     const snap = typeof seatHandle()?.getSnapshot === 'function' ? seatHandle()!.getSnapshot!() : undefined
@@ -263,6 +300,13 @@ export function apply(ctx: ClientContext): void {
         // The plugin's own settings face: the chip reads the configured
         // level as the user-intent source (issue #5).
         tlScope: scopeOf === undefined ? undefined : tlSettingsScopeOf(scopeOf) as never,
+        // Issue #11: the level the last request ACTUALLY carried. The host's
+        // `modelSelection.next` (what the directory exposes as `current`) is the
+        // user's intent — with `auto` selected it stays `'auto'` forever, so the
+        // chip could never show what was really sent. Read our own projection
+        // instead; `undefined` on any host without it, and the chip degrades to
+        // the plain intent label.
+        lastEffectiveEffort: lastEffectiveOf(sessionsRef, sessionId),
       }
     },
   })
@@ -304,6 +348,7 @@ export function apply(ctx: ClientContext): void {
     const directories = scope.modelDirectories
     if (directories === undefined) return
     seatDirectories = directories
+    sessionsRef = scope.sessions
     ctx.slots.inject('conversation.input.model', function* () {
       // Reaching the generator proves the seat is declared — late
       // ctx.slots.register from the watch is then legitimate. The yielded

@@ -44,6 +44,20 @@ export interface AutoScheduleState {
     samples: readonly ToolCallSample[];
     /** Effort explicitly picked in this session, or null when never picked. */
     userEffort: string | null;
+    /**
+     * The effort the last request ACTUALLY carried, folded from the committed
+     * `request/header` (the host writes the effective value there —
+     * `dsh-llm/lib/index.js:2298-2308`).
+     *
+     * Issue #11: with `auto` selected the UI showed "Auto" while every request
+     * went out as a concrete level, so the user could not tell what was really
+     * sent. The host's `modelSelection.lastUsed` cannot answer that either (it is
+     * rewritten on every header, i.e. it holds our own output — see the module
+     * doc), so the answer has to come from this projection.
+     *
+     * `null` until the session's first committed request.
+     */
+    lastEffective: string | null;
 }
 /**
  * Fold one committed Session event into the auto-schedule state.
@@ -72,6 +86,7 @@ export declare function buildAutoScheduleDefinition(): {
             argsSize: z.ZodNumber;
         }, z.core.$strip>>;
         userEffort: z.ZodNullable<z.ZodString>;
+        lastEffective: z.ZodNullable<z.ZodString>;
     }, z.core.$strip>;
     init: () => AutoScheduleState;
     apply: typeof applyAutoSchedule;

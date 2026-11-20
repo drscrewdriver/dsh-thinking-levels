@@ -80,7 +80,26 @@ interface ModelDirectoriesFace {
  */
 interface SessionsFace {
   scope(sessionId: string): unknown
-  binding(sessionId: string): unknown
+  binding(sessionId: string): {
+    /**
+     * The session's projection face. `faceOf(key)` returns a snapshot store for
+     * one registered projection — the sanctioned client read path
+     * (`dsh-client-ui-model-selection/src/client/service.ts:81` reads the host's
+     * `modelSelection` through exactly this call).
+     *
+     * Issue #11: the composer chip needs the level a request ACTUALLY carried,
+     * which lives in this plugin's own `tlAutoSchedule` projection (the host's
+     * `modelSelection.next` is the user intent, not the resolved level).
+     */
+    session?: {
+      projections?: {
+        faceOf?: (key: string) => {
+          getSnapshot?: () => unknown
+          subscribe?: (listener: () => void) => () => void
+        } | undefined
+      }
+    }
+  } | undefined
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

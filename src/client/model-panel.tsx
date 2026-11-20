@@ -105,6 +105,18 @@ export interface ModelPanelInjected {
    * settings channel — the chip then falls back to the directory value.
    */
   tlScope?: SettingsScope<unknown>
+  /**
+   * The effort the session's last committed request actually carried, folded
+   * from our own `tlAutoSchedule` projection (issue #11). Undefined when the
+   * projection channel is absent or the session has no committed request yet —
+   * the chip then shows the plain intent label.
+   *
+   * Distinct from `directory.current.reasoningEffort`, which is the host's
+   * `modelSelection.next` (user intent): with `auto` selected that value stays
+   * `'auto'` forever, which is exactly why the chip used to show "Auto" while
+   * requests went out as `high`.
+   */
+  lastEffectiveEffort?: string
 }
 
 /** Full props: the injected face + the session standard seat + locale copy. */
@@ -452,7 +464,7 @@ function stopIndexOf(value: number | undefined): number {
  * (the "max context window" editor moved into each line).
  * @param props - injected directory + config forms, session seat, copy.
  */
-export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessionId, t }: ModelPanelProps): JSX.Element {
+export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessionId, lastEffectiveEffort, t }: ModelPanelProps): JSX.Element {
   const state = useSyncExternalStore(
     listener => directory?.store.subscribe(listener) ?? (() => {}),
     () => directory?.store.getSnapshot() ?? UNAVAILABLE_STATE,
@@ -691,6 +703,16 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessi
   // advertises the mask > the directory's merged value. When the intent is
   // the mask, the step's resolved level rides along as a secondary hint.
   const resolvedEffort = state.current?.reasoningEffort
+  /**
+   * Issue #11: what the last request ACTUALLY carried.
+   *
+   * `resolvedEffort` above is the host's `modelSelection.next` — the user's
+   * intent — so with `auto` picked it stays `'auto'` and the `→ level` hint
+   * could never appear. The projection's `lastEffective` is the committed
+   * header's resolved level. Fall back to `resolvedEffort` for hosts without the
+   * projection so a non-auto pick keeps its previous hint behaviour.
+   */
+  const actualEffort = lastEffectiveEffort ?? resolvedEffort
   const autoAdvertised = currentReasoning?.efforts.some(effort => effort.id === 'auto') === true
   const intentEffort = selectedEffortRef.current
     ?? (resolvedEffort === 'auto' || (autoAdvertised && configLevel === 'auto')
@@ -705,9 +727,9 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessi
       : effortName(intentEffort)
   const resolvedHint = currentReasoning !== undefined
     && intentEffort === 'auto'
-    && resolvedEffort !== undefined
-    && resolvedEffort !== 'auto'
-    ? `→ ${effortName(resolvedEffort)}`
+    && actualEffort !== undefined
+    && actualEffort !== 'auto'
+    ? `→ ${effortName(actualEffort)}`
     : undefined
 
   return (

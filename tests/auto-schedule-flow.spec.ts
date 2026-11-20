@@ -20,7 +20,7 @@ interface Host {
   lastHeaderEffort?: string
 }
 
-const makeHost = (): Host => ({ state: { samples: [], userEffort: null } })
+const makeHost = (): Host => ({ state: { samples: [], userEffort: null, lastEffective: null } })
 
 /** Fold events the way the host registry would, before the request is prepared. */
 const fold = (host: Host, ...events: unknown[]): void => {

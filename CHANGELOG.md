@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.19
+
+- **修复 issue #11：选中 auto 时界面看不到实际生效档位。** 报告人观察到「选 Auto 后请求仍以 high 发出，`lastUsed` 一直是 high、`pending` 一直是 auto」。核实结论：auto 不上送**是设计**（它是 scheduler sentinel，请求期由 `decideEffort` 按工具采样窗口解析成具体档位，有降档行为），`lastUsed`/`pending` 是宿主 `modelSelection` 投影的固有语义（`lastUsed` 每次 `request/header` 被重写、`pending` 匹配 header 提交后清空，二者都不承载用户意图 —— 见 `auto-schedule-projection.ts` 模块注释）。**真正的缺陷是显示**：`tlAutoSchedule` 投影新增 `lastEffective` 字段，折叠已提交的 `request/header` 中的 effective effort（宿主在 `dsh-llm` 里把解析结果写进该事件），选择器 chip 据此显示 `Auto → high`。
+  - 为什么不能复用 `directory.current.reasoningEffort`：宿主从 `modelSelection.next`（**下一步**要用的选择，即用户意图）派生它（`dsh-client-ui-model-selection/src/client/directory.ts:178`），选中 auto 时它永远是 `'auto'`，所以旧的 `→ level` 提示永远不显示。
+  - 投影 `stateVersion` 1 → 2（形状变更）；历史会话不受影响 —— 投影是日志的折叠视图，冷读会重新折叠出 `samples`/`userEffort`/`lastEffective`。
+  - 降级：投影通道缺失（旧宿主、冷会话）时 `lastEffectiveEffort` 为 `undefined`，chip 退回只显示意图标签，不报错（抛错的 inject 会让整个座位让回官方选择器）。
+  - 新增 7 个用例：`request/header` 折叠（正常/缺失/非字符串）、引用稳定性（`Object.is` 门控）、冷读重建、注入面降级。
+
 ## 4.4.18
 
 - **修复 issue #10（同时覆盖 #9 的形态）：与第三方 adapter 包装器同开时 `resolveModel` 互递归爆栈 / 改写报错。**

@@ -252,14 +252,18 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     expect(options['locale']).toBe('thinking-levels')
     expect(typeof options['inject']).toBe('function')
     // The injected face binds the session's model directory, the two
-    // cross-plugin config forms, and the plugin's own settings face (the
-    // chip's user-intent source, issue #5) — all by entry id.
+    // cross-plugin config forms, the plugin's own settings face (the chip's
+    // user-intent source, issue #5), and the last request's effective effort
+    // (issue #11: `next` holds the intent, so `auto` never showed what was sent).
     const face = (options['inject'] as (sessionId: string) => Record<string, unknown>)('session-1')
     // The seat gate probes the own namespace once before registering, and the
     // face re-reads it: the modern entry id appears on both sides of the pair.
     expect(forms).toEqual(['dsh-thinking-levels', 'llm-pi-ai', 'llm-deepseek', 'dsh-thinking-levels'])
-    expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'piAiScope', 'tlScope'])
+    expect(Object.keys(face).sort()).toEqual(['deepseekScope', 'directory', 'lastEffectiveEffort', 'piAiScope', 'tlScope'])
     expect(face['directory']).toMatchObject({ sessionId: 'session-1' })
+    // No projection channel in this fixture: the key degrades to undefined
+    // rather than throwing (a thrown inject would abdicate the seat).
+    expect(face['lastEffectiveEffort']).toBeUndefined()
   })
 })
 
@@ -379,5 +383,27 @@ describe('modern-surface idempotence latch (task_4)', () => {
     expect(registrations.filter(r => r.slot === 'settings.section')).toHaveLength(1)
     expect(registrations.filter(r => r.slot === 'plugins.bundle.config')).toHaveLength(1)
     expect(declared.filter(s => s === 'conversation.input.right')).toHaveLength(1)
+  })
+})
+
+/**
+ * Issue #11: the chip's `→ level` hint had no data source. The directory's
+ * `current.reasoningEffort` is the host's `modelSelection.next` (user intent),
+ * so with `auto` selected it stays `'auto'` forever. The level a request
+ * actually carried lives in this plugin's own `tlAutoSchedule` projection.
+ */
+describe('lastEffectiveEffort injection (issue #11)', () => {
+  const injectOf = (): ((sessionId: string) => Record<string, unknown>) | undefined => {
+    // `takeoverUi: true` is what actually seats the panel, so the entry exists.
+    const { registrations } = collectRegistrations(true, 'configForms', {}, { takeoverUi: true })
+    const seat = registrations.find(r => r.slot === 'conversation.input.model')
+    return seat?.options['inject'] as ((sessionId: string) => Record<string, unknown>) | undefined
+  }
+
+  it('degrades to undefined when the sessions face exposes no projections', () => {
+    // The default fixture has no `sessions` service at all.
+    const inject = injectOf()
+    expect(inject).toBeDefined()
+    expect(inject!('session-1')['lastEffectiveEffort']).toBeUndefined()
   })
 })
