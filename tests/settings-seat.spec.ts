@@ -174,17 +174,19 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     // The seat inject is flushed after apply (the real host fires it once
     // `modelDirectories` starts), so its declaration lands last; the section
     // registers on the rank timer, so it seats last.
-    expect(declared).toEqual(['conversation.input.right', 'settings.section', 'plugins.bundle.config', 'conversation.input.model'])
-    expect(registrations).toHaveLength(4)
+    expect(declared).toEqual(['conversation.view', 'conversation.input.right', 'settings.section', 'plugins.bundle.config', 'conversation.input.model'])
+    expect(registrations).toHaveLength(5)
     expect(registrations.map(r => r.slot)).toEqual([
+      'conversation.view',
       'conversation.input.right',
       'plugins.bundle.config',
       'conversation.input.model',
       'settings.section',
     ])
-    expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
-    expect(registrations[2]!.options).toMatchObject({ id: 'context-window-model-panel' })
-    expect(registrations[3]!.options).toMatchObject({ id: 'dsh-family' })
+    expect(registrations[0]!.options).toMatchObject({ id: 'dsh-thinking-levels.effort-trace' })
+    expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[3]!.options).toMatchObject({ id: 'context-window-model-panel' })
+    expect(registrations[4]!.options).toMatchObject({ id: 'dsh-family' })
   })
 
   it('leaves the shipped ModelSelect in place while takeoverUi is off (4.4.0 default)', () => {
@@ -194,8 +196,8 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
     const { declared, registrations } = collectRegistrations()
     expect(declared).toContain('conversation.input.model')
     expect(registrations.find(r => r.slot === 'conversation.input.model')).toBeUndefined()
-    // The modern surface still seats.
-    expect(registrations).toHaveLength(3)
+    // The modern surface still seats (now including the effort-trace tab).
+    expect(registrations).toHaveLength(4)
   })
 
   it('hot-seats and abdicates on takeoverUi flips without re-running apply (4.4.1 watchdog)', () => {
@@ -218,15 +220,18 @@ describe('config-form contract (declarative settings, family shared tab)', () =>
 
   it('skips the model panel entirely when the harness lacks modelDirectories', () => {
     const { declared, registrations } = collectRegistrations(false)
-    expect(declared).toEqual(['conversation.input.right', 'settings.section', 'plugins.bundle.config'])
+    expect(declared).toEqual(['conversation.view', 'conversation.input.right', 'settings.section', 'plugins.bundle.config'])
     // The model panel is skipped, but the modern surface (family section,
-    // plugins-page card, and the context-check ring riding its seat) still
-    // registers — none of them depend on modelDirectories.
-    expect(registrations).toHaveLength(3)
-    expect(registrations[0]!.slot).toBe('conversation.input.right')
-    expect(registrations[0]!.options).toMatchObject({ id: 'projection-data-hook' })
-    expect(registrations[1]!.slot).toBe('plugins.bundle.config')
-    expect(registrations[2]!.slot).toBe('settings.section')
+    // plugins-page card, the context-check ring riding its seat, and the
+    // effort-trace tab on its own `sessions` inject) still registers — none
+    // of them depend on modelDirectories.
+    expect(registrations).toHaveLength(4)
+    expect(registrations[0]!.slot).toBe('conversation.view')
+    expect(registrations[0]!.options).toMatchObject({ id: 'dsh-thinking-levels.effort-trace' })
+    expect(registrations[1]!.slot).toBe('conversation.input.right')
+    expect(registrations[1]!.options).toMatchObject({ id: 'projection-data-hook' })
+    expect(registrations[2]!.slot).toBe('plugins.bundle.config')
+    expect(registrations[3]!.slot).toBe('settings.section')
     // The projection hook rides the right seat on every generation; only the
     // ring (0.2.0 projection consumers) gates on the data being present.
   })

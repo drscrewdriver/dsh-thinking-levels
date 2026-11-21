@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.5.0
+
+- **新增「Effort 轨迹」标签页（conversation.view）**：会话时间线旁以 run-length 时间线展示本会话每次请求实际发出的档位——`↑ auto max ×1` / `= auto high ×12` / `↓ auto low ×3` 式标签，↑/↓/= 为相对上一 run 的升降（escalation 序，复用 effort slider 的显示序表），最新在前。issue #11 的延伸：chip 只回答「最后一发是什么」，标签页回答「一路是怎么变过来的」。
+  - 数据面：`tlAutoSchedule` 投影新增 `trace` 环（run-length 折叠 `{level, intent, count}`，`TRACE_MAX=64`），由与 `lastEffective` 相同的 `request/header` 事件折叠；intent 取折叠时刻的会话显式选择（auto / manual / 配置默认=中性）。`stateVersion` 2→3——投影是日志的纯折叠，冷读自动重建历史会话的轨迹，无迁移负担。
+  - 无档位 header（非推理模型 / 被剥离）不进轨迹、隐式结束当前 run；语义与 `lastEffective=null` 路径保持一致。
+  - 客户端面：`conversation.view` 槽位注册（perm-gate history 同款模式），读取与 chip 同一条投影 face 路径，无 HTTP feed；投影缺失 / trace 为空渲染空态，宿主未声明该槽位时 generator inject 永不触发（无标签页=诚实降级）。调度器零接触，chip 行为逐字不变。
+  - locale：10 语补 `trace.label` / `trace.empty` / `trace.intent.auto` / `trace.intent.manual`。
+  - 测试：投影折叠 + 轨迹组件两份 spec（20 例），全量 305/305。
+
 ## 4.4.20
 
 - **connect 类插件兼容矩阵（issue #10 后续收口，无 src/ 变更）。** 普查四家 connect/聚合插件当日版本的 adapter 形态——`@dmh2002/dsh-connect-qoder` 1.27.1 / `dsh-connect-trae` 4.18.5 / `dsh-connect-workbuddy` 5.30.0（dingminhua，ES class + 自有默认档广告）、`dsh-our-free-model`（Ebony-Vinyl，plain class + prepareCall 内部直调 this.resolveModel）——全部为普通对象形态、无 Proxy/freeze、不回读 `llm.adapters`，4.4.18 的 registry-entry facade 方案零返工成立。

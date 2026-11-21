@@ -9,7 +9,7 @@ import {
 } from '../src/auto-schedule-projection.ts'
 import { TOOL_SAMPLE_WINDOW } from '../src/session-events.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [] })
 
 /** The real wire shape (`packages/core/session/src/types.ts`): name + arguments. */
 const toolCall = (name: string, args = '') => ({ type: 'tool/call', data: { turn: 1, step: 1, callId: 'c', name, arguments: args } })
@@ -93,9 +93,9 @@ describe('buildAutoScheduleDefinition', () => {
   it('declares a versioned unit with a parseable schema', () => {
     const definition = buildAutoScheduleDefinition()
     expect(definition.key).toBe(AUTO_SCHEDULE_KEY)
-    expect(definition.stateVersion).toBe(2)
+    expect(definition.stateVersion).toBe(3)
     const initial = definition.init()
-    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null })
+    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null, trace: [] })
     expect(definition.stateSchema.parse(initial)).toEqual(initial)
   })
 
@@ -105,16 +105,17 @@ describe('buildAutoScheduleDefinition', () => {
       samples: [{ name: 'bash', argsSize: 3 }],
       userEffort: 'auto',
       lastEffective: null,
+      trace: [],
       // a field a future version might drop — must not poison the cache row
       legacyField: true,
     })
-    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null })
+    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] })
   })
 })
 
 describe('readAutoSchedule — capability gate', () => {
   it('reads the folded state when the registry serves stateOf', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] }
     const service = { stateOf: (_session: unknown, key: string) => (key === AUTO_SCHEDULE_KEY ? state : undefined) }
     expect(readAutoSchedule(ctxWith(service), {})).toEqual(state)
   })
@@ -134,7 +135,7 @@ describe('readAutoSchedule — capability gate', () => {
   })
 
   it('returns undefined without a session', () => {
-    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null }) }
+    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null, trace: [] }) }
     expect(readAutoSchedule(ctxWith(service), undefined)).toBeUndefined()
     expect(readAutoSchedule(ctxWith(service), null)).toBeUndefined()
   })
@@ -142,19 +143,19 @@ describe('readAutoSchedule — capability gate', () => {
 
 describe('requestedEffortOf', () => {
   it('prefers the session pick over the configured default', () => {
-    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null }, 'auto')).toBe('high')
-    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null }, 'low')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null, trace: [] }, 'auto')).toBe('high')
+    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null, trace: [] }, 'low')).toBe('auto')
   })
 
   it('falls back when the session never picked', () => {
     expect(requestedEffortOf(undefined, 'auto')).toBe('auto')
-    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null }, 'low')).toBe('low')
+    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null, trace: [] }, 'low')).toBe('low')
   })
 
   it('falls back for a value the plugin does not understand', () => {
     // A gateway-specific wire value is not a plugin level: it keeps the
     // pre-existing behaviour (scheduler decides) instead of being passed on.
-    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null }, 'auto')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null, trace: [] }, 'auto')).toBe('auto')
   })
 })
 
@@ -185,16 +186,22 @@ describe('lastEffective — the level the last request actually carried (issue #
     expect(applyAutoSchedule(empty(), header('')).lastEffective).toBeNull()
   })
 
-  it('returns the SAME reference when the value did not move', () => {
-    // The registry gates its change feed on Object.is; rebuilding on every
-    // header would wake every client-visible unit on each request.
+  it('advances the trace run when the level repeats; same reference only for effort-less headers', () => {
+    // The registry gates its change feed on Object.is. Since the trace joined
+    // (stateVersion 3), a level-carrying header ALWAYS advances its run —
+    // count++ = new reference — so the trace tab stays live per request; the
+    // same-reference guarantee survives only for headers without an effort.
     const once = applyAutoSchedule(empty(), header('high'))
-    expect(applyAutoSchedule(once, header('high'))).toBe(once)
+    const twice = applyAutoSchedule(once, header('high'))
+    expect(twice).not.toBe(once)
+    expect(twice.trace).toEqual([{ level: 'high', intent: null, count: 2 }])
     expect(applyAutoSchedule(once, header('low'))).not.toBe(once)
+    const quiet = applyAutoSchedule(empty(), header())
+    expect(applyAutoSchedule(quiet, header())).toBe(quiet)
   })
 
   it('leaves samples and userEffort untouched', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] }
     const next = applyAutoSchedule(state, header('low'))
     expect(next.samples).toBe(state.samples)
     expect(next.userEffort).toBe('auto')

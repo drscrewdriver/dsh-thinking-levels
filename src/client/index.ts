@@ -31,6 +31,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, de, en, es, fr, it, ja, ko, pt, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
+import { EffortTrace } from './effort-trace.tsx'
 import { ProjectionDataHook } from './context-ring.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
@@ -367,6 +368,34 @@ export function apply(ctx: ClientContext): void {
         }
       }
     })
+  })
+
+  // Effort-trace tab (conversation.view — the dsh-perm-gate history pattern):
+  // a run-length timeline of the levels this session's requests actually went
+  // out with, folded by the `tlAutoSchedule` projection (stateVersion 3) from
+  // the same committed headers the chip's `lastEffective` reads. Its own
+  // `sessions` inject on purpose: the tab must not ride the modelDirectories
+  // one above (an absent directories service must not cost the tab). On a
+  // host that never declared the slot the generator inject simply never
+  // fires — the honest degradation is "no tab", like the undischarged
+  // dsh-family.tab inject.
+  ;(ctx as unknown as {
+    inject: (
+      deps: string[],
+      cb: (scope: { sessions?: SessionsFace | undefined }) => void,
+    ) => void
+  }).inject(['sessions'], (scope) => {
+    const sessions = scope.sessions
+    ctx.slots.inject('conversation.view', function* () {
+      yield ctx.slots.register({
+        name: 'conversation.view',
+        id: 'dsh-thinking-levels.effort-trace',
+        order: 25,
+        label: () => t('trace.label'),
+        locale: NS,
+        inject: (sessionId: string | undefined) => ({ sessionId, sessions, tFallback: t }),
+      }, EffortTrace)
+    }) as unknown
   })
 
   // Family settings section (see the SlotMap note above): the contributor

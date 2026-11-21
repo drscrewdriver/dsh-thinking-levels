@@ -163,6 +163,20 @@ The scheduling policy is the same source as [dsh-tool-turbo](https://github.com/
 
 **Where the samples come from (4.4.7+).** The scheduler folds `tool/call` events into a Session projection (`tlAutoSchedule`), so it sees real tool history on every host from 0.1.2-rc.1 on; the pre-4.4.7 `session.events` read only ever produced samples on 0.1.0-rc.8. The session's explicit pick is folded from `model/selection` events, so a level the host echoes back can never be mistaken for a manual choice. Known limitation: host `0.1.0-rc.8` exposes no `stateOf` on its projection registry (legacy plane contract), so that one line keeps the old array read — scheduling works there, the echo correction does not.
 
+## Effort trace tab
+
+The conversation view gains an **Effort 轨迹 / Effort trace** tab (next to the timeline): a run-length timeline of the levels this session's requests actually went out with —
+
+```
+↑ auto max    ×1
+= auto high   ×12
+↓ auto low    ×3
+```
+
+`↑` / `↓` / `=` is the transition against the previous (older) run by escalation rank; the tag shows the intent (`auto` — the scheduler resolved it, `manual` — an explicit pick, neutral — the configured default) and how many consecutive requests the run covers. Newest first.
+
+Data comes from the plugin's `tlAutoSchedule` session projection (stateVersion 3), folded from the same committed `request/header` events the selector chip's `Auto → level` hint reads — no HTTP feed, and a cold read rebuilds the trace of resumed/historical sessions from the log. The tab degrades silently on hosts without the conversation-view slot or the projection face (empty state, never an error).
+
 ## Third-party adapter compatibility (contract for connect-plugin authors)
 
 TL reads the `llm.adapters` registry to advertise `auto` in the model directory, and makes three promises to every plugin that registers adapters there (providers-hub, the connect-* family, our-free-model, vision-router, …):

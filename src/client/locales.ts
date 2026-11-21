@@ -106,6 +106,10 @@ export const zh = {
   'input.effort.default': '提供方默认',
   'input.effort.reset': '恢复提供方默认',
   'card.capabilities.failed': '保存失败：配置被拒绝或冲突，请检查值。',
+  'trace.label': 'Effort 轨迹',
+  'trace.empty': '本会话还没有已提交的请求档位。',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': '手动',
 } satisfies Record<string, string>
 
 /** English dictionary (keys mirror zh). */
@@ -211,6 +215,10 @@ export const en: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Provider default',
   'input.effort.reset': 'Restore provider default',
   'card.capabilities.failed': 'Save failed: the value was rejected or conflicted. Check it.',
+  'trace.label': 'Effort trace',
+  'trace.empty': 'No committed request levels in this session yet.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manual',
 }
 
 /** Japanese dictionary (keys mirror zh). */
@@ -316,6 +324,10 @@ export const ja: Record<keyof typeof zh, string> = {
   'input.effort.default': 'プロバイダーの既定',
   'input.effort.reset': 'プロバイダーの既定に戻す',
   'card.capabilities.failed': '保存に失敗しました：値が拒否されたか競合しています。確認してください。',
+  'trace.label': 'Effort 軌跡',
+  'trace.empty': 'このセッションには確定済みリクエストのレベルがまだありません。',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': '手動',
 }
 
 /** Korean dictionary (keys mirror zh). */
@@ -421,6 +433,10 @@ export const ko: Record<keyof typeof zh, string> = {
   'input.effort.default': '공급자 기본값',
   'input.effort.reset': '공급자 기본값으로 복원',
   'card.capabilities.failed': '저장 실패: 값이 거부되었거나 충돌합니다. 확인하세요.',
+  'trace.label': 'Effort 궤적',
+  'trace.empty': '이 세션에는 아직 확정된 요청 레벨이 없습니다.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': '수동',
 }
 
 /** French dictionary (keys mirror zh). */
@@ -526,6 +542,10 @@ export const fr: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Valeur par défaut du fournisseur',
   'input.effort.reset': 'Restaurer la valeur par défaut du fournisseur',
   'card.capabilities.failed': 'Échec de l\'enregistrement : la valeur a été rejetée ou est en conflit. Vérifiez-la.',
+  'trace.label': 'Trace des efforts',
+  'trace.empty': 'Aucun niveau de requête validé dans cette session pour l\'instant.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manuel',
 }
 
 /** German dictionary (keys mirror zh). */
@@ -631,6 +651,10 @@ export const de: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Anbieterstandard',
   'input.effort.reset': 'Auf Anbieterstandard zurücksetzen',
   'card.capabilities.failed': 'Speichern fehlgeschlagen: Der Wert wurde abgelehnt oder steht in Konflikt. Bitte überprüfen.',
+  'trace.label': 'Effort-Verlauf',
+  'trace.empty': 'In dieser Sitzung gibt es noch keine übermittelten Request-Stufen.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manuell',
 }
 
 /** Italian dictionary (keys mirror zh). */
@@ -736,6 +760,10 @@ export const it: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Predefinito del provider',
   'input.effort.reset': 'Ripristina il predefinito del provider',
   'card.capabilities.failed': 'Salvataggio non riuscito: il valore è stato rifiutato o è in conflitto. Verifica.',
+  'trace.label': 'Traccia degli effort',
+  'trace.empty': 'Nessun livello di richiesta confermato in questa sessione.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manuale',
 }
 
 /** Russian dictionary (keys mirror zh). */
@@ -841,6 +869,10 @@ export const ru: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Значение провайдера по умолчанию',
   'input.effort.reset': 'Вернуть значение провайдера по умолчанию',
   'card.capabilities.failed': 'Ошибка сохранения: значение отклонено или конфликтует. Проверьте его.',
+  'trace.label': 'Трасса усилий',
+  'trace.empty': 'В этой сессии ещё нет зафиксированных уровней запросов.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'вручную',
 }
 
 /** Spanish dictionary (keys mirror zh). */
@@ -946,6 +978,10 @@ export const es: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Predeterminado del proveedor',
   'input.effort.reset': 'Restaurar el valor predeterminado del proveedor',
   'card.capabilities.failed': 'Error al guardar: el valor fue rechazado o está en conflicto. Verifícalo.',
+  'trace.label': 'Trazado de esfuerzo',
+  'trace.empty': 'Aún no hay niveles de solicitud confirmados en esta sesión.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manual',
 }
 
 /** Portuguese (pt-BR) dictionary (keys mirror zh). */
@@ -1051,6 +1087,10 @@ export const pt: Record<keyof typeof zh, string> = {
   'input.effort.default': 'Padrão do provedor',
   'input.effort.reset': 'Restaurar o padrão do provedor',
   'card.capabilities.failed': 'Falha ao salvar: o valor foi rejeitado ou está em conflito. Verifique-o.',
+  'trace.label': 'Trilha de esforço',
+  'trace.empty': 'Ainda não há níveis de solicitação confirmados nesta sessão.',
+  'trace.intent.auto': 'auto',
+  'trace.intent.manual': 'manual',
 }
 
 /** Combined dictionary map — all 10 languages, single-call registration. */

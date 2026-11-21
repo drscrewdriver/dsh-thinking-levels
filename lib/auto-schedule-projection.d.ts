@@ -22,6 +22,10 @@
  *   (`api/session-controller/src/agent.ts:340` ← `commands.ts:176`), so the
  *   plugin's own injection can never pollute it — the echo disappears by
  *   construction and needs no "remember what I injected" side table.
+ * - `apply` folds `request/header` events into `lastEffective` (issue #11) and
+ *   the run-length `trace` (conversation-view effort tab): the header carries
+ *   the level the request actually went out with, so the trace is the
+ *   per-request history the single field can only summarize.
  *
  * Projections are the sanctioned read path ("reads the projection"), are
  * folded lazily over the in-memory log on first read (so resumed/forked
@@ -38,6 +42,21 @@ import { z } from 'zod';
 import { type EffortId, type ToolCallSample } from './thinking-level.ts';
 /** Projection key. `tl` matches the plugin's other unit (`tlCacheBilling`). */
 export declare const AUTO_SCHEDULE_KEY = "tlAutoSchedule";
+/** One run-length segment of the effort trace (conversation-view tab). */
+export interface EffortRun {
+    /** The wire level this run's requests went out with. */
+    level: string;
+    /**
+     * Why: `'auto'` (scheduler sentinel), `'manual'` (explicit session pick) or
+     * `null` (the configured default — a session that never picked cannot be
+     * told apart from one, so the tab renders it neutral).
+     */
+    intent: 'auto' | 'manual' | null;
+    /** How many consecutive committed requests the run covers. */
+    count: number;
+}
+/** Runs kept in the trace ring; run-length lets 64 runs cover very long sessions. */
+export declare const TRACE_MAX = 64;
 /** Folded state: recent tool samples plus the session's explicit pick. */
 export interface AutoScheduleState {
     /** Recent `tool/call` samples, oldest first, at most {@link TOOL_SAMPLE_WINDOW}. */
@@ -58,7 +77,31 @@ export interface AutoScheduleState {
      * `null` until the session's first committed request.
      */
     lastEffective: string | null;
+    /**
+     * Run-length-folded effort trace, oldest run first — consecutive committed
+     * requests that went out with the same effective level AND the same intent
+     * collapse into one {@link EffortRun}. Folded from the same `request/header`
+     * events as `lastEffective`: the trace is the per-request history that field
+     * can only summarize (the conversation-view tab renders it). Headers without
+     * an effort (non-reasoning model, stripped) append nothing — they
+     * implicitly end the current run. At most {@link TRACE_MAX} runs.
+     */
+    trace: readonly EffortRun[];
 }
+/**
+ * Append one committed request's effective level to the run-length trace.
+ *
+ * Pure and total: every call returns a NEW array (a header always grows some
+ * run — same level+intent extends the last run's count, anything else opens a
+ * new one), so the Object.is change gate treats every level-carrying header as
+ * a real state change and wakes the trace tab. Headers without a level never
+ * reach this function (see {@link applyAutoSchedule}).
+ * @param trace - trace before the header.
+ * @param level - the effective wire level the header committed.
+ * @param intent - why: the session pick at fold time, or null for default.
+ * @returns the advanced trace.
+ */
+export declare function foldTrace(trace: readonly EffortRun[], level: string, intent: EffortRun['intent']): readonly EffortRun[];
 /**
  * Fold one committed Session event into the auto-schedule state.
  *
@@ -87,6 +130,11 @@ export declare function buildAutoScheduleDefinition(): {
         }, z.core.$strip>>;
         userEffort: z.ZodNullable<z.ZodString>;
         lastEffective: z.ZodNullable<z.ZodString>;
+        trace: z.ZodArray<z.ZodObject<{
+            level: z.ZodString;
+            intent: z.ZodNullable<z.ZodString>;
+            count: z.ZodNumber;
+        }, z.core.$strip>>;
     }, z.core.$strip>;
     init: () => AutoScheduleState;
     apply: typeof applyAutoSchedule;

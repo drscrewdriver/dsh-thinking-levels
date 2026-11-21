@@ -123,6 +123,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.input.right': { kind: 'list'; scope: 'session' }
     /**
+     * The conversation view's tab row (next to the timeline): the runtime
+     * declaration lives in the conversation UI package — mirrored here (the
+     * dsh-perm-gate history-tab pattern) so the typed `slots.register`
+     * accepts the effort-trace entry. `session-maybe`: the owner props carry
+     * the `sessionId` when the tab renders inside a session, and nothing
+     * otherwise.
+     */
+    'conversation.view': {
+      kind: 'list'
+      scope: 'session-maybe'
+      owner: {
+        sessionId?: string
+        useSessions?: (selector: (state: unknown) => unknown) => unknown
+      }
+    }
+    /**
      * The ≤0.1.6 per-plugin settings card seat (removed in the 0.1.7
      * declarative migration). Declared so the merged client can register its
      * legacy card on the old lines; on 0.1.7+ the seat does not exist and the
