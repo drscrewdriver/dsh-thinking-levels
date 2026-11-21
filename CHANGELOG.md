@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.6.0
+
+- **新增 `Config.simpleToolsRegex`：简单工具 regex 名单（issue #12）。** 第三方工具家族（如 dsh-ops 的 `ops_*`）可一条 `^ops_.*` 整族进白名单，不再逐个枚举。每条按原生 JavaScript regex 编译（`i` flag、**不自动加锚点**，建议自写 `^`），与字面量名单并存、进同一 ratio 统计；编译失败的条目跳过并告警一次（配置变更粒度，非每请求）。
+  - **双面匹配**：regex 与字面量名单统一测完整工具名与剥 `ops_` 后的裸名两面——regex 路径的硬前提（裸名无 `ops_` 前缀，`ops_.*` 对裸名永不命中），顺带修复字面量条目 `ops_bash` 式写法「因剥前缀而永不命中」的隐性坑（行为修复：此前无效的命名空间字面量现在生效）。
+  - **内置表语义不动**：`SIMPLE_TOOL_RE` 仍只测裸名（issue #8 契约）；`shell`/`pwsh`/`cmd`/`sh`（terminal 插件）与 `ops_shell` 剥前缀路径逐字不变。
+  - **调度双 gate 不动**：simpleRatio 的 `argsSize < HEAVY_ARGS` 二道门与升档面（heaviest args → max）独立驱动——家族级白名单只作用于降档面的 ratio 统计，最坏后果是档位偏好偏一档（会话内自愈），不会把重调用拉进低档、也不会把轻会话推上 max。
+  - 实现：`SimpleToolMatcher` 统一分类器替代链路上的裸 `RegExp`；`planStrictStep`/`resolveEffortInjection`/`decideEffort` 加 `extraSimpleRegex` 输入。新增 9 例（家族命中/双面修复/无效跳过+告警/双 gate/终端适配），全量 314/314。
+
 ## 4.5.0
 
 - **新增「Effort 轨迹」标签页（conversation.view）**：会话时间线旁以 run-length 时间线展示本会话每次请求实际发出的档位——`↑ auto max ×1` / `= auto high ×12` / `↓ auto low ×3` 式标签，↑/↓/= 为相对上一 run 的升降（escalation 序，复用 effort slider 的显示序表），最新在前。issue #11 的延伸：chip 只回答「最后一发是什么」，标签页回答「一路是怎么变过来的」。

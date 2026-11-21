@@ -69,6 +69,8 @@ export interface StrictStepInput {
   allowUpgrade: boolean
   /** Extra tool names merged into the built-in cheap-and-deterministic set (issue #8 `Config.simpleTools`). */
   extraSimpleTools?: readonly string[]
+  /** Extra raw regex patterns for the same set (issue #12 `Config.simpleToolsRegex`). */
+  extraSimpleRegex?: readonly string[]
   /** Whether the target model advertises reasoning-effort support at all. */
   supportsReasoning: boolean
   /** The model's advertised effort ids (including plugin masks like `auto`). */
@@ -137,6 +139,7 @@ export function planStrictStep(input: StrictStepInput): StrictStepPlan {
     allowDowngrade: input.allowDowngrade,
     allowUpgrade: input.allowUpgrade,
     extraSimpleTools: input.extraSimpleTools,
+    extraSimpleRegex: input.extraSimpleRegex,
     efforts: input.efforts,
     toggleOnly: input.toggleOnly,
   })

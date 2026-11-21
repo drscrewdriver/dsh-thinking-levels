@@ -87,6 +87,15 @@ export interface EffortDecisionInput {
    * leaves the built-in classification untouched (issue #8 `Config.simpleTools`).
    */
   extraSimpleTools?: readonly string[]
+  /**
+   * Extra RAW REGEX patterns treated as cheap-and-deterministic, merged with
+   * the literal list and the built-in set (issue #12 `Config.simpleToolsRegex`).
+   * Each entry compiles as written (`i` flag, no auto-anchoring — the hint
+   * suggests `^`); invalid entries are skipped with a one-time warning. The
+   * matcher tests the full name and the bare name, so a family pattern like
+   * `ops_.*` hits the whole namespace.
+   */
+  extraSimpleRegex?: readonly string[]
 }
 
 /**
@@ -119,30 +128,90 @@ function escapeRe(source: string): string {
 }
 
 /**
- * Compiled `extraSimpleTools` matchers, memoised by content. The config array
- * may be a fresh reference on every read (volatile `.get()`), so key on the
- * joined names rather than identity to avoid recompiling per request.
+ * The merged cheap-and-deterministic classifier over both extra lists
+ * (issue #12): literal entries (`Config.simpleTools`, anchored exactly as
+ * before) plus raw regex entries (`Config.simpleToolsRegex`, compiled as
+ * written — invalid ones skipped with a one-time warning, never thrown).
+ *
+ * `test` matches the FULL tool name AND the namespace-stripped bare name: a
+ * family pattern like `ops_.*` can only ever hit the full name (the bare name
+ * carries no `ops_` prefix), while a literal entry like `ops_bash` used to be
+ * dead on arrival against the bare name alone — the dual face repairs it as a
+ * side effect. The BUILT-IN table keeps its bare-name-only semantics (the
+ * issue #8 contract); only the extra lists gained the second face.
  */
-const EXTRA_SIMPLE_RE_CACHE = new Map<string, RegExp | null>()
-function compileExtraSimpleTools(tokens: readonly string[] | undefined): RegExp | null {
-  if (tokens === undefined || tokens.length === 0) return null
-  const key = tokens.join('\u0000')
-  const hit = EXTRA_SIMPLE_RE_CACHE.get(key)
-  if (hit !== undefined) return hit
-  const cleaned = tokens.map(token => token.trim()).filter(token => token !== '')
-  const re = cleaned.length === 0 ? null : new RegExp(`^(?:${cleaned.map(escapeRe).join('|')})(?:_|$)`, 'i')
-  EXTRA_SIMPLE_RE_CACHE.set(key, re)
-  return re
+export interface SimpleToolMatcher {
+  test(name: string): boolean
 }
 
-/** Whether a tool name (namespace prefix removed) looks cheap-and-deterministic. */
-function isSimpleToolName(name: string, extra?: RegExp | null): boolean {
+/**
+ * Compiled matchers, memoised by content. The config arrays may be fresh
+ * references on every read (volatile `.get()`), so key on the joined contents
+ * rather than identity to avoid recompiling per request.
+ */
+const SIMPLE_MATCHER_CACHE = new Map<string, SimpleToolMatcher | null>()
+
+/**
+ * Compile the two extra lists into one classifier, or `null` when both are
+ * empty (the built-in classification then stands alone). A compile is pure
+ * apart from the one-time `console.warn` for invalid regex entries — the
+ * cache keys on content, so the warning fires once per configuration, not
+ * once per request.
+ */
+export function compileSimpleToolsMatcher(
+  literal: readonly string[] | undefined,
+  regex: readonly string[] | undefined,
+): SimpleToolMatcher | null {
+  const literalKey = (literal ?? []).join('\u0000')
+  const regexKey = (regex ?? []).join('\u0000')
+  if (literalKey === '' && regexKey === '') return null
+  const key = `${literalKey}\u0001${regexKey}`
+  const hit = SIMPLE_MATCHER_CACHE.get(key)
+  if (hit !== undefined) return hit
+  const matcher = buildSimpleToolsMatcher(literal ?? [], regex ?? [])
+  SIMPLE_MATCHER_CACHE.set(key, matcher)
+  return matcher
+}
+
+function buildSimpleToolsMatcher(literal: readonly string[], regex: readonly string[]): SimpleToolMatcher | null {
+  const cleaned = literal.map(token => token.trim()).filter(token => token !== '')
+  const literalRe = cleaned.length === 0
+    ? null
+    : new RegExp(`^(?:${cleaned.map(escapeRe).join('|')})(?:_|$)`, 'i')
+  const rawRes: RegExp[] = []
+  const failed: string[] = []
+  for (const pattern of regex) {
+    const trimmed = pattern.trim()
+    if (trimmed === '') continue
+    try {
+      rawRes.push(new RegExp(trimmed, 'i'))
+    } catch {
+      failed.push(trimmed)
+    }
+  }
+  if (failed.length > 0) {
+    console.warn(`[dsh-thinking-levels] Config.simpleToolsRegex: skipped invalid pattern(s) (they must compile as JavaScript RegExp): ${failed.map(p => `/${p}/`).join(', ')}`)
+  }
+  if (literalRe === null && rawRes.length === 0) return null
+  return {
+    test(name: string): boolean {
+      const bare = name.replace(TOOL_NAMESPACE_RE, '')
+      return (literalRe !== null && (literalRe.test(name) || literalRe.test(bare)))
+        || rawRes.some(re => re.test(name) || re.test(bare))
+    },
+  }
+}
+
+/** Whether a tool name looks cheap-and-deterministic: the built-in table reads
+ * the namespace-stripped bare name (issue #8 semantics, untouched); the extra
+ * matcher carries its own dual face (full name ∥ bare name, issue #12). */
+function isSimpleToolName(name: string, extra?: SimpleToolMatcher | null): boolean {
   const bare = name.replace(TOOL_NAMESPACE_RE, '')
-  return SIMPLE_TOOL_RE.test(bare) || (extra !== undefined && extra !== null && extra.test(bare))
+  return SIMPLE_TOOL_RE.test(bare) || (extra !== undefined && extra !== null && extra.test(name))
 }
 
 /** Count how many of the recent calls look cheap-and-deterministic. */
-function simpleRatio(calls: readonly ToolCallSample[], extra?: RegExp | null): number {
+function simpleRatio(calls: readonly ToolCallSample[], extra?: SimpleToolMatcher | null): number {
   if (calls.length === 0) return 1
   const simple = calls.filter(call =>
     isSimpleToolName(call.name, extra) && call.argsSize < HEAVY_ARGS,
@@ -182,7 +251,7 @@ function scheduleEffort(
   calls: readonly ToolCallSample[],
   allowDowngrade: boolean,
   allowUpgrade: boolean,
-  extra?: RegExp | null,
+  extra?: SimpleToolMatcher | null,
 ): AutoEffort {
   // The no-sample branch is the first request of the session: start at the hub
   // regardless of `allowDowngrade` (see the rationale above).
@@ -206,9 +275,9 @@ function scheduleEffort(
  * @returns The level to inject; `auto` is resolved before returning.
  */
 export function decideEffort(input: EffortDecisionInput): EffortId {
-  const { recentCalls, selected, allowDowngrade, allowUpgrade, extraSimpleTools } = input
+  const { recentCalls, selected, allowDowngrade, allowUpgrade, extraSimpleTools, extraSimpleRegex } = input
   if (selected !== 'auto') return selected
-  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade, compileExtraSimpleTools(extraSimpleTools))
+  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade, compileSimpleToolsMatcher(extraSimpleTools, extraSimpleRegex))
 }
 
 /**
@@ -259,6 +328,11 @@ export interface EffortInjectionInput {
    * the `auto` scheduler (issue #8 `Config.simpleTools`).
    */
   extraSimpleTools?: readonly string[]
+  /**
+   * Extra raw regex patterns for the same set (issue #12
+   * `Config.simpleToolsRegex`), compiled as written, invalid ones skipped.
+   */
+  extraSimpleRegex?: readonly string[]
   /** The model's advertised effort ids (including plugin masks like `auto`). */
   efforts: readonly string[]
   /**
@@ -353,6 +427,7 @@ export function resolveEffortInjection(input: EffortInjectionInput): EffortInjec
     allowDowngrade: input.allowDowngrade,
     allowUpgrade: input.allowUpgrade,
     extraSimpleTools: input.extraSimpleTools,
+    extraSimpleRegex: input.extraSimpleRegex,
   })
   const clamped = clampToEfforts(level, efforts)
   return clamped === undefined ? { inject: false } : { inject: true, level: clamped }

@@ -128,9 +128,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     USD: "USD";
                 }>;
                 tier: z.ZodNullable<z.ZodEnum<{
+                    flat: "flat";
                     peak: "peak";
                     offPeak: "offPeak";
-                    flat: "flat";
                 }>>;
                 source: z.ZodEnum<{
                     off: "off";
@@ -211,7 +211,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 miss: number;
                 output: number;
                 currency: "CNY" | "USD";
-                tier: "peak" | "offPeak" | "flat" | null;
+                tier: "flat" | "peak" | "offPeak" | null;
                 source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
@@ -288,7 +288,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 miss: number;
                 output: number;
                 currency: "CNY" | "USD";
-                tier: "peak" | "offPeak" | "flat" | null;
+                tier: "flat" | "peak" | "offPeak" | null;
                 source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
@@ -364,7 +364,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                 miss: number;
                 output: number;
                 currency: "CNY" | "USD";
-                tier: "peak" | "offPeak" | "flat" | null;
+                tier: "flat" | "peak" | "offPeak" | null;
                 source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                 priced: boolean;
                 estimated: boolean;
@@ -451,9 +451,9 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             matchedModel: z.ZodNullable<z.ZodString>;
             modelMatched: z.ZodBoolean;
             tier: z.ZodNullable<z.ZodEnum<{
+                flat: "flat";
                 peak: "peak";
                 offPeak: "offPeak";
-                flat: "flat";
             }>>;
             unitPricePerM: z.ZodNullable<z.ZodNumber>;
             turn: z.ZodNullable<z.ZodNumber>;
@@ -513,7 +513,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
                     miss: number;
                     output: number;
                     currency: "CNY" | "USD";
-                    tier: "peak" | "offPeak" | "flat" | null;
+                    tier: "flat" | "peak" | "offPeak" | null;
                     source: "off" | "custom" | "estimate" | "cn" | "global" | "catalog-miss";
                     priced: boolean;
                     estimated: boolean;
@@ -638,7 +638,7 @@ export declare function buildBillingDefinition(getPricing: () => PricingSnapshot
             provider: string | null;
             matchedModel: string | null;
             modelMatched: boolean;
-            tier: "peak" | "offPeak" | "flat" | null;
+            tier: "flat" | "peak" | "offPeak" | null;
             /** @deprecated 目录化后请以 priceRow 三价目位为准；保留一代 = 当前行缓存命中价。 */
             unitPricePerM: number | null;
             turn: number;

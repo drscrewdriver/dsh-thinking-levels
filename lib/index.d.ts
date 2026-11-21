@@ -78,6 +78,14 @@ export interface ThinkingLevelsConfig {
      */
     simpleTools: string[] | Volatile<string[]>;
     /**
+     * Extra RAW REGEX patterns with the same cheap-and-deterministic role
+     * (issue #12): each entry compiles as written (`i` flag, no auto-anchoring —
+     * anchor with `^` yourself), and the matcher tests BOTH the full tool name
+     * and the namespace-stripped bare name, so `ops_.*` covers the whole family.
+     * Invalid patterns are skipped with a one-time warning.
+     */
+    simpleToolsRegex: string[] | Volatile<string[]>;
+    /**
      * Master takeover switch: mirrored into the openai-completions transport's
      * own section (`llm-openai-completions.enabled`) when it flips. The
      * transport's dispatch judgment stays single-source in ITS section; this
@@ -114,6 +122,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    simpleToolsRegex: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
@@ -134,6 +143,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
+    simpleToolsRegex: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
     takeover: z<boolean, boolean, "volatile-defined">;
     takeoverUi: z<boolean, boolean, "volatile-defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "volatile-defined">;
@@ -162,6 +172,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     simpleTools: z<string[], string[], "defined">;
+    simpleToolsRegex: z<string[], string[], "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;
@@ -182,6 +193,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     simpleTools: z<string[], string[], "defined">;
+    simpleToolsRegex: z<string[], string[], "defined">;
     takeover: z<boolean, boolean, "defined">;
     takeoverUi: z<boolean, boolean, "defined">;
     defaultPricing: z<"off" | "custom" | "estimate" | "cn" | "global", "off" | "custom" | "estimate" | "cn" | "global", "defined">;

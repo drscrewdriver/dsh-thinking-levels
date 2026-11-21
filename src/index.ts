@@ -98,6 +98,14 @@ export interface ThinkingLevelsConfig {
    */
   simpleTools: string[] | Volatile<string[]>
   /**
+   * Extra RAW REGEX patterns with the same cheap-and-deterministic role
+   * (issue #12): each entry compiles as written (`i` flag, no auto-anchoring —
+   * anchor with `^` yourself), and the matcher tests BOTH the full tool name
+   * and the namespace-stripped bare name, so `ops_.*` covers the whole family.
+   * Invalid patterns are skipped with a one-time warning.
+   */
+  simpleToolsRegex: string[] | Volatile<string[]>
+  /**
    * Master takeover switch: mirrored into the openai-completions transport's
    * own section (`llm-openai-completions.enabled`) when it flips. The
    * transport's dispatch judgment stays single-source in ITS section; this
@@ -150,6 +158,7 @@ export const Config = z.object({
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
   simpleTools: z.array(z.string()).default([]).volatile(),
+  simpleToolsRegex: z.array(z.string()).default([]).volatile(),
   takeover: z.boolean().default(false).volatile(),
   takeoverUi: z.boolean().default(false).volatile(),
   defaultPricing: defaultPricingSchema.volatile(),
@@ -169,6 +178,7 @@ export const LegacyConfig = z.object({
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
   simpleTools: z.array(z.string()).default([]),
+  simpleToolsRegex: z.array(z.string()).default([]),
   takeover: z.boolean().default(false),
   takeoverUi: z.boolean().default(false),
   defaultPricing: defaultPricingSchema,
@@ -182,6 +192,7 @@ export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   allowDowngrade: true,
   allowUpgrade: false,
   simpleTools: [],
+  simpleToolsRegex: [],
   takeover: false,
   takeoverUi: false,
   defaultPricing: 'estimate',
@@ -223,6 +234,7 @@ interface LiveConfig {
   allowDowngrade: boolean
   allowUpgrade: boolean
   simpleTools: string[]
+  simpleToolsRegex: string[]
   takeover: boolean
   takeoverUi: boolean
   defaultPricing: PricingPolicy
@@ -242,6 +254,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
     simpleTools: readVolatile(config.simpleTools, []),
+    simpleToolsRegex: readVolatile(config.simpleToolsRegex, []),
     takeover: readVolatile(config.takeover, false),
     takeoverUi: readVolatile(config.takeoverUi, false),
     defaultPricing: readVolatile(config.defaultPricing, 'estimate'),
@@ -706,6 +719,7 @@ export function installLegacySection(
         allowDowngrade: readVolatile(config.allowDowngrade, true),
         allowUpgrade: readVolatile(config.allowUpgrade, false),
         simpleTools: readVolatile(config.simpleTools, []),
+        simpleToolsRegex: readVolatile(config.simpleToolsRegex, []),
         takeover: readVolatile(config.takeover, false),
         takeoverUi: readVolatile(config.takeoverUi, false),
         models: config.models,
@@ -994,6 +1008,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
       extraSimpleTools: cfg.simpleTools,
+      extraSimpleRegex: cfg.simpleToolsRegex,
       supportsReasoning: capabilityFor.supportsReasoning,
       efforts: capabilityFor.efforts,
       toggleOnly: capabilityFor.toggleOnly,
@@ -1160,6 +1175,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
       extraSimpleTools: cfg.simpleTools,
+      extraSimpleRegex: cfg.simpleToolsRegex,
       efforts: capabilityFor.efforts,
       toggleOnly: capabilityFor.toggleOnly,
     })

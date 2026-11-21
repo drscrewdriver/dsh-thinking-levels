@@ -69,7 +69,40 @@ export interface EffortDecisionInput {
      * leaves the built-in classification untouched (issue #8 `Config.simpleTools`).
      */
     extraSimpleTools?: readonly string[];
+    /**
+     * Extra RAW REGEX patterns treated as cheap-and-deterministic, merged with
+     * the literal list and the built-in set (issue #12 `Config.simpleToolsRegex`).
+     * Each entry compiles as written (`i` flag, no auto-anchoring — the hint
+     * suggests `^`); invalid entries are skipped with a one-time warning. The
+     * matcher tests the full name and the bare name, so a family pattern like
+     * `ops_.*` hits the whole namespace.
+     */
+    extraSimpleRegex?: readonly string[];
 }
+/**
+ * The merged cheap-and-deterministic classifier over both extra lists
+ * (issue #12): literal entries (`Config.simpleTools`, anchored exactly as
+ * before) plus raw regex entries (`Config.simpleToolsRegex`, compiled as
+ * written — invalid ones skipped with a one-time warning, never thrown).
+ *
+ * `test` matches the FULL tool name AND the namespace-stripped bare name: a
+ * family pattern like `ops_.*` can only ever hit the full name (the bare name
+ * carries no `ops_` prefix), while a literal entry like `ops_bash` used to be
+ * dead on arrival against the bare name alone — the dual face repairs it as a
+ * side effect. The BUILT-IN table keeps its bare-name-only semantics (the
+ * issue #8 contract); only the extra lists gained the second face.
+ */
+export interface SimpleToolMatcher {
+    test(name: string): boolean;
+}
+/**
+ * Compile the two extra lists into one classifier, or `null` when both are
+ * empty (the built-in classification then stands alone). A compile is pure
+ * apart from the one-time `console.warn` for invalid regex entries — the
+ * cache keys on content, so the warning fires once per configuration, not
+ * once per request.
+ */
+export declare function compileSimpleToolsMatcher(literal: readonly string[] | undefined, regex: readonly string[] | undefined): SimpleToolMatcher | null;
 /**
  * Map the user's selected level to the level injected into the next
  * `agent/request`. Manual levels (off / low / high / max) pass through
@@ -123,6 +156,11 @@ export interface EffortInjectionInput {
      * the `auto` scheduler (issue #8 `Config.simpleTools`).
      */
     extraSimpleTools?: readonly string[];
+    /**
+     * Extra raw regex patterns for the same set (issue #12
+     * `Config.simpleToolsRegex`), compiled as written, invalid ones skipped.
+     */
+    extraSimpleRegex?: readonly string[];
     /** The model's advertised effort ids (including plugin masks like `auto`). */
     efforts: readonly string[];
     /**

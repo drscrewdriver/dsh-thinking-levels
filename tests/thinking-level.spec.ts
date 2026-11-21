@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
-  assertEffortId, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
+  assertEffortId, compileSimpleToolsMatcher, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
   reasoningEffortSupported, resolveEffortInjection, toolDurationMs,
   type EffortDecisionInput, type EffortInjectionInput,
 } from '../src/thinking-level.ts'
@@ -161,6 +161,89 @@ describe('Config.simpleTools extra allowlist', () => {
 
   it('ignores blank/whitespace tokens without disabling the built-in set', () => {
     expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'bash', argsSize: 40 }], extraSimpleTools: ['', '  '] }))).toBe('low')
+  })
+})
+
+describe('Config.simpleToolsRegex — family regex allowlist (issue #12)', () => {
+  /** A dsh-ops session with one tool the built-in set does NOT cover. */
+  const opsFamily = [
+    { name: 'ops_bash', argsSize: 40 },
+    { name: 'ops_grep', argsSize: 20 },
+    { name: 'ops_widget_x', argsSize: 60 },
+  ]
+
+  it('covers a whole family in one pattern through the FULL name', () => {
+    // Without the regex: widget_x is unrecognised → ratio 2/3 < 0.75 → high.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: opsFamily }))).toBe('high')
+    // One pattern covers the family → ratio 1 → low. The bare name never
+    // carries the `ops_` prefix, so only the dual face can make this hit.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: opsFamily, extraSimpleRegex: ['^ops_.*'] }))).toBe('low')
+  })
+
+  it('repairs a namespaced literal entry through the dual face', () => {
+    // `ops_bash` as a literal used to be dead: the strip removed the prefix it
+    // was written for, so the anchored literal never matched. The dual face
+    // (full name ∥ bare name) makes it live.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_bash', argsSize: 40 }], extraSimpleTools: ['ops_bash'] }))).toBe('low')
+  })
+
+  it('skips an invalid pattern instead of throwing; the valid ones still count', () => {
+    const calls = [{ name: 'ops_bash', argsSize: 40 }]
+    expect(decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleRegex: ['ops_[', '^ops_.*'] }))).toBe('low')
+  })
+
+  it('warns once per configuration for invalid patterns (cache-level, not per request)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const calls = [{ name: 'ops_bash', argsSize: 40 }]
+      decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleRegex: ['ops_['] }))
+      decideEffort(base({ selected: 'auto', recentCalls: calls, extraSimpleRegex: ['ops_['] }))
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(String(warn.mock.calls[0]?.[0])).toContain('ops_[')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('keeps both scheduler gates intact: heavy family members stay heavy, upgrades stay args-driven', () => {
+    // The args gate blocks a family member with a heavy payload from counting
+    // simple (ratio 0 → high; upgrade off = the production default)…
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_bash', argsSize: 4000 }], extraSimpleRegex: ['^ops_.*'], allowUpgrade: false }))).toBe('high')
+    // …and the upgrade path is still driven by payload, never by the list.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_bash', argsSize: 4000 }], extraSimpleRegex: ['^ops_.*'], allowUpgrade: true }))).toBe('max')
+  })
+
+  it('leaves the built-in classification and the terminal tools untouched', () => {
+    // Built-in reads bare names only — a regex list must not change that side.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'shell', argsSize: 40 }, { name: 'pwsh', argsSize: 20 }] }))).toBe('low')
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'ops_shell', argsSize: 40 }] }))).toBe('low')
+    // And an unrelated regex must not smuggle heavy look-alikes in.
+    expect(decideEffort(base({ selected: 'auto', recentCalls: [{ name: 'codebase_search', argsSize: 40 }], extraSimpleRegex: ['^ops_.*'] }))).toBe('high')
+  })
+})
+
+describe('compileSimpleToolsMatcher', () => {
+  it('returns null when both lists are empty', () => {
+    expect(compileSimpleToolsMatcher(undefined, undefined)).toBeNull()
+    expect(compileSimpleToolsMatcher([], [])).toBeNull()
+    expect(compileSimpleToolsMatcher(['', '  '], [''])).toBeNull()
+  })
+
+  it('tests the full name and the bare name (the dual face)', () => {
+    const regex = compileSimpleToolsMatcher([], ['^ops_.*'])!
+    expect(regex.test('ops_widget')).toBe(true)
+    expect(regex.test('widget')).toBe(false)
+    const literal = compileSimpleToolsMatcher(['bash'], [])!
+    expect(literal.test('bash')).toBe(true)
+    expect(literal.test('ops_bash')).toBe(true)
+    expect(literal.test('my_bash')).toBe(false)
+  })
+
+  it('array entries carry patterns verbatim — quantifier commas survive', () => {
+    const matcher = compileSimpleToolsMatcher([], ['^a{1,2}_x$'])!
+    expect(matcher.test('a_x')).toBe(true)
+    expect(matcher.test('aa_x')).toBe(true)
+    expect(matcher.test('aaa_x')).toBe(false)
   })
 })
 
