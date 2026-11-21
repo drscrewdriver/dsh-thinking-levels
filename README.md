@@ -163,9 +163,17 @@ The scheduling policy is the same source as [dsh-tool-turbo](https://github.com/
 
 **Where the samples come from (4.4.7+).** The scheduler folds `tool/call` events into a Session projection (`tlAutoSchedule`), so it sees real tool history on every host from 0.1.2-rc.1 on; the pre-4.4.7 `session.events` read only ever produced samples on 0.1.0-rc.8. The session's explicit pick is folded from `model/selection` events, so a level the host echoes back can never be mistaken for a manual choice. Known limitation: host `0.1.0-rc.8` exposes no `stateOf` on its projection registry (legacy plane contract), so that one line keeps the old array read — scheduling works there, the echo correction does not.
 
-## Install
+## Third-party adapter compatibility (contract for connect-plugin authors)
 
-See [INSTALL.md](./INSTALL.md) for the full official-CLI guide (profile discovery, upgrade, migration, verification, troubleshooting). Quick start:
+TL reads the `llm.adapters` registry to advertise `auto` in the model directory, and makes three promises to every plugin that registers adapters there (providers-hub, the connect-* family, our-free-model, vision-router, …):
+
+1. **TL never writes to your adapter object.** Since 4.4.18 the advertisement replaces the *registry entry* with a plain-object forwarding facade instead of assigning `adapter.resolveModel` (the old in-place write recursed against providers-hub's write-through Proxy — issue #10 — and threw against vision-router's read-only Proxy — issue #9).
+2. **TL only swaps the registry entry.** The host re-reads `adapters.get(provider)` on every call, so the swap is transparent to you; your adapter stays byte-for-byte untouched, frozen and getter-only shapes included.
+3. **One facade per inner adapter, idempotent.** Re-runs (every `llm/adapters-updated`) never stack a second layer, and one adapter serving several provider routes keeps a single facade identity (the host compares adapter identity to preserve replay state).
+
+What you may rely on: your own `resolveModel` post-processing (default efforts, badges) runs first; TL appends `auto` (and gated `low`) *after* it. Calls made internally on `this` (e.g. `prepareCall` → `this.resolveModel`) bypass the facade by design — only directory/selector flows through the registry. The full shape × behaviour matrix lives in `tests/adapter-matrix.spec.ts`.
+
+## Install
 
 ```bash
 # 1. install the plugin into a profile from npm (web shown; any profile works)

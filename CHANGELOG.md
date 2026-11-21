@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.20
+
+- **connect 类插件兼容矩阵（issue #10 后续收口，无 src/ 变更）。** 普查四家 connect/聚合插件当日版本的 adapter 形态——`@dmh2002/dsh-connect-qoder` 1.27.1 / `dsh-connect-trae` 4.18.5 / `dsh-connect-workbuddy` 5.30.0（dingminhua，ES class + 自有默认档广告）、`dsh-our-free-model`（Ebony-Vinyl，plain class + prepareCall 内部直调 this.resolveModel）——全部为普通对象形态、无 Proxy/freeze、不回读 `llm.adapters`，4.4.18 的 registry-entry facade 方案零返工成立。
+- 新增 `tests/adapter-matrix.spec.ts`（28 例）：六形态（hub write-through Proxy / vision-router 只读 Proxy / connect class / 内调 class / frozen / getter-only）× 四行为（不写第三方对象 / 不递归 / 八成员透传 + this 绑定 / 幂等不套娃）表驱动全绿；handle.replace 拓扑瞬态用例锁死收敛（重挂裸 adapter → `adapters-updated` 重包，`Object.is` 同一 facade）；混合流用例锁死 our-free-model 式「重注册新实例 + 连续 emit」不套娃。全量回归 285/285。
+- README 新增「Third-party adapter compatibility」契约段，面向 connect 插件作者写明三承诺：永不写入第三方对象 / 只替换注册表条目 / 每 inner adapter 单一 facade 幂等标记。
+
 ## 4.4.19
 
 - **修复 issue #11：选中 auto 时界面看不到实际生效档位。** 报告人观察到「选 Auto 后请求仍以 high 发出，`lastUsed` 一直是 high、`pending` 一直是 auto」。核实结论：auto 不上送**是设计**（它是 scheduler sentinel，请求期由 `decideEffort` 按工具采样窗口解析成具体档位，有降档行为），`lastUsed`/`pending` 是宿主 `modelSelection` 投影的固有语义（`lastUsed` 每次 `request/header` 被重写、`pending` 匹配 header 提交后清空，二者都不承载用户意图 —— 见 `auto-schedule-projection.ts` 模块注释）。**真正的缺陷是显示**：`tlAutoSchedule` 投影新增 `lastEffective` 字段，折叠已提交的 `request/header` 中的 effective effort（宿主在 `dsh-llm` 里把解析结果写进该事件），选择器 chip 据此显示 `Auto → high`。
