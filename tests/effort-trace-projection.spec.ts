@@ -16,7 +16,7 @@ import {
   type AutoScheduleState,
 } from '../src/auto-schedule-projection.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 })
 
 /** A committed `request/header` with the effective reasoningEffort in config. */
 const header = (reasoningEffort?: unknown) => ({
@@ -60,10 +60,10 @@ describe('foldTrace — run-length append', () => {
 
   it('clips to TRACE_MAX runs, dropping the oldest', () => {
     let trace: readonly ReturnType<typeof foldTrace>[number][] = []
-    for (let i = 0; i < TRACE_MAX + 5; i += 1) trace = foldTrace(trace, `level-${i}`, null)
+    for (let i = 0; i < TRACE_MAX + 5; i += 1) trace = foldTrace(trace, `level-${i}`, 'default')
     expect(trace).toHaveLength(TRACE_MAX)
-    expect(trace[0]).toEqual({ level: `level-${5}`, intent: null, count: 1 })
-    expect(trace[TRACE_MAX - 1]).toEqual({ level: `level-${TRACE_MAX + 4}`, intent: null, count: 1 })
+    expect(trace[0]).toEqual({ level: `level-${5}`, intent: 'default', count: 1 })
+    expect(trace[TRACE_MAX - 1]).toEqual({ level: `level-${TRACE_MAX + 4}`, intent: 'default', count: 1 })
   })
 })
 
@@ -85,7 +85,7 @@ describe('applyAutoSchedule — trace fold over the session log', () => {
 
   it('renders the configured default as a neutral run when the session never picked', () => {
     const state = applyAutoSchedule(empty(), header('high'))
-    expect(state.trace).toEqual([{ level: 'high', intent: null, count: 1 }])
+    expect(state.trace).toEqual([{ level: 'high', intent: 'default', count: 1 }])
   })
 
   it('appends nothing for a header without an effort — the run simply ends', () => {
@@ -97,8 +97,8 @@ describe('applyAutoSchedule — trace fold over the session log', () => {
     // A later level re-opens a fresh run.
     state = applyAutoSchedule(state, header('low'))
     expect(state.trace).toEqual([
-      { level: 'high', intent: null, count: 1 },
-      { level: 'low', intent: null, count: 1 },
+      { level: 'high', intent: 'default', count: 1 },
+      { level: 'low', intent: 'default', count: 1 },
     ])
   })
 
@@ -135,24 +135,27 @@ describe('applyAutoSchedule — trace fold over the session log', () => {
   })
 })
 
-describe('buildAutoScheduleDefinition — stateVersion 4', () => {
-  it('declares version 4 with a schema that accepts a stamped trace', () => {
+describe('buildAutoScheduleDefinition — stateVersion 5', () => {
+  it('declares version 5 with a schema that accepts a stamped trace', () => {
     const definition = buildAutoScheduleDefinition()
-    expect(definition.stateVersion).toBe(4)
+    expect(definition.stateVersion).toBe(5)
     const row = {
       samples: [],
       userEffort: 'auto',
       lastEffective: 'high',
-      trace: [{ level: 'high', intent: 'auto', count: 2, turn: 3, step: 1, time: 1795412669385 }],
+      trace: [{ level: 'high', intent: 'auto', count: 2, turn: 3, step: 1, time: 1795412669385, provider: 'trae', model: 'deepseek-v4.1-flash' }],
       turn: 3,
       step: 1,
+      lastProvider: 'trae',
+      lastModel: 'deepseek-v4.1-flash',
+      modelSwitches: 1,
     }
     expect(definition.stateSchema.parse(row)).toEqual(row)
   })
 
   it('still accepts a run without position stamps (an un-stamped header)', () => {
     const definition = buildAutoScheduleDefinition()
-    const row = { samples: [], userEffort: null, lastEffective: 'low', trace: [{ level: 'low', intent: null, count: 1 }], turn: 0, step: 0 }
+    const row = { samples: [], userEffort: null, lastEffective: 'low', trace: [{ level: 'low', intent: 'default', count: 1 }], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }
     expect(definition.stateSchema.parse(row)).toEqual(row)
   })
 })

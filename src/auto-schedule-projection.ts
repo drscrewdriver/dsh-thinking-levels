@@ -50,11 +50,21 @@ export interface EffortRun {
   /** The wire level this run's requests went out with. */
   level: string
   /**
-   * Why: `'auto'` (scheduler sentinel), `'manual'` (explicit session pick) or
-   * `null` (the configured default — a session that never picked cannot be
-   * told apart from one, so the tab renders it neutral).
+   * Why this level was sent. Four-valued on purpose — the old three-valued
+   * form LIED:
+   *
+   * - `'auto'` — the scheduler's `auto` sentinel resolved it.
+   * - `'manual'` — a `model/selection` event in the log carries exactly this
+   *   level at fold time, i.e. someone actually selected it.
+   * - `'default'` — the session never picked anything; the configured default
+   *   applied.
+   * - `'unknown'` — the level changed with NO recorded selection behind it.
+   *   This is the honest bucket for the 0.2.2+ strict line, where the plugin
+   *   itself writes `agent.model.select()` and — measured on a live session
+   *   (30 headers, high/low alternating, ONE `model/selection` event) — those
+   *   writes never reach the log. Calling that "manual" was a fabrication.
    */
-  intent: 'auto' | 'manual' | null
+  intent: 'auto' | 'manual' | 'default' | 'unknown'
   /** How many consecutive committed requests the run covers. */
   count: number
   /**
@@ -67,6 +77,10 @@ export interface EffortRun {
   step?: number
   /** Wall-clock ms of the run's first committed request. */
   time?: number
+  /** Provider route of the run's first request, folded from the request header. */
+  provider?: string
+  /** Model id of the run's first request, folded from the request header. */
+  model?: string
 }
 
 /** Runs kept in the trace ring; run-length lets 64 runs cover very long sessions. */
@@ -110,6 +124,22 @@ export interface AutoScheduleState {
   turn: number
   /** The step in progress at fold time (folded from `step/start`). `0` before it. */
   step: number
+  /**
+   * The provider route the last committed request went out on, folded from the
+   * header's `config.provider`. `null` until the first request.
+   *
+   * The header carries it on every request, so the model a level was sent to is
+   * always recoverable — dropping it (as the first version did) left the trace
+   * unable to say WHICH model a switch happened on.
+   */
+  lastProvider: string | null
+  /** The model id the last committed request went out on. `null` until the first. */
+  lastModel: string | null
+  /**
+   * Count of provider/model switches observed in this session's committed
+   * requests. `0` means one route throughout.
+   */
+  modelSwitches: number
 }
 
 const stateSchema = z.object({
@@ -123,9 +153,14 @@ const stateSchema = z.object({
     turn: z.number().optional(),
     step: z.number().optional(),
     time: z.number().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
   })),
   turn: z.number(),
   step: z.number(),
+  lastProvider: z.string().nullable(),
+  lastModel: z.string().nullable(),
+  modelSwitches: z.number(),
 })
 
 /** Initial folded state (also the shape every cold read starts from). */
@@ -136,6 +171,9 @@ const initAutoSchedule = (): AutoScheduleState => ({
   trace: [],
   turn: 0,
   step: 0,
+  lastProvider: null,
+  lastModel: null,
+  modelSwitches: 0,
 })
 
 /**
@@ -148,26 +186,36 @@ const initAutoSchedule = (): AutoScheduleState => ({
  * reach this function (see {@link applyAutoSchedule}).
  * @param trace - trace before the header.
  * @param level - the effective wire level the header committed.
- * @param intent - why: the session pick at fold time, or null for default.
- * @param at - where the request sat (turn/step) and when it went out: stamped
- *   onto a run's FIRST request only, because a run means "this level held for
- *   these consecutive steps starting here".
+ * @param intent - why this level was sent (see {@link EffortRun.intent}).
+ * @param at - where the request sat (turn/step), when it went out, and which
+ *   provider/model route it targeted: stamped onto a run's FIRST request only,
+ *   because a run means "this level held for these consecutive steps starting
+ *   here".
  * @returns the advanced trace.
  */
 export function foldTrace(
   trace: readonly EffortRun[],
   level: string,
   intent: EffortRun['intent'],
-  at: { turn?: number; step?: number; time?: number } = {},
+  at: { turn?: number; step?: number; time?: number; provider?: string; model?: string } = {},
 ): readonly EffortRun[] {
   const last = trace[trace.length - 1]
-  if (last !== undefined && last.level === level && last.intent === intent) {
+  // A run means "this level held on this ROUTE for these consecutive steps".
+  // The route is part of the identity: folding `trae/high` and `deepseek/high`
+  // into one run would erase the model switch the tab exists to show.
+  if (last !== undefined
+    && last.level === level
+    && last.intent === intent
+    && last.provider === at.provider
+    && last.model === at.model) {
     return [...trace.slice(0, -1), { ...last, count: last.count + 1 }]
   }
   const run: EffortRun = { level, intent, count: 1 }
   if (at.turn !== undefined) run.turn = at.turn
   if (at.step !== undefined) run.step = at.step
   if (at.time !== undefined) run.time = at.time
+  if (at.provider !== undefined) run.provider = at.provider
+  if (at.model !== undefined) run.model = at.model
   const pushed = [...trace, run]
   return pushed.length > TRACE_MAX ? pushed.slice(pushed.length - TRACE_MAX) : pushed
 }
@@ -228,6 +276,20 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
     const config = typeof header === 'object' && header !== null
       ? (header as { config?: unknown }).config
       : undefined
+    const route = typeof config === 'object' && config !== null
+      ? (config as { provider?: unknown; model?: unknown })
+      : undefined
+    const provider = typeof route?.provider === 'string' && route.provider.length > 0
+      ? route.provider
+      : undefined
+    const model = typeof route?.model === 'string' && route.model.length > 0
+      ? route.model
+      : undefined
+    // A model switch is a route change between two consecutive committed
+    // requests. Recorded on EVERY header (both ids), so the trace can name the
+    // model each level was sent to instead of guessing.
+    const switched = state.lastProvider !== null
+      && (state.lastProvider !== provider || state.lastModel !== model)
     const raw = typeof config === 'object' && config !== null
       ? (config as { reasoningEffort?: unknown }).reasoningEffort
       : undefined
@@ -235,27 +297,67 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
       // A header without an effort (non-reasoning model, stripped) records
       // nothing in the trace and keeps the old same-reference semantics when
       // lastEffective is already null.
-      return state.lastEffective === null ? state : { ...state, lastEffective: null }
+      const unchanged = state.lastEffective === null
+        && !switched
+        && state.lastProvider === (provider ?? null)
+        && state.lastModel === (model ?? null)
+      if (unchanged) return state
+      return {
+        ...state,
+        lastEffective: null,
+        lastProvider: provider ?? null,
+        lastModel: model ?? null,
+        modelSwitches: switched ? state.modelSwitches + 1 : state.modelSwitches,
+      }
     }
-    // The trace run's intent is the session pick AT FOLD TIME: model/selection
-    // events interleave chronologically in the log, so state.userEffort is
-    // exactly the pick in force when this header committed.
-    const intent: EffortRun['intent'] = state.userEffort === 'auto'
-      ? 'auto'
-      : state.userEffort !== null ? 'manual' : null
+    const intent = attributionOf(state.userEffort, raw)
     const time = (event as { time?: unknown }).time
     return {
       ...state,
       lastEffective: raw,
+      lastProvider: provider ?? null,
+      lastModel: model ?? null,
+      modelSwitches: switched ? state.modelSwitches + 1 : state.modelSwitches,
       trace: foldTrace(state.trace, raw, intent, {
         // A header that arrives before any `turn/start` (a synthetic or
         // inherited cut) carries no position rather than a bogus T0·S0.
         ...(state.turn > 0 ? { turn: state.turn, step: state.step } : {}),
         ...(typeof time === 'number' ? { time } : {}),
+        ...(provider !== undefined ? { provider } : {}),
+        ...(model !== undefined ? { model } : {}),
       }),
     }
   }
   return state
+}
+
+/**
+ * Attribute one committed header's level to whoever actually chose it.
+ *
+ * The old rule was "the session's recorded pick is a concrete level → the
+ * request was manual", which is a non-sequitur: a session can carry ONE
+ * recorded pick and then send THIRTY headers at alternating levels (measured
+ * live: `7f321902` had `model/selection = [high]` and headers
+ * `high,low,high,low,…`). On the 0.2.2+ strict line the plugin itself is a
+ * `model/selection` writer through `agent.model.select()`, and those writes do
+ * not reach the log — so "manual" was a fabrication for 29 of 30 requests.
+ *
+ * The honest rule is equality, not existence:
+ * - the recorded pick IS this level → `manual` (someone selected exactly this);
+ * - the recorded pick is `auto` → `auto` (the scheduler resolved it);
+ * - no pick at all → `default` (the configured default applied);
+ * - a pick exists but is a DIFFERENT level → `unknown`: the level came from a
+ *   writer the log does not record. Saying "manual" here would be a lie and
+ *   saying "auto" would be a guess, so the UI shows a neutral "未记录" tag.
+ *
+ * @param userEffort - the session's recorded pick at fold time, or null.
+ * @param level - the level this header actually carried.
+ * @returns the attribution.
+ */
+export function attributionOf(userEffort: string | null, level: string): EffortRun['intent'] {
+  if (userEffort === null) return 'default'
+  if (userEffort === 'auto') return 'auto'
+  return userEffort === level ? 'manual' : 'unknown'
 }
 
 /**
@@ -269,6 +371,12 @@ export interface AutoScheduleView {
   lastEffective: string | null
   /** Run-length effort trace, oldest run first. */
   trace: readonly EffortRun[]
+  /** Provider route of the last committed request, or null. */
+  lastProvider: string | null
+  /** Model id of the last committed request, or null. */
+  lastModel: string | null
+  /** How many provider/model switches the session's committed requests show. */
+  modelSwitches: number
 }
 
 const viewSchema = z.object({
@@ -281,21 +389,30 @@ const viewSchema = z.object({
     turn: z.number().optional(),
     step: z.number().optional(),
     time: z.number().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
   })),
+  lastProvider: z.string().nullable(),
+  lastModel: z.string().nullable(),
+  modelSwitches: z.number(),
 })
 
 /** Content comparison for the wire identity gate (see {@link buildAutoScheduleDefinition}). */
 function sameView(a: AutoScheduleView, b: AutoScheduleView): boolean {
   if (a.userEffort !== b.userEffort || a.lastEffective !== b.lastEffective) return false
+  if (a.lastProvider !== b.lastProvider || a.lastModel !== b.lastModel) return false
+  if (a.modelSwitches !== b.modelSwitches) return false
   if (a.trace === b.trace) return true
   if (a.trace.length !== b.trace.length) return false
   for (let i = 0; i < a.trace.length; i += 1) {
     const x = a.trace[i]!
     const y = b.trace[i]!
     if (x.level !== y.level || x.intent !== y.intent || x.count !== y.count) return false
-    // Position/time ride the run's first request, so they only ever change with
-    // a new run — compare them so a re-fold after a cold read stays identical.
+    // Position/time/route ride the run's first request, so they only ever
+    // change with a new run — compare them so a re-fold after a cold read stays
+    // identical.
     if (x.turn !== y.turn || x.step !== y.step || x.time !== y.time) return false
+    if (x.provider !== y.provider || x.model !== y.model) return false
   }
   return true
 }
@@ -331,6 +448,9 @@ export function buildAutoScheduleDefinition() {
       userEffort: state.userEffort,
       lastEffective: state.lastEffective,
       trace: state.trace,
+      lastProvider: state.lastProvider,
+      lastModel: state.lastModel,
+      modelSwitches: state.modelSwitches,
     }
     if (lastView !== undefined && sameView(lastView, next)) {
       // Client-irrelevant change (e.g. the samples ring): reuse the identity so
@@ -346,11 +466,12 @@ export function buildAutoScheduleDefinition() {
     key: AUTO_SCHEDULE_KEY,
     // Bumped 1 → 2 when `lastEffective` joined the state (issue #11), 2 → 3
     // when the run-length `trace` joined (conversation-view tab), 3 → 4 when
-    // the trace gained turn/step/time position stamps: the host validates
-    // against `stateSchema` per version, so a shape change must raise it.
-    // Historical sessions are not lost — the state is a fold over the log, so a
-    // cold read rebuilds everything from the events.
-    stateVersion: 4,
+    // the trace gained turn/step/time position stamps, 4 → 5 when runs gained
+    // provider/model plus the four-valued intent: the host validates against
+    // `stateSchema` per version, so a shape change must raise it. Historical
+    // sessions are not lost — the state is a fold over the log, so a cold read
+    // rebuilds everything from the events.
+    stateVersion: 5,
     stateSchema,
     init: initAutoSchedule,
     apply: applyAutoSchedule,

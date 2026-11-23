@@ -92,6 +92,32 @@ const TONE: Record<TraceRow['dir'], { color: string; bg: string }> = {
   },
 }
 
+/**
+ * Tag tone per ATTRIBUTION — deliberately separate from the direction tone.
+ *
+ * `unknown` is grey, never amber/green: it is not a verdict about the level,
+ * it says the log does not explain the change. Colouring it like a decision
+ * would be the same lie as labelling it "manual".
+ */
+const INTENT_TONE: Record<EffortRun['intent'], { color: string; bg: string }> = {
+  auto: {
+    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
+    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.08))',
+  },
+  manual: {
+    color: 'var(--dsw-alias-state-business-primary, #2b6cb0)',
+    bg: 'var(--dsw-alias-bg-layer-2, rgba(43,108,176,0.08))',
+  },
+  default: {
+    color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.9))',
+    bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
+  },
+  unknown: {
+    color: 'var(--dsw-alias-state-warn-label, #b9770e)',
+    bg: 'var(--dsw-alias-state-warn-tertiary, rgba(185,119,14,0.06))',
+  },
+}
+
 /** Unknown ids rank after the standard table (same tail semantics as the slider). */
 const rankOf = (level: string): number => EFFORT_SLIDER_RANK[level] ?? 100
 
@@ -143,26 +169,33 @@ export interface TraceSummary {
   highest: string | undefined
   /** How many of those runs came from the `auto` sentinel (rather than a manual lock). */
   autoRuns: number
+  /** How many runs the log cannot attribute (see {@link EffortRun.intent}). */
+  unknownRuns: number
+  /** Provider/model switches across the session's committed requests. */
+  switches: number
 }
 
 /**
  * Summarize a trace for the header strip. Pure.
  * @param trace - the folded trace, oldest run first.
+ * @param modelSwitches - route switches folded by the projection (0 when absent).
  * @returns the summary; zeroed for an absent trace.
  */
-export function summarize(trace: readonly EffortRun[] | undefined): TraceSummary {
+export function summarize(trace: readonly EffortRun[] | undefined, modelSwitches = 0): TraceSummary {
   if (trace === undefined || trace.length === 0) {
-    return { requests: 0, runs: 0, highest: undefined, autoRuns: 0 }
+    return { requests: 0, runs: 0, highest: undefined, autoRuns: 0, unknownRuns: 0, switches: modelSwitches }
   }
   let requests = 0
   let highest: string | undefined
   let autoRuns = 0
+  let unknownRuns = 0
   for (const run of trace) {
     requests += run.count
     if (run.intent === 'auto') autoRuns += 1
+    if (run.intent === 'unknown') unknownRuns += 1
     if (highest === undefined || rankOf(run.level) > rankOf(highest)) highest = run.level
   }
-  return { requests, runs: trace.length, highest, autoRuns }
+  return { requests, runs: trace.length, highest, autoRuns, unknownRuns, switches: modelSwitches }
 }
 
 /**
@@ -193,6 +226,70 @@ export function traceOf(
   }
 }
 
+/** The whole projection slice this tab renders (trace + route bookkeeping). */
+export interface TraceSlice {
+  trace: readonly EffortRun[]
+  /** Provider/model of the last committed request, for the summary strip. */
+  lastProvider: string | null
+  lastModel: string | null
+  /** How many route switches the session shows. */
+  modelSwitches: number
+}
+
+/**
+ * Read the whole slice off the projection face. `undefined` — never a throw —
+ * when the face or its trace is absent; a trace with no route bookkeeping still
+ * renders (the older cached row simply has no switch count).
+ *
+ * ## Reference stability is mandatory here
+ *
+ * `useSyncExternalStore` requires `getSnapshot()` to return the SAME reference
+ * until the underlying value changes. The projection face hands out the bare
+ * state object and only swaps it on a real publish, so the slice is memoized on
+ * that state identity: building a fresh `{ trace, … }` per call would make every
+ * render look like a change and spin React into an infinite re-render.
+ * @param sessions - the sessions face.
+ * @param sessionId - the owning session.
+ * @returns the slice, or undefined when there is nothing to render.
+ */
+export function traceSliceOf(
+  sessions: SessionsFace | undefined,
+  sessionId: string | undefined,
+): TraceSlice | undefined {
+  try {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+    const face = sessions?.binding(sessionId)?.session?.projections?.faceOf?.('tlAutoSchedule')
+    const snapshot = typeof face?.getSnapshot === 'function' ? face.getSnapshot() : undefined
+    const state = projectionValueOf(snapshot)
+    if (state === undefined) return undefined
+    const raw = state['trace']
+    if (!Array.isArray(raw)) return undefined
+    const cached = sliceCache.get(state)
+    if (cached !== undefined) return cached
+    const provider = state['lastProvider']
+    const model = state['lastModel']
+    const switches = state['modelSwitches']
+    const slice: TraceSlice = {
+      trace: raw as readonly EffortRun[],
+      lastProvider: typeof provider === 'string' && provider.length > 0 ? provider : null,
+      lastModel: typeof model === 'string' && model.length > 0 ? model : null,
+      modelSwitches: typeof switches === 'number' && Number.isFinite(switches) ? switches : 0,
+    }
+    sliceCache.set(state, slice)
+    return slice
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Memo for {@link traceSliceOf}: one slice per projection state identity. The
+ * face is shared by every reader of this key (the chip and the tab), so the
+ * memo lives at module level; entries die with the state objects themselves, so
+ * it cannot grow without bound.
+ */
+const sliceCache = new WeakMap<object, TraceSlice>()
+
 /**
  * Subscribe to the trace over the projection face's store when it offers one;
  * a one-shot read otherwise (the conversation re-renders around every request
@@ -201,7 +298,7 @@ export function traceOf(
  * `Object.is`, so the face's `value.trace` reference is stable between
  * publishes and the read wrapper stays honest.
  */
-function useTrace(sessions: SessionsFace | undefined, sessionId: unknown): readonly EffortRun[] | undefined {
+function useTrace(sessions: SessionsFace | undefined, sessionId: unknown): TraceSlice | undefined {
   const id = typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined
   const face = useMemo(() => {
     try {
@@ -210,7 +307,7 @@ function useTrace(sessions: SessionsFace | undefined, sessionId: unknown): reado
       return undefined
     }
   }, [sessions, id])
-  const getSnapshot = useMemo(() => () => traceOf(sessions, id), [sessions, id])
+  const getSnapshot = useMemo(() => () => traceSliceOf(sessions, id), [sessions, id])
   const subscribe = useMemo(() => (listener: () => void): (() => void) => {
     try {
       return typeof face?.subscribe === 'function' ? face.subscribe(listener) : () => {}
@@ -391,6 +488,28 @@ function SummaryBar(props: { t: (key: string) => string; summary: TraceSummary }
         <span style={barValueStyle}>{summary.autoRuns}</span>
         <span>{t('trace.summary.autoRuns')}</span>
       </span>
+      {summary.unknownRuns === 0
+        ? null
+        : (
+            <>
+              <span aria-hidden style={barSepStyle} />
+              <span style={{ ...barStatStyle, color: 'var(--dsw-alias-state-warn-label, #b9770e)' }}>
+                <span style={barValueStyle}>{summary.unknownRuns}</span>
+                <span>{t('trace.intent.unknown')}</span>
+              </span>
+            </>
+          )}
+      {summary.switches === 0
+        ? null
+        : (
+            <>
+              <span aria-hidden style={barSepStyle} />
+              <span style={barStatStyle}>
+                <span style={barValueStyle}>{summary.switches}</span>
+                <span>{t('trace.summary.switches')}</span>
+              </span>
+            </>
+          )}
       {summary.highest === undefined
         ? null
         : (
@@ -412,9 +531,10 @@ function SummaryBar(props: { t: (key: string) => string; summary: TraceSummary }
 /** The tab body: summary strip + timeline rows newest first, or the empty state. */
 export function EffortTrace(props: EffortTraceProps): JSX.Element {
   const t = props.t ?? props.tFallback ?? ((key: string) => key)
-  const trace = useTrace(props.sessions, props.sessionId)
+  const slice = useTrace(props.sessions, props.sessionId)
+  const trace = slice?.trace ?? []
   const rows = traceRows(trace)
-  if (trace === undefined || rows.length === 0) {
+  if (slice === undefined || rows.length === 0) {
     return (
       <div style={pageStyle}>
         <div>
@@ -431,7 +551,7 @@ export function EffortTrace(props: EffortTraceProps): JSX.Element {
         <div style={titleStyle}>{t('trace.title')}</div>
         <div style={subtitleStyle}>{t('trace.subtitle')}</div>
       </div>
-      <SummaryBar t={t} summary={summarize(trace)} />
+      <SummaryBar t={t} summary={summarize(trace, slice.modelSwitches)} />
       {/*
         * Attribution honesty: on the 0.2.2+ strict line THIS plugin is itself a
         * `model/selection` writer (it must fix the next step's level before
@@ -444,11 +564,13 @@ export function EffortTrace(props: EffortTraceProps): JSX.Element {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {rows.map((row, i) => {
           const tone = TONE[row.dir]
+          const intentTone = INTENT_TONE[row.run.intent]
           const position = positionOf(row.run)
           const clock = clockOf(row.run.time)
-          const intentLabel = row.run.intent === 'auto'
-            ? t('trace.intent.auto')
-            : row.run.intent === 'manual' ? t('trace.intent.manual') : t('trace.intent.default')
+          const intentLabel = t(`trace.intent.${row.run.intent}`)
+          const route = row.run.model === undefined
+            ? ''
+            : row.run.provider === undefined ? row.run.model : `${row.run.provider}/${row.run.model}`
           return (
             <div key={`${row.run.level}-${row.run.turn ?? 'x'}-${row.run.step ?? 'x'}-${trace.length - i}`} style={rowStyle}>
               <div style={railStyle}>
@@ -460,11 +582,22 @@ export function EffortTrace(props: EffortTraceProps): JSX.Element {
               <div style={bodyStyle}>
                 <div style={headStyle}>
                   <code style={levelStyle}>{row.run.level}</code>
-                  <span style={{ ...tagStyle, color: tone.color, background: tone.bg }}>{intentLabel}</span>
+                  <span
+                    style={{ ...tagStyle, color: intentTone.color, background: intentTone.bg }}
+                    title={row.run.intent === 'unknown' ? t('trace.intent.unknownHint') : undefined}
+                  >
+                    {intentLabel}
+                  </span>
                   {row.run.count > 1
                     ? <span style={metaStyle}>{`× ${row.run.count}`}</span>
                     : null}
                   {position === '' ? null : <span style={metaStyle}>{position}</span>}
+                  {/*
+                    * The model the level was sent to. Recorded from the request
+                    * header, never inferred — without it a run cannot say which
+                    * route it belonged to.
+                    */}
+                  {route === '' ? null : <span style={{ ...metaStyle, fontFamily: 'var(--ds-font-family-code, monospace)' }}>{route}</span>}
                   {clock === '' ? null : <span style={clockStyle}>{clock}</span>}
                 </div>
                 <div style={noteStyle}>

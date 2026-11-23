@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **修复归属造假：档位变化不再一律标「手动」，并全程记录 provider/model。** 现场取证（会话 `7f321902`）：`model/selection` 事件只有 **1 条**（high），而 `request/header` 有 **30 条**、high/low 交替。旧规则是「会话里记录的档位不是 auto ⇒ 每次请求都算 manual」，于是 29 次插件自己的调度全被标成「手动」——那是个伪命题：0.2.2+ 严格线上本插件自己就是 `model/selection` 的写入者，而 `agent.model.select()` 的写入**不进日志**（宿主只在用户主动选择时 append）。
+  - 归属改为四值、且以「相等」而非「存在」为判据（`attributionOf`）：记录值 == 本次档位 → `manual`；记录值是 `auto` → `auto`；无任何记录 → `default`；**有记录但对不上 → `unknown`（未记录）**。同一份真实数据：旧规则 30×manual，新规则 15×manual + 15×unknown。
+  - 视图面：`unknown` 用中性警示色并带解释性 tooltip（说明严格线写入不进日志），绝不与 `manual` 同色——把它染成决策色就是第二次说谎。汇总条新增「N 未记录」计数。
+  - **provider/model 全程记录**：`request/header.config.provider/model` 每个请求都带，此前被丢弃，导致轨迹说不清「这档位发给了哪个模型」。现在折叠进 `lastProvider`/`lastModel`/`modelSwitches`，并给每段 run 打上 `provider`/`model`；同一档位跨模型切换会**拆段**（`foldTrace` 把 route 纳入 run 身份），否则切换会被抹平。视图面每段显示 `provider/model` 徽标，汇总条显示切换次数。
+  - `stateVersion` 4→5（state 形状变更）。冷读自动重建，无迁移负担。
+
 - **Effort 轨迹页与「权限审批记录」对齐呈现，并补上 turn/step 位置坐标。** 此前只有一列裸文本（`手动 low`），既看不出是第几轮第几步变的，也没有变化方向的视觉提示；同一条标签栏里的两个页签长得像两个产品。
   - 呈现：标题 + 副标题、汇总条（请求数 / 段数 / auto 段数 / 峰值档位）、每段一张卡片——圆环字形（↑升 / ↓降 / =持平 / •起始）走左侧连线轨，档位用等宽字，意图色标（auto 绿、降档琥珀、持平/起始中性），`× N` 次数徽标，右侧对齐的墙钟时间；全部走 `--dsw-alias-*` 设计令牌与 perm-gate 同款圆角/间距/字号。
   - 位置：`tlAutoSchedule` 新增 `turn` / `step` 折叠（`turn/start`、`step/start`），每段首条请求记下 `T{轮}·S{步}` 与 `time`；`stateVersion` 3→4。历史会话冷读自动重建，无迁移负担。
