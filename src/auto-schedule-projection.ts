@@ -57,6 +57,16 @@ export interface EffortRun {
   intent: 'auto' | 'manual' | null
   /** How many consecutive committed requests the run covers. */
   count: number
+  /**
+   * The turn the run's FIRST request belonged to, folded from the preceding
+   * `turn/start`. Optional: runs folded before stateVersion 4 (a cached row
+   * that predates it) simply lack it and the tab omits the position chip.
+   */
+  turn?: number
+  /** The step the run's first request belonged to (folded from `step/start`). */
+  step?: number
+  /** Wall-clock ms of the run's first committed request. */
+  time?: number
 }
 
 /** Runs kept in the trace ring; run-length lets 64 runs cover very long sessions. */
@@ -92,17 +102,41 @@ export interface AutoScheduleState {
    * implicitly end the current run. At most {@link TRACE_MAX} runs.
    */
   trace: readonly EffortRun[]
+  /**
+   * The turn in progress at fold time (folded from `turn/start`), so a
+   * `request/header` can be stamped with the turn it belongs to. `0` before the
+   * session's first turn.
+   */
+  turn: number
+  /** The step in progress at fold time (folded from `step/start`). `0` before it. */
+  step: number
 }
 
 const stateSchema = z.object({
   samples: z.array(z.object({ name: z.string(), argsSize: z.number() })),
   userEffort: z.string().nullable(),
   lastEffective: z.string().nullable(),
-  trace: z.array(z.object({ level: z.string(), intent: z.string().nullable(), count: z.number() })),
+  trace: z.array(z.object({
+    level: z.string(),
+    intent: z.string().nullable(),
+    count: z.number(),
+    turn: z.number().optional(),
+    step: z.number().optional(),
+    time: z.number().optional(),
+  })),
+  turn: z.number(),
+  step: z.number(),
 })
 
 /** Initial folded state (also the shape every cold read starts from). */
-const initAutoSchedule = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [] })
+const initAutoSchedule = (): AutoScheduleState => ({
+  samples: [],
+  userEffort: null,
+  lastEffective: null,
+  trace: [],
+  turn: 0,
+  step: 0,
+})
 
 /**
  * Append one committed request's effective level to the run-length trace.
@@ -115,18 +149,26 @@ const initAutoSchedule = (): AutoScheduleState => ({ samples: [], userEffort: nu
  * @param trace - trace before the header.
  * @param level - the effective wire level the header committed.
  * @param intent - why: the session pick at fold time, or null for default.
+ * @param at - where the request sat (turn/step) and when it went out: stamped
+ *   onto a run's FIRST request only, because a run means "this level held for
+ *   these consecutive steps starting here".
  * @returns the advanced trace.
  */
 export function foldTrace(
   trace: readonly EffortRun[],
   level: string,
   intent: EffortRun['intent'],
+  at: { turn?: number; step?: number; time?: number } = {},
 ): readonly EffortRun[] {
   const last = trace[trace.length - 1]
   if (last !== undefined && last.level === level && last.intent === intent) {
-    return [...trace.slice(0, -1), { level, intent, count: last.count + 1 }]
+    return [...trace.slice(0, -1), { ...last, count: last.count + 1 }]
   }
-  const pushed = [...trace, { level, intent, count: 1 }]
+  const run: EffortRun = { level, intent, count: 1 }
+  if (at.turn !== undefined) run.turn = at.turn
+  if (at.step !== undefined) run.step = at.step
+  if (at.time !== undefined) run.time = at.time
+  const pushed = [...trace, run]
   return pushed.length > TRACE_MAX ? pushed.slice(pushed.length - TRACE_MAX) : pushed
 }
 
@@ -161,6 +203,20 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
     const userEffort = typeof raw === 'string' && raw.length > 0 ? raw : null
     return userEffort === state.userEffort ? state : { ...state, userEffort }
   }
+  if (type === 'turn/start') {
+    // Position bookkeeping only: the tab stamps each run with the turn/step it
+    // started in, so "when did auto drop to low" is answerable in the UI.
+    const data = (event as { data?: unknown }).data
+    const raw = typeof data === 'object' && data !== null ? (data as { turn?: unknown }).turn : undefined
+    if (typeof raw !== 'number') return state
+    return raw === state.turn && state.step === 0 ? state : { ...state, turn: raw, step: 0 }
+  }
+  if (type === 'step/start') {
+    const data = (event as { data?: unknown }).data
+    const step = typeof data === 'object' && data !== null ? (data as { step?: unknown }).step : undefined
+    if (typeof step !== 'number') return state
+    return step === state.step ? state : { ...state, step }
+  }
   if (type === 'request/header') {
     // Issue #11: the header carries the effort this request actually went out
     // with — the host resolves and commits the effective value here, so it is
@@ -187,7 +243,17 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
     const intent: EffortRun['intent'] = state.userEffort === 'auto'
       ? 'auto'
       : state.userEffort !== null ? 'manual' : null
-    return { ...state, lastEffective: raw, trace: foldTrace(state.trace, raw, intent) }
+    const time = (event as { time?: unknown }).time
+    return {
+      ...state,
+      lastEffective: raw,
+      trace: foldTrace(state.trace, raw, intent, {
+        // A header that arrives before any `turn/start` (a synthetic or
+        // inherited cut) carries no position rather than a bogus T0·S0.
+        ...(state.turn > 0 ? { turn: state.turn, step: state.step } : {}),
+        ...(typeof time === 'number' ? { time } : {}),
+      }),
+    }
   }
   return state
 }
@@ -208,7 +274,14 @@ export interface AutoScheduleView {
 const viewSchema = z.object({
   userEffort: z.string().nullable(),
   lastEffective: z.string().nullable(),
-  trace: z.array(z.object({ level: z.string(), intent: z.string().nullable(), count: z.number() })),
+  trace: z.array(z.object({
+    level: z.string(),
+    intent: z.string().nullable(),
+    count: z.number(),
+    turn: z.number().optional(),
+    step: z.number().optional(),
+    time: z.number().optional(),
+  })),
 })
 
 /** Content comparison for the wire identity gate (see {@link buildAutoScheduleDefinition}). */
@@ -220,6 +293,9 @@ function sameView(a: AutoScheduleView, b: AutoScheduleView): boolean {
     const x = a.trace[i]!
     const y = b.trace[i]!
     if (x.level !== y.level || x.intent !== y.intent || x.count !== y.count) return false
+    // Position/time ride the run's first request, so they only ever change with
+    // a new run — compare them so a re-fold after a cold read stays identical.
+    if (x.turn !== y.turn || x.step !== y.step || x.time !== y.time) return false
   }
   return true
 }
@@ -269,13 +345,12 @@ export function buildAutoScheduleDefinition() {
   return {
     key: AUTO_SCHEDULE_KEY,
     // Bumped 1 → 2 when `lastEffective` joined the state (issue #11), 2 → 3
-    // when the run-length `trace` joined (conversation-view tab): the host
-    // validates against `stateSchema` per version, so a shape change must raise
-    // it. Historical sessions are not lost — the state is a fold over the log,
-    // so a cold read rebuilds samples/userEffort/lastEffective/trace from the
-    // events. Adding `wire` is a view-only change: the persisted STATE shape is
-    // untouched, so 3 still describes it.
-    stateVersion: 3,
+    // when the run-length `trace` joined (conversation-view tab), 3 → 4 when
+    // the trace gained turn/step/time position stamps: the host validates
+    // against `stateSchema` per version, so a shape change must raise it.
+    // Historical sessions are not lost — the state is a fold over the log, so a
+    // cold read rebuilds everything from the events.
+    stateVersion: 4,
     stateSchema,
     init: initAutoSchedule,
     apply: applyAutoSchedule,

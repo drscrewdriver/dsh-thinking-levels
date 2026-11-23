@@ -112,6 +112,19 @@ export const zh = {
   'trace.empty': '本会话还没有已提交的请求档位。',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': '手动',
+  'trace.title': 'Effort 轨迹',
+  'trace.subtitle': '本会话每次请求实际发出的档位，连续相同档位折叠为一段（最新在上）。',
+  'trace.summary.requests': '次请求',
+  'trace.summary.runs': '段',
+  'trace.summary.autoRuns': '段由 auto 调度',
+  'trace.summary.peak': '峰值',
+  'trace.summary.hint': 'T=轮次 · S=步',
+  'trace.note.attribution': '注：0.2.2 起宿主禁止在请求阶段改档位，本插件（严格线）会自己写 `model/selection` 提前一步排程——因此「手动」标签只表示日志里最后一笔选择是具体档位，未必是人为点击。',
+  'trace.intent.default': '默认',
+  'trace.dir.up': '相对上一段升档，共 %n 次请求',
+  'trace.dir.down': '相对上一段降档，共 %n 次请求',
+  'trace.dir.flat': '档位不变、选中意图变了，共 %n 次请求',
+  'trace.dir.start': '本会话首个档位，共 %n 次请求',
 } satisfies Record<string, string>
 
 /** English dictionary (keys mirror zh). */
@@ -223,6 +236,19 @@ export const en: Record<keyof typeof zh, string> = {
   'trace.empty': 'No committed request levels in this session yet.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manual',
+  'trace.title': 'Effort trace',
+  'trace.subtitle': 'The level every request in this session actually went out with; consecutive identical levels collapse into one run (newest first).',
+  'trace.summary.requests': 'requests',
+  'trace.summary.runs': 'runs',
+  'trace.summary.autoRuns': 'runs scheduled by auto',
+  'trace.summary.peak': 'peak',
+  'trace.summary.hint': 'T=turn · S=step',
+  'trace.note.attribution': 'Note: from 0.2.2 the host forbids changing the level at request time, so this plugin (strict line) writes `model/selection` itself a step ahead — a “manual” tag therefore only means the last selection in the log was a concrete level, not necessarily a human click.',
+  'trace.intent.default': 'default',
+  'trace.dir.up': 'escalated from the previous run, %n request(s)',
+  'trace.dir.down': 'dropped from the previous run, %n request(s)',
+  'trace.dir.flat': 'same level, different pick, %n request(s)',
+  'trace.dir.start': 'this session’s first level, %n request(s)',
 }
 
 /** Japanese dictionary (keys mirror zh). */
@@ -334,6 +360,19 @@ export const ja: Record<keyof typeof zh, string> = {
   'trace.empty': 'このセッションには確定済みリクエストのレベルがまだありません。',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': '手動',
+  'trace.title': 'Effort 軌跡',
+  'trace.subtitle': 'このセッションで各リクエストが実際に送られたレベル。連続する同一レベルは 1 セグメントにまとめます（新しい順）。',
+  'trace.summary.requests': 'リクエスト',
+  'trace.summary.runs': 'セグメント',
+  'trace.summary.autoRuns': 'セグメントは auto が決定',
+  'trace.summary.peak': '最大',
+  'trace.summary.hint': 'T=ターン · S=ステップ',
+  'trace.note.attribution': '注：0.2.2 以降ホストはリクエスト段階でのレベル変更を禁止するため、本プラグイン（厳格ライン）は 1 ステップ先の `model/selection` を自分で書きます。したがって「手動」はログ上の最後の選択が具体レベルだったことだけを意味し、人手のクリックとは限りません。',
+  'trace.intent.default': '既定',
+  'trace.dir.up': '前のセグメントから上げ、%n リクエスト',
+  'trace.dir.down': '前のセグメントから下げ、%n リクエスト',
+  'trace.dir.flat': 'レベルは同じで選択のみ変更、%n リクエスト',
+  'trace.dir.start': 'このセッションの最初のレベル、%n リクエスト',
 }
 
 /** Korean dictionary (keys mirror zh). */
@@ -445,6 +484,19 @@ export const ko: Record<keyof typeof zh, string> = {
   'trace.empty': '이 세션에는 아직 확정된 요청 레벨이 없습니다.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': '수동',
+  'trace.title': 'Effort 궤적',
+  'trace.subtitle': '이 세션에서 각 요청이 실제로 보낸 레벨입니다. 연속된 동일 레벨은 한 구간으로 묶습니다(최신순).',
+  'trace.summary.requests': '회 요청',
+  'trace.summary.runs': '구간',
+  'trace.summary.autoRuns': '구간은 auto 결정',
+  'trace.summary.peak': '최고',
+  'trace.summary.hint': 'T=턴 · S=단계',
+  'trace.note.attribution': '참고: 0.2.2부터 호스트는 요청 단계에서 레벨 변경을 금지하므로, 이 플러그인(엄격 라인)은 한 단계 앞서 `model/selection`을 직접 기록합니다. 따라서 "수동"은 로그의 마지막 선택이 구체적 레벨이었다는 뜻일 뿐, 사람의 클릭을 의미하지 않습니다.',
+  'trace.intent.default': '기본',
+  'trace.dir.up': '이전 구간보다 상향, %n회 요청',
+  'trace.dir.down': '이전 구간보다 하향, %n회 요청',
+  'trace.dir.flat': '레벨은 같고 선택만 변경, %n회 요청',
+  'trace.dir.start': '이 세션의 첫 레벨, %n회 요청',
 }
 
 /** French dictionary (keys mirror zh). */
@@ -556,6 +608,19 @@ export const fr: Record<keyof typeof zh, string> = {
   'trace.empty': 'Aucun niveau de requête validé dans cette session pour l\'instant.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manuel',
+  'trace.title': 'Trace des efforts',
+  'trace.subtitle': 'Le niveau réellement envoyé à chaque requête de cette session ; les niveaux identiques consécutifs sont regroupés (le plus récent en haut).',
+  'trace.summary.requests': 'requêtes',
+  'trace.summary.runs': 'segments',
+  'trace.summary.autoRuns': 'segments planifiés par auto',
+  'trace.summary.peak': 'pic',
+  'trace.summary.hint': 'T=tour · S=étape',
+  'trace.note.attribution': 'Remarque : depuis 0.2.2 l’hôte interdit de changer le niveau au moment de la requête ; ce plugin (ligne stricte) écrit donc lui-même `model/selection` une étape à l’avance. L’étiquette « manuel » signifie seulement que la dernière sélection du journal était un niveau concret, pas forcément un clic humain.',
+  'trace.intent.default': 'par défaut',
+  'trace.dir.up': 'montée depuis le segment précédent, %n requête(s)',
+  'trace.dir.down': 'descente depuis le segment précédent, %n requête(s)',
+  'trace.dir.flat': 'même niveau, choix différent, %n requête(s)',
+  'trace.dir.start': 'premier niveau de la session, %n requête(s)',
 }
 
 /** German dictionary (keys mirror zh). */
@@ -667,6 +732,19 @@ export const de: Record<keyof typeof zh, string> = {
   'trace.empty': 'In dieser Sitzung gibt es noch keine übermittelten Request-Stufen.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manuell',
+  'trace.title': 'Effort-Verlauf',
+  'trace.subtitle': 'Die Stufe, mit der jede Anfrage dieser Sitzung tatsächlich gesendet wurde; aufeinanderfolgende gleiche Stufen werden zusammengefasst (neueste oben).',
+  'trace.summary.requests': 'Anfragen',
+  'trace.summary.runs': 'Abschnitte',
+  'trace.summary.autoRuns': 'Abschnitte von auto geplant',
+  'trace.summary.peak': 'Spitze',
+  'trace.summary.hint': 'T=Turn · S=Schritt',
+  'trace.note.attribution': 'Hinweis: Ab 0.2.2 verbietet der Host das Ändern der Stufe zur Request-Zeit; dieses Plugin (strikte Linie) schreibt `model/selection` daher selbst einen Schritt im Voraus. „Manuell“ heißt also nur, dass die letzte Auswahl im Log eine konkrete Stufe war — nicht zwingend ein menschlicher Klick.',
+  'trace.intent.default': 'Standard',
+  'trace.dir.up': 'gegenüber dem vorigen Abschnitt erhöht, %n Anfrage(n)',
+  'trace.dir.down': 'gegenüber dem vorigen Abschnitt gesenkt, %n Anfrage(n)',
+  'trace.dir.flat': 'gleiche Stufe, andere Auswahl, %n Anfrage(n)',
+  'trace.dir.start': 'erste Stufe der Sitzung, %n Anfrage(n)',
 }
 
 /** Italian dictionary (keys mirror zh). */
@@ -778,6 +856,19 @@ export const it: Record<keyof typeof zh, string> = {
   'trace.empty': 'Nessun livello di richiesta confermato in questa sessione.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manuale',
+  'trace.title': 'Traccia degli effort',
+  'trace.subtitle': 'Il livello realmente inviato a ogni richiesta di questa sessione; livelli identici consecutivi vengono raggruppati (più recenti in alto).',
+  'trace.summary.requests': 'richieste',
+  'trace.summary.runs': 'segmenti',
+  'trace.summary.autoRuns': 'segmenti pianificati da auto',
+  'trace.summary.peak': 'picco',
+  'trace.summary.hint': 'T=turno · S=passo',
+  'trace.note.attribution': 'Nota: dalla 0.2.2 l’host vieta di cambiare livello al momento della richiesta, quindi questo plugin (linea rigorosa) scrive `model/selection` da sé con un passo di anticipo. L’etichetta «manuale» significa solo che l’ultima selezione nel log era un livello concreto, non necessariamente un clic umano.',
+  'trace.intent.default': 'predefinito',
+  'trace.dir.up': 'salito rispetto al segmento precedente, %n richiesta/e',
+  'trace.dir.down': 'sceso rispetto al segmento precedente, %n richiesta/e',
+  'trace.dir.flat': 'stesso livello, scelta diversa, %n richiesta/e',
+  'trace.dir.start': 'primo livello della sessione, %n richiesta/e',
 }
 
 /** Russian dictionary (keys mirror zh). */
@@ -889,6 +980,19 @@ export const ru: Record<keyof typeof zh, string> = {
   'trace.empty': 'В этой сессии ещё нет зафиксированных уровней запросов.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'вручную',
+  'trace.title': 'Трасса усилий',
+  'trace.subtitle': 'Уровень, с которым реально ушёл каждый запрос этой сессии; одинаковые подряд уровни схлопнуты в один отрезок (сверху новее).',
+  'trace.summary.requests': 'запросов',
+  'trace.summary.runs': 'отрезков',
+  'trace.summary.autoRuns': 'отрезков выбрал auto',
+  'trace.summary.peak': 'пик',
+  'trace.summary.hint': 'T=ход · S=шаг',
+  'trace.note.attribution': 'Примечание: с 0.2.2 хост запрещает менять уровень на этапе запроса, поэтому плагин (строгая линия) сам пишет `model/selection` на шаг вперёд. Метка «вручную» означает лишь то, что последний выбор в журнале был конкретным уровнем, а не обязательно клик человека.',
+  'trace.intent.default': 'по умолчанию',
+  'trace.dir.up': 'повышение относительно прошлого отрезка, %n запрос(ов)',
+  'trace.dir.down': 'понижение относительно прошлого отрезка, %n запрос(ов)',
+  'trace.dir.flat': 'уровень тот же, выбор другой, %n запрос(ов)',
+  'trace.dir.start': 'первый уровень сессии, %n запрос(ов)',
 }
 
 /** Spanish dictionary (keys mirror zh). */
@@ -1000,6 +1104,19 @@ export const es: Record<keyof typeof zh, string> = {
   'trace.empty': 'Aún no hay niveles de solicitud confirmados en esta sesión.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manual',
+  'trace.title': 'Trazado de esfuerzo',
+  'trace.subtitle': 'El nivel con el que realmente salió cada solicitud de esta sesión; los niveles idénticos consecutivos se agrupan (lo más reciente arriba).',
+  'trace.summary.requests': 'solicitudes',
+  'trace.summary.runs': 'tramos',
+  'trace.summary.autoRuns': 'tramos planificados por auto',
+  'trace.summary.peak': 'pico',
+  'trace.summary.hint': 'T=turno · S=paso',
+  'trace.note.attribution': 'Nota: desde 0.2.2 el host prohíbe cambiar el nivel en el momento de la solicitud, así que este plugin (línea estricta) escribe `model/selection` por sí mismo un paso antes. La etiqueta «manual» solo significa que la última selección del registro era un nivel concreto, no necesariamente un clic humano.',
+  'trace.intent.default': 'predeterminado',
+  'trace.dir.up': 'subió respecto al tramo anterior, %n solicitud(es)',
+  'trace.dir.down': 'bajó respecto al tramo anterior, %n solicitud(es)',
+  'trace.dir.flat': 'mismo nivel, elección distinta, %n solicitud(es)',
+  'trace.dir.start': 'primer nivel de la sesión, %n solicitud(es)',
 }
 
 /** Portuguese (pt-BR) dictionary (keys mirror zh). */
@@ -1111,6 +1228,19 @@ export const pt: Record<keyof typeof zh, string> = {
   'trace.empty': 'Ainda não há níveis de solicitação confirmados nesta sessão.',
   'trace.intent.auto': 'auto',
   'trace.intent.manual': 'manual',
+  'trace.title': 'Trilha de esforço',
+  'trace.subtitle': 'O nível com que cada requisição desta sessão realmente saiu; níveis idênticos consecutivos são agrupados (mais recente no topo).',
+  'trace.summary.requests': 'requisições',
+  'trace.summary.runs': 'trechos',
+  'trace.summary.autoRuns': 'trechos agendados pelo auto',
+  'trace.summary.peak': 'pico',
+  'trace.summary.hint': 'T=turno · S=passo',
+  'trace.note.attribution': 'Nota: desde 0.2.2 o host proíbe mudar o nível no momento da requisição, então este plugin (linha estrita) escreve `model/selection` por conta própria um passo antes. O rótulo «manual» significa apenas que a última seleção no log era um nível concreto, não necessariamente um clique humano.',
+  'trace.intent.default': 'padrão',
+  'trace.dir.up': 'subiu em relação ao trecho anterior, %n requisição(ões)',
+  'trace.dir.down': 'desceu em relação ao trecho anterior, %n requisição(ões)',
+  'trace.dir.flat': 'mesmo nível, escolha diferente, %n requisição(ões)',
+  'trace.dir.start': 'primeiro nível da sessão, %n requisição(ões)',
 }
 
 /** Combined dictionary map — all 10 languages, single-call registration. */

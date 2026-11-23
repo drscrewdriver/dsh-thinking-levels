@@ -5,19 +5,28 @@
  * typed SlotMap merge lives in `types/contracts.d.ts`).
  *
  * A run-length timeline of the effort levels this session's requests ACTUALLY
- * went out with — the `tlAutoSchedule` projection's `trace` (stateVersion 3),
+ * went out with — the `tlAutoSchedule` projection's `trace` (stateVersion 4),
  * the same durable fold the composer chip's `lastEffective` reads. Consecutive
  * requests with the same level AND intent collapse into one run, so even a
  * 95-step session reads as a handful of rows:
  *
- *   ↑ auto max ×1
- *   = auto high ×12
- *   ↓ auto low ×3
+ *   ↑ auto max ×1        T4·S7   14:03:22
+ *   = auto high ×12      T3·S2   13:58:10
+ *   ↓ auto low ×3        T1·S1   13:44:31
  *
  * The ↑/↓/= glyph is the transition against the escalation rank of the
  * previous (older) run; the run text shows the intent (`auto`/`manual`,
  * neutral when the session never picked and the configured default applied)
- * plus the repetition count.
+ * plus the repetition count and the turn·step the run STARTED in.
+ *
+ * ## Which "node" a run belongs to
+ *
+ * A run's position stamp is the `turn/start` / `step/start` pair preceding its
+ * first `request/header`. The plugin's decision itself happens EARLIER — at
+ * `agent/pre-step`, before the host appends `step/start` (agent-loop
+ * `agent.ts`: `preStep()` then `session.append('step/start')`) — so the stamp
+ * names the step the level was chosen FOR, which is exactly the node the user
+ * sees in the timeline.
  *
  * Data source: the session's projection face — NO HTTP feed. The projection is
  * a pure fold over the session log, so a cold read rebuilds historical
@@ -25,6 +34,12 @@
  * empty trace or a throwing face read renders the empty state — a thrown
  * render would abdicate the whole tab, which is never acceptable for a
  * cosmetic view.
+ *
+ * Presentation mirrors perm-gate's approval history on purpose (title +
+ * subtitle header, a summary strip, then one card per run with a circled glyph
+ * on a connected rail, a colored intent tag, meta chips and a right-aligned
+ * clock): the two tabs sit next to each other in the same tab row and must not
+ * look like two different products.
  */
 import { useMemo, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
@@ -57,8 +72,42 @@ export interface TraceRow {
 /** Transition glyph per direction (mirrors perm-gate's glyph table pattern). */
 const GLYPH: Record<TraceRow['dir'], string> = { up: '↑', down: '↓', flat: '=', start: '•' }
 
+/** Rail/tag color per direction: a rise is green, a drop is amber, flat is muted. */
+const TONE: Record<TraceRow['dir'], { color: string; bg: string }> = {
+  up: {
+    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
+    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.08))',
+  },
+  down: {
+    color: 'var(--dsw-alias-state-warn-label, #b9770e)',
+    bg: 'var(--dsw-alias-state-warn-tertiary, rgba(185,119,14,0.08))',
+  },
+  flat: {
+    color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.9))',
+    bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
+  },
+  start: {
+    color: 'var(--dsw-alias-state-business-primary, #2b6cb0)',
+    bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
+  },
+}
+
 /** Unknown ids rank after the standard table (same tail semantics as the slider). */
 const rankOf = (level: string): number => EFFORT_SLIDER_RANK[level] ?? 100
+
+/** `HH:MM:SS` in the viewer's zone; empty for an absent stamp. */
+function clockOf(ms: number | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return ''
+  const d = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+/** `T{turn}·S{step}` for a stamped run, empty when the run carries no position. */
+function positionOf(run: EffortRun): string {
+  if (typeof run.turn !== 'number') return ''
+  return typeof run.step === 'number' ? `T${run.turn}·S${run.step}` : `T${run.turn}`
+}
 
 /**
  * Build the display rows: newest run first, each carrying the transition
@@ -82,6 +131,38 @@ export function traceRows(trace: readonly EffortRun[] | undefined): TraceRow[] {
     rows.push({ run, dir: to > from ? 'up' : to < from ? 'down' : 'flat' })
   }
   return rows
+}
+
+/** The whole-session summary the header strip shows. */
+export interface TraceSummary {
+  /** Committed requests covered by the trace (sum of run counts). */
+  requests: number
+  /** How many distinct runs are kept. */
+  runs: number
+  /** Highest escalation rank the session ever reached, if any. */
+  highest: string | undefined
+  /** How many of those runs came from the `auto` sentinel (rather than a manual lock). */
+  autoRuns: number
+}
+
+/**
+ * Summarize a trace for the header strip. Pure.
+ * @param trace - the folded trace, oldest run first.
+ * @returns the summary; zeroed for an absent trace.
+ */
+export function summarize(trace: readonly EffortRun[] | undefined): TraceSummary {
+  if (trace === undefined || trace.length === 0) {
+    return { requests: 0, runs: 0, highest: undefined, autoRuns: 0 }
+  }
+  let requests = 0
+  let highest: string | undefined
+  let autoRuns = 0
+  for (const run of trace) {
+    requests += run.count
+    if (run.intent === 'auto') autoRuns += 1
+    if (highest === undefined || rankOf(run.level) > rankOf(highest)) highest = run.level
+  }
+  return { requests, runs: trace.length, highest, autoRuns }
 }
 
 /**
@@ -140,49 +221,260 @@ function useTrace(sessions: SessionsFace | undefined, sessionId: unknown): reado
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
-const listStyle: CSSProperties = {
+/* ── styles (perm-gate history parity) ─────────────────────────────────── */
+
+const pageStyle: CSSProperties = {
+  boxSizing: 'border-box',
+  maxWidth: '720px',
+  margin: '0 auto',
+  padding: '8px 4px',
   display: 'flex',
   flexDirection: 'column',
-  gap: 6,
-  padding: 12,
-  overflowY: 'auto',
+  gap: '8px',
   font: 'inherit',
+  overflowY: 'auto',
 }
-const rowStyle: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 8 }
-const glyphStyle: CSSProperties = {
-  width: 18,
-  flexShrink: 0,
-  textAlign: 'center',
-  fontFamily: 'monospace',
-  color: 'var(--dsw-alias-text-secondary, rgba(127,127,127,0.9))',
+
+const titleStyle: CSSProperties = {
+  fontSize: '14px',
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-primary)',
 }
-const countStyle: CSSProperties = {
-  color: 'var(--dsw-alias-text-secondary, rgba(127,127,127,0.9))',
+
+const subtitleStyle: CSSProperties = {
+  marginTop: '2px',
+  fontSize: '12px',
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary, var(--dsw-alias-label-primary))',
+}
+
+/** The summary strip: the same rounded bar perm-gate's snapshot inventory uses. */
+const barStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  flexWrap: 'wrap',
+  padding: '6px 10px',
+  borderRadius: '8px',
+  background: 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.05))',
+  fontSize: '12px',
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+const barStatStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'baseline',
+  gap: '4px',
+}
+
+const barValueStyle: CSSProperties = {
+  fontWeight: 600,
+  color: 'var(--dsw-alias-label-primary)',
   fontVariantNumeric: 'tabular-nums',
 }
-const levelStyle: CSSProperties = { fontFamily: 'monospace' }
 
-/** The tab body: timeline rows newest first, or the empty state. */
+const barSepStyle: CSSProperties = {
+  width: '1px',
+  height: '10px',
+  background: 'var(--dsw-alias-border-l2, rgba(127,127,127,0.3))',
+}
+
+const rowStyle: CSSProperties = {
+  display: 'flex',
+  gap: '10px',
+  padding: '6px 10px',
+  borderRadius: '8px',
+  background: 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.05))',
+}
+
+const railStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  flex: '0 0 auto',
+  width: '20px',
+}
+
+const markStyle: CSSProperties = {
+  width: '18px',
+  height: '18px',
+  marginTop: '3px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '11px',
+  lineHeight: '18px',
+  borderRadius: '999px',
+  borderStyle: 'solid',
+  borderWidth: '1px',
+  fontFamily: 'var(--ds-font-family-code, monospace)',
+}
+
+const railLineStyle: CSSProperties = {
+  flex: '1 1 auto',
+  width: '1px',
+  minHeight: '10px',
+  background: 'var(--dsw-alias-border-l2, rgba(127,127,127,0.3))',
+}
+
+const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, paddingBottom: '10px' }
+
+const headStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  flexWrap: 'wrap',
+}
+
+const levelStyle: CSSProperties = {
+  font: '600 12px/18px var(--ds-font-family-code, monospace)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+const tagStyle: CSSProperties = {
+  fontSize: '11px',
+  lineHeight: '18px',
+  padding: '0 8px',
+  borderRadius: '9px',
+  fontWeight: 600,
+}
+
+const metaStyle: CSSProperties = {
+  fontSize: '11px',
+  lineHeight: '18px',
+  padding: '0 6px',
+  borderRadius: '9px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.3))',
+  fontVariantNumeric: 'tabular-nums',
+}
+
+const clockStyle: CSSProperties = {
+  marginLeft: 'auto',
+  flex: '0 0 auto',
+  fontSize: '11px',
+  color: 'var(--dsw-alias-label-tertiary)',
+  fontVariantNumeric: 'tabular-nums',
+}
+
+const noteStyle: CSSProperties = {
+  marginTop: '2px',
+  fontSize: '12px',
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-secondary, inherit)',
+  overflowWrap: 'anywhere',
+}
+
+const emptyStyle: CSSProperties = {
+  padding: '16px 0',
+  fontSize: '13px',
+  color: 'var(--dsw-alias-label-tertiary)',
+}
+
+/** The summary strip above the timeline. */
+function SummaryBar(props: { t: (key: string) => string; summary: TraceSummary }): JSX.Element {
+  const { t, summary } = props
+  return (
+    <div style={barStyle}>
+      <span style={barStatStyle}>
+        <span style={barValueStyle}>{summary.requests}</span>
+        <span>{t('trace.summary.requests')}</span>
+      </span>
+      <span aria-hidden style={barSepStyle} />
+      <span style={barStatStyle}>
+        <span style={barValueStyle}>{summary.runs}</span>
+        <span>{t('trace.summary.runs')}</span>
+      </span>
+      <span aria-hidden style={barSepStyle} />
+      <span style={barStatStyle}>
+        <span style={barValueStyle}>{summary.autoRuns}</span>
+        <span>{t('trace.summary.autoRuns')}</span>
+      </span>
+      {summary.highest === undefined
+        ? null
+        : (
+            <>
+              <span aria-hidden style={barSepStyle} />
+              <span style={barStatStyle}>
+                <span>{t('trace.summary.peak')}</span>
+                <span style={{ ...barValueStyle, fontFamily: 'var(--ds-font-family-code, monospace)' }}>
+                  {summary.highest}
+                </span>
+              </span>
+            </>
+          )}
+      <span style={{ marginLeft: 'auto' }}>{t('trace.summary.hint')}</span>
+    </div>
+  )
+}
+
+/** The tab body: summary strip + timeline rows newest first, or the empty state. */
 export function EffortTrace(props: EffortTraceProps): JSX.Element {
   const t = props.t ?? props.tFallback ?? ((key: string) => key)
   const trace = useTrace(props.sessions, props.sessionId)
   const rows = traceRows(trace)
   if (trace === undefined || rows.length === 0) {
-    return <div style={listStyle}><span style={countStyle}>{t('trace.empty')}</span></div>
+    return (
+      <div style={pageStyle}>
+        <div>
+          <div style={titleStyle}>{t('trace.title')}</div>
+          <div style={subtitleStyle}>{t('trace.subtitle')}</div>
+        </div>
+        <span style={{ ...emptyStyle, fontSize: '13px' }}>{t('trace.empty')}</span>
+      </div>
+    )
   }
   return (
-    <div style={listStyle}>
-      {rows.map((row, i) => (
-        <div key={trace.length - i} style={rowStyle}>
-          <span style={glyphStyle} aria-hidden="true">{GLYPH[row.dir]}</span>
-          <span>
-            {row.run.intent === 'auto' && `${t('trace.intent.auto')} `}
-            {row.run.intent === 'manual' && `${t('trace.intent.manual')} `}
-            <code style={levelStyle}>{row.run.level}</code>
-            {row.run.count > 1 && <span style={countStyle}> ×{row.run.count}</span>}
-          </span>
-        </div>
-      ))}
+    <div style={pageStyle}>
+      <div>
+        <div style={titleStyle}>{t('trace.title')}</div>
+        <div style={subtitleStyle}>{t('trace.subtitle')}</div>
+      </div>
+      <SummaryBar t={t} summary={summarize(trace)} />
+      {/*
+        * Attribution honesty: on the 0.2.2+ strict line THIS plugin is itself a
+        * `model/selection` writer (it must fix the next step's level before
+        * preparation), so a concrete level in the log cannot be proven to be a
+        * human click. Say so instead of labelling scheduler output "manual".
+        */}
+      <div style={{ fontSize: '11px', lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary)' }}>
+        {t('trace.note.attribution')}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {rows.map((row, i) => {
+          const tone = TONE[row.dir]
+          const position = positionOf(row.run)
+          const clock = clockOf(row.run.time)
+          const intentLabel = row.run.intent === 'auto'
+            ? t('trace.intent.auto')
+            : row.run.intent === 'manual' ? t('trace.intent.manual') : t('trace.intent.default')
+          return (
+            <div key={`${row.run.level}-${row.run.turn ?? 'x'}-${row.run.step ?? 'x'}-${trace.length - i}`} style={rowStyle}>
+              <div style={railStyle}>
+                <span aria-hidden style={{ ...markStyle, borderColor: tone.color, color: tone.color }}>
+                  {GLYPH[row.dir]}
+                </span>
+                <span aria-hidden style={railLineStyle} />
+              </div>
+              <div style={bodyStyle}>
+                <div style={headStyle}>
+                  <code style={levelStyle}>{row.run.level}</code>
+                  <span style={{ ...tagStyle, color: tone.color, background: tone.bg }}>{intentLabel}</span>
+                  {row.run.count > 1
+                    ? <span style={metaStyle}>{`× ${row.run.count}`}</span>
+                    : null}
+                  {position === '' ? null : <span style={metaStyle}>{position}</span>}
+                  {clock === '' ? null : <span style={clockStyle}>{clock}</span>}
+                </div>
+                <div style={noteStyle}>
+                  {t(`trace.dir.${row.dir}`).replace('%n', String(row.run.count))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

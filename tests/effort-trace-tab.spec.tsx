@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { act, create } from 'react-test-renderer'
-import { EffortTrace, traceOf, traceRows } from '../src/client/effort-trace.tsx'
+import { EffortTrace, summarize, traceOf, traceRows } from '../src/client/effort-trace.tsx'
 import type { EffortRun } from '../src/auto-schedule-projection.ts'
 
 const identity = (key: string): string => key
@@ -128,8 +128,9 @@ describe('EffortTrace — the conversation-view tab body', () => {
     const lines = texts(renderer).join('|')
     // Newest first: the manual high run leads, the flat glyph marks the same
     // level as its older neighbour, and the run-length counts show. The pipes
-    // are the text-leaf boundaries of the joined serialization.
-    expect(lines).toContain('=|trace.intent.manual |high| ×|2|↑|trace.intent.auto |high| ×|12|•|trace.intent.auto |low| ×|3')
+    // are the text-leaf boundaries of the joined serialization. Each row reads
+    // glyph → level → intent tag → count → direction note (perm-gate order).
+    expect(lines).toContain('=|high|trace.intent.manual|× 2|trace.dir.flat|↑|high|trace.intent.auto|× 12|trace.dir.up|•|low|trace.intent.auto|× 3|trace.dir.start')
   })
 
   it('renders the empty state when the face or the trace is missing', () => {
@@ -171,11 +172,70 @@ describe('EffortTrace — the conversation-view tab body', () => {
       renderer = create(createElement(EffortTrace, { sessionId: 's1', sessions, t: identity }))
     })
     // A single run is the timeline's start: the start glyph, no count badge.
-    expect(texts(renderer).join('|')).toContain('•|trace.intent.auto |high')
+    expect(texts(renderer).join('|')).toContain('•|high|trace.intent.auto')
     act(() => {
       snapshot = { trace: [run('high', 'auto', 1), run('low', 'auto', 4)] }
       for (const listener of listeners) listener()
     })
-    expect(texts(renderer).join('|')).toContain('↓|trace.intent.auto |low| ×|4')
+    expect(texts(renderer).join('|')).toContain('↓|low|trace.intent.auto|× 4')
+  })
+})
+
+/**
+ * The tab renders like perm-gate's approval history: title + subtitle, a
+ * summary strip, then one card per run with a circled glyph, an intent tag, the
+ * turn·step the run started in and its wall clock.
+ */
+describe('EffortTrace — perm-gate presentation parity', () => {
+  it('summarizes the session: requests, runs, auto runs and the peak level', () => {
+    const trace: EffortRun[] = [
+      { level: 'low', intent: 'auto', count: 3 },
+      { level: 'high', intent: 'auto', count: 12 },
+      { level: 'max', intent: 'manual', count: 1 },
+    ]
+    expect(summarize(trace)).toEqual({ requests: 16, runs: 3, highest: 'max', autoRuns: 2 })
+    expect(summarize(undefined)).toEqual({ requests: 0, runs: 0, highest: undefined, autoRuns: 0 })
+    expect(summarize([])).toEqual({ requests: 0, runs: 0, highest: undefined, autoRuns: 0 })
+  })
+
+  it('renders the header, the summary strip and a position chip per stamped run', () => {
+    const trace: EffortRun[] = [
+      { level: 'low', intent: 'manual', count: 1, turn: 1, step: 1 },
+      { level: 'high', intent: 'auto', count: 2, turn: 2, step: 3 },
+    ]
+    const renderer = create(createElement(EffortTrace, { sessionId: 's1', sessions: sessionsWith(trace), t: identity }))
+    const text = texts(renderer).join('|')
+    // Header + summary strip (the identity translator returns the keys).
+    expect(text).toContain('trace.title')
+    expect(text).toContain('trace.subtitle')
+    expect(text).toContain('|3|trace.summary.requests')
+    expect(text).toContain('|2|trace.summary.runs')
+    // Per run: level, intent tag, count, T·S position, direction note.
+    expect(text).toContain('trace.intent.auto')
+    expect(text).toContain('T2·S3')
+    expect(text).toContain('T1·S1')
+    expect(text).toContain('trace.dir.start')
+  })
+
+  it('omits the position and clock chips when a run carries no stamp', () => {
+    const renderer = create(createElement(EffortTrace, { sessionId: 's1', sessions: sessionsWith([run('low', 'auto', 1)]), t: identity }))
+    const text = texts(renderer).join('|')
+    expect(text).not.toContain('T0')
+    expect(text).not.toContain('NaN')
+  })
+
+  it('labels a run whose intent is unknown (configured default) as default', () => {
+    const renderer = create(createElement(EffortTrace, { sessionId: 's1', sessions: sessionsWith([run('high', null, 1)]), t: identity }))
+    expect(texts(renderer).join('|')).toContain('trace.intent.default')
+  })
+
+  it('shows the wall clock of the run start in HH:MM:SS', () => {
+    const at = new Date(2026, 0, 2, 3, 4, 5).getTime()
+    const renderer = create(createElement(EffortTrace, {
+      sessionId: 's1',
+      sessions: sessionsWith([{ level: 'high', intent: 'manual', count: 1, turn: 1, step: 1, time: at }]),
+      t: identity,
+    }))
+    expect(texts(renderer).join('|')).toContain('03:04:05')
   })
 })

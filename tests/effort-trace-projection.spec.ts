@@ -1,5 +1,5 @@
 /**
- * The run-length effort trace (`tlAutoSchedule.trace`, stateVersion 3): the
+ * The run-length effort trace (`tlAutoSchedule.trace`, stateVersion 4): the
  * per-request history behind the conversation-view effort tab. The fold is
  * over the same committed `request/header` events `lastEffective` reads —
  * consecutive requests that went out with the same level AND the same intent
@@ -16,7 +16,7 @@ import {
   type AutoScheduleState,
 } from '../src/auto-schedule-projection.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [] })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 })
 
 /** A committed `request/header` with the effective reasoningEffort in config. */
 const header = (reasoningEffort?: unknown) => ({
@@ -135,11 +135,24 @@ describe('applyAutoSchedule — trace fold over the session log', () => {
   })
 })
 
-describe('buildAutoScheduleDefinition — stateVersion 3', () => {
-  it('declares version 3 with a schema that accepts the trace', () => {
+describe('buildAutoScheduleDefinition — stateVersion 4', () => {
+  it('declares version 4 with a schema that accepts a stamped trace', () => {
     const definition = buildAutoScheduleDefinition()
-    expect(definition.stateVersion).toBe(3)
-    const row = { samples: [], userEffort: 'auto', lastEffective: 'high', trace: [{ level: 'high', intent: 'auto', count: 2 }] }
+    expect(definition.stateVersion).toBe(4)
+    const row = {
+      samples: [],
+      userEffort: 'auto',
+      lastEffective: 'high',
+      trace: [{ level: 'high', intent: 'auto', count: 2, turn: 3, step: 1, time: 1795412669385 }],
+      turn: 3,
+      step: 1,
+    }
+    expect(definition.stateSchema.parse(row)).toEqual(row)
+  })
+
+  it('still accepts a run without position stamps (an un-stamped header)', () => {
+    const definition = buildAutoScheduleDefinition()
+    const row = { samples: [], userEffort: null, lastEffective: 'low', trace: [{ level: 'low', intent: null, count: 1 }], turn: 0, step: 0 }
     expect(definition.stateSchema.parse(row)).toEqual(row)
   })
 })

@@ -2,11 +2,16 @@
 
 ## Unreleased
 
+- **Effort 轨迹页与「权限审批记录」对齐呈现，并补上 turn/step 位置坐标。** 此前只有一列裸文本（`手动 low`），既看不出是第几轮第几步变的，也没有变化方向的视觉提示；同一条标签栏里的两个页签长得像两个产品。
+  - 呈现：标题 + 副标题、汇总条（请求数 / 段数 / auto 段数 / 峰值档位）、每段一张卡片——圆环字形（↑升 / ↓降 / =持平 / •起始）走左侧连线轨，档位用等宽字，意图色标（auto 绿、降档琥珀、持平/起始中性），`× N` 次数徽标，右侧对齐的墙钟时间；全部走 `--dsw-alias-*` 设计令牌与 perm-gate 同款圆角/间距/字号。
+  - 位置：`tlAutoSchedule` 新增 `turn` / `step` 折叠（`turn/start`、`step/start`），每段首条请求记下 `T{轮}·S{步}` 与 `time`；`stateVersion` 3→4。历史会话冷读自动重建，无迁移负担。
+  - 归属诚实化：页脚常驻提示——0.2.2 起宿主禁止在请求阶段改档位，本插件（严格线）自己会写 `model/selection` 提前一步排程，故「手动」只表示日志最后一笔选择是具体档位，未必是人为点击。这条不写清楚，页签会公然说谎（截图里 auto 摆动被标成「手动」）。
+
 - **修复：投影缺少 `wire`，浏览器侧永远读不到（Effort 轨迹恒为空态）。** 宿主只在 unit 声明了 `wire` 时才把投影送到客户端——`snapshot()` / `cachedSnapshot()` 均 `continue` 于 `def.wire === undefined`（`packages/session/session-projection/src/index.ts`，「Omit for host-only units」）。`tlAutoSchedule` 自 4.5.0 起一直没有 `wire`，于是它是 host-only：`traceOf`（轨迹页签）和 `lastEffectiveOf`（chip 的 issue #11 修复）在真实宿主上全是死读——投影里明明有数据，界面恒渲染空态。`tlCacheBilling` 从一开始就有 `wire`，所以计费卡看得见。
   - 新增 `wire: { viewSchema, view }`：视图只带客户端要渲染的三项（`userEffort` / `lastEffective` / `trace`），`samples` 留在宿主侧（只供调度器读）。
   - 视图带单槽内容 memo：`tool/call` 只增长 `samples`，客户端相关字段没变时复用同一对象身份，`Object.is` 闸门保持关闭——否则每个工具调用都会唤醒每个订阅端（长会话上千次）。
-  - `stateVersion` 保持 3：持久化的 **state** 形状没动，加 `wire` 属视图层变更。
-  - 测试 +4（wire 存在性与 schema 校验、samples-only 变更不换身份、同一状态重复读复用、畸形载荷被拒），全量 320/320。
+  - 该次只加 `wire`，`stateVersion` 未动；随后位置坐标（turn/step/time）进来才升到 4。
+  - 测试 +4（wire 存在性与 schema 校验、samples-only 变更不换身份、同一状态重复读复用、畸形载荷被拒）。
 
 - **修复：投影 face 的读取按 settings 句柄形状解包，读取恒为 `undefined`。** 宿主 `ProjectionValueStore` 的 face 是 `getSnapshot: () => rows.get(key)?.value`，返回的就是**投影状态本身**（`packages/api/session-controller/src/client/sessions/projection-store.ts` 的 `channel()`；宿主内部消费者都是直接强转，如 `faceOf('permissions').getSnapshot() as PermissionSelection`）。`effort-trace.tsx` 与 `index.ts` 却按 `{ status, value }` 的设置句柄形状取 `.value`——那套形状属于 `configForms` / `settingsScope`（`card.tsx` / `model-panel.tsx` 里的 `.value` 是对的）。两套 API 混淆，结果同样是空态。
   - 新增 `src/client/projection-value.ts`：`projectionValueOf()` **正向识别裸状态**（`trace` / `lastEffective` / `userEffort` / `samples` 任一命中即是），包装形状永远不会被误认成状态，反之亦然；同时兼容旧的 `{ value }` 包裹（老宿主 / 测试替身）。

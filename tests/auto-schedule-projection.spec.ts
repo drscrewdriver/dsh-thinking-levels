@@ -9,7 +9,7 @@ import {
 } from '../src/auto-schedule-projection.ts'
 import { TOOL_SAMPLE_WINDOW } from '../src/session-events.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [] })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 })
 
 /** The real wire shape (`packages/core/session/src/types.ts`): name + arguments. */
 const toolCall = (name: string, args = '') => ({ type: 'tool/call', data: { turn: 1, step: 1, callId: 'c', name, arguments: args } })
@@ -93,9 +93,9 @@ describe('buildAutoScheduleDefinition', () => {
   it('declares a versioned unit with a parseable schema', () => {
     const definition = buildAutoScheduleDefinition()
     expect(definition.key).toBe(AUTO_SCHEDULE_KEY)
-    expect(definition.stateVersion).toBe(3)
+    expect(definition.stateVersion).toBe(4)
     const initial = definition.init()
-    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null, trace: [] })
+    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 })
     expect(definition.stateSchema.parse(initial)).toEqual(initial)
   })
 
@@ -106,16 +106,18 @@ describe('buildAutoScheduleDefinition', () => {
       userEffort: 'auto',
       lastEffective: null,
       trace: [],
+      turn: 2,
+      step: 3,
       // a field a future version might drop — must not poison the cache row
       legacyField: true,
     })
-    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] })
+    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 2, step: 3 })
   })
 })
 
 describe('readAutoSchedule — capability gate', () => {
   it('reads the folded state when the registry serves stateOf', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0 }
     const service = { stateOf: (_session: unknown, key: string) => (key === AUTO_SCHEDULE_KEY ? state : undefined) }
     expect(readAutoSchedule(ctxWith(service), {})).toEqual(state)
   })
@@ -135,7 +137,7 @@ describe('readAutoSchedule — capability gate', () => {
   })
 
   it('returns undefined without a session', () => {
-    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null, trace: [] }) }
+    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 }) }
     expect(readAutoSchedule(ctxWith(service), undefined)).toBeUndefined()
     expect(readAutoSchedule(ctxWith(service), null)).toBeUndefined()
   })
@@ -143,19 +145,19 @@ describe('readAutoSchedule — capability gate', () => {
 
 describe('requestedEffortOf', () => {
   it('prefers the session pick over the configured default', () => {
-    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null, trace: [] }, 'auto')).toBe('high')
-    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null, trace: [] }, 'low')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null, trace: [], turn: 0, step: 0 }, 'auto')).toBe('high')
+    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0 }, 'low')).toBe('auto')
   })
 
   it('falls back when the session never picked', () => {
     expect(requestedEffortOf(undefined, 'auto')).toBe('auto')
-    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null, trace: [] }, 'low')).toBe('low')
+    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0 }, 'low')).toBe('low')
   })
 
   it('falls back for a value the plugin does not understand', () => {
     // A gateway-specific wire value is not a plugin level: it keeps the
     // pre-existing behaviour (scheduler decides) instead of being passed on.
-    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null, trace: [] }, 'auto')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null, trace: [], turn: 0, step: 0 }, 'auto')).toBe('auto')
   })
 })
 
@@ -188,7 +190,7 @@ describe('lastEffective — the level the last request actually carried (issue #
 
   it('advances the trace run when the level repeats; same reference only for effort-less headers', () => {
     // The registry gates its change feed on Object.is. Since the trace joined
-    // (stateVersion 3), a level-carrying header ALWAYS advances its run —
+    // (stateVersion 3+, now 4), a level-carrying header ALWAYS advances its run —
     // count++ = new reference — so the trace tab stays live per request; the
     // same-reference guarantee survives only for headers without an effort.
     const once = applyAutoSchedule(empty(), header('high'))
@@ -201,7 +203,7 @@ describe('lastEffective — the level the last request actually carried (issue #
   })
 
   it('leaves samples and userEffort untouched', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [] }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0 }
     const next = applyAutoSchedule(state, header('low'))
     expect(next.samples).toBe(state.samples)
     expect(next.userEffort).toBe('auto')
@@ -238,6 +240,8 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
       userEffort: 'auto',
       lastEffective: 'low',
       trace: [{ level: 'low', intent: 'auto', count: 2 }],
+      turn: 1,
+      step: 2,
     }
     const view = def.wire.view(state)
     // samples stay host-side; the browser gets exactly what it renders.
@@ -247,7 +251,7 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
 
   it('keeps the view identity when only host-only state (samples) changes', () => {
     const def = buildAutoScheduleDefinition()
-    const base: AutoScheduleState = { samples: [], userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 1 }] }
+    const base: AutoScheduleState = { samples: [], userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 1 }], turn: 1, step: 1 }
     const first = def.wire.view(base)
     const grown: AutoScheduleState = { ...base, samples: [{ name: 'bash', argsSize: 9 }] }
     // Same content, new state reference: the Object.is gate must stay closed,
@@ -260,7 +264,7 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
 
   it('reuses the view for a repeated identical state read', () => {
     const def = buildAutoScheduleDefinition()
-    const state: AutoScheduleState = { samples: [], userEffort: null, lastEffective: 'max', trace: [{ level: 'max', intent: null, count: 1 }] }
+    const state: AutoScheduleState = { samples: [], userEffort: null, lastEffective: 'max', trace: [{ level: 'max', intent: null, count: 1 }], turn: 0, step: 0 }
     expect(def.wire.view(state)).toBe(def.wire.view(state))
   })
 
@@ -268,5 +272,53 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
     const def = buildAutoScheduleDefinition()
     expect(() => def.wire.viewSchema.parse({ userEffort: 1, lastEffective: null, trace: [] })).toThrow()
     expect(() => def.wire.viewSchema.parse({ userEffort: null, lastEffective: null, trace: [{ level: 'low', intent: null }] })).toThrow()
+  })
+})
+
+/**
+ * Position stamps: the tab names the turn/step a run STARTED in, so "when did
+ * auto drop to low" is answerable in the UI. The decision itself is made at
+ * `agent/pre-step` — BEFORE the host appends `step/start` (agent-loop
+ * `agent.ts`: `preStep()` then `session.append('step/start')`) — so the stamp
+ * identifies the step the level was picked FOR, i.e. the timeline node.
+ */
+describe('position stamps — turn/step on the run, not on the request', () => {
+  const turnStart = (turn: number) => ({ type: 'turn/start', data: { turn } })
+  const stepStart = (turn: number, step: number) => ({ type: 'step/start', data: { turn, step } })
+  const stamped = (level: string, time: number) => ({ type: 'request/header', time, data: { header: { config: { provider: 'p', model: 'm', reasoningEffort: level } } } })
+
+  it('stamps only the first request of a run, so a run still reads as one row', () => {
+    let state = buildAutoScheduleDefinition().init()
+    state = applyAutoSchedule(state, turnStart(1))
+    state = applyAutoSchedule(state, stepStart(1, 1))
+    state = applyAutoSchedule(state, stamped('low', 1000))
+    state = applyAutoSchedule(state, stepStart(1, 2))
+    state = applyAutoSchedule(state, stamped('low', 2000))
+    expect(state.trace).toEqual([{ level: 'low', intent: null, count: 2, turn: 1, step: 1, time: 1000 }])
+    // A new run opens with ITS OWN position, not the previous run's.
+    state = applyAutoSchedule(state, turnStart(2))
+    state = applyAutoSchedule(state, stepStart(2, 1))
+    state = applyAutoSchedule(state, stamped('high', 3000))
+    expect(state.trace[1]).toEqual({ level: 'high', intent: null, count: 1, turn: 2, step: 1, time: 3000 })
+  })
+
+  it('leaves the position off a header that arrives before any turn/start', () => {
+    const state = applyAutoSchedule(empty(), stamped('low', 500))
+    expect(state.trace).toEqual([{ level: 'low', intent: null, count: 1, time: 500 }])
+  })
+
+  it('keeps the state reference for repeated turn/step announcements', () => {
+    let state = applyAutoSchedule(empty(), turnStart(3))
+    expect(applyAutoSchedule(state, turnStart(3))).toBe(state)
+    state = applyAutoSchedule(state, stepStart(3, 4))
+    expect(applyAutoSchedule(state, stepStart(3, 4))).toBe(state)
+    expect(applyAutoSchedule(state, { type: 'user/message', data: {} })).toBe(state)
+  })
+
+  it('survives malformed position events without changing state', () => {
+    const base = applyAutoSchedule(empty(), turnStart(1))
+    expect(applyAutoSchedule(base, { type: 'turn/start', data: {} })).toBe(base)
+    expect(applyAutoSchedule(base, { type: 'step/start', data: { step: 'x' } })).toBe(base)
+    expect(applyAutoSchedule(base, { type: 'step/start' })).toBe(base)
   })
 })

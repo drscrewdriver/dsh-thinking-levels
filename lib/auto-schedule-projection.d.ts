@@ -54,6 +54,16 @@ export interface EffortRun {
     intent: 'auto' | 'manual' | null;
     /** How many consecutive committed requests the run covers. */
     count: number;
+    /**
+     * The turn the run's FIRST request belonged to, folded from the preceding
+     * `turn/start`. Optional: runs folded before stateVersion 4 (a cached row
+     * that predates it) simply lack it and the tab omits the position chip.
+     */
+    turn?: number;
+    /** The step the run's first request belonged to (folded from `step/start`). */
+    step?: number;
+    /** Wall-clock ms of the run's first committed request. */
+    time?: number;
 }
 /** Runs kept in the trace ring; run-length lets 64 runs cover very long sessions. */
 export declare const TRACE_MAX = 64;
@@ -87,6 +97,14 @@ export interface AutoScheduleState {
      * implicitly end the current run. At most {@link TRACE_MAX} runs.
      */
     trace: readonly EffortRun[];
+    /**
+     * The turn in progress at fold time (folded from `turn/start`), so a
+     * `request/header` can be stamped with the turn it belongs to. `0` before the
+     * session's first turn.
+     */
+    turn: number;
+    /** The step in progress at fold time (folded from `step/start`). `0` before it. */
+    step: number;
 }
 /**
  * Append one committed request's effective level to the run-length trace.
@@ -99,9 +117,16 @@ export interface AutoScheduleState {
  * @param trace - trace before the header.
  * @param level - the effective wire level the header committed.
  * @param intent - why: the session pick at fold time, or null for default.
+ * @param at - where the request sat (turn/step) and when it went out: stamped
+ *   onto a run's FIRST request only, because a run means "this level held for
+ *   these consecutive steps starting here".
  * @returns the advanced trace.
  */
-export declare function foldTrace(trace: readonly EffortRun[], level: string, intent: EffortRun['intent']): readonly EffortRun[];
+export declare function foldTrace(trace: readonly EffortRun[], level: string, intent: EffortRun['intent'], at?: {
+    turn?: number;
+    step?: number;
+    time?: number;
+}): readonly EffortRun[];
 /**
  * Fold one committed Session event into the auto-schedule state.
  *
@@ -162,7 +187,12 @@ export declare function buildAutoScheduleDefinition(): {
             level: z.ZodString;
             intent: z.ZodNullable<z.ZodString>;
             count: z.ZodNumber;
+            turn: z.ZodOptional<z.ZodNumber>;
+            step: z.ZodOptional<z.ZodNumber>;
+            time: z.ZodOptional<z.ZodNumber>;
         }, z.core.$strip>>;
+        turn: z.ZodNumber;
+        step: z.ZodNumber;
     }, z.core.$strip>;
     init: () => AutoScheduleState;
     apply: typeof applyAutoSchedule;
@@ -174,6 +204,9 @@ export declare function buildAutoScheduleDefinition(): {
                 level: z.ZodString;
                 intent: z.ZodNullable<z.ZodString>;
                 count: z.ZodNumber;
+                turn: z.ZodOptional<z.ZodNumber>;
+                step: z.ZodOptional<z.ZodNumber>;
+                time: z.ZodOptional<z.ZodNumber>;
             }, z.core.$strip>>;
         }, z.core.$strip>;
         view: (state: AutoScheduleState) => AutoScheduleView;
