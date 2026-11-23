@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **配色加深：方向色改用固定语义色，降档从琥珀改红。** 之前两处都用主题令牌（`--dsw-alias-state-success-primary` / `-warn-*`），问题有两个：一是这些令牌是为大面积背景调的柔和色，落在 18px 圆环和一个字形上就发灰；二是琥珀色配绿箭头读起来像「警告」，而降档其实只是相反方向，不该是警告色。
+  - 方向色：升档 `#18a058`、降档 `#d03050`（红）、起始 `#2b6cb0`、持平沿用弱化灰。方向是固定语义，不跟主题走。
+  - 归属色：`scheduler` 用最饱和的 `#0e9f6e`（已知写入者里证据最硬的一档，就该最醒目）、`auto` `#18a058`、`manual` `#2b6cb0`、`unknown` `#d48806`（琥珀，需要留意）。
+  - 圆环加重：描边 1px→1.5px、字形 11px→12px 且 700 字重——半透明行底上原来箭头几乎看不见，「往哪边动」读不出来。
+
 - **插件调度现在能真正打标记了（`scheduler` 归属）。** 上一版把无法归属的档位诚实标成「未记录」，但那是「说不清」，不是「说清了」。这次用宿主正式开放的机制把它坐实：
   - 机制：`@deepseek-ai/dsh-session` 的 `appendPluginRecord(session, type, data)` 可写入 `ignorable` 的 `plugin:` 记录——不进模型可见面、fork/resume 随日志保留、不认识的读者跳过而不是拒读。插件每次自写档位后追加一条 `plugin:dsh-thinking-levels/scheduler-write`，投影见到标记就把**下一条** `request/header` 归因为 `scheduler`。
   - 归属优先级：`scheduler`（有标记，证据）> `manual`（记录值 == 本次档位）> `auto` > `default` > `unknown`（无标记且对不上，退路）。标记只声明「是谁写的」，档位永远取自实际发出的 header——不会伪造。

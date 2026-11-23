@@ -72,55 +72,67 @@ export interface TraceRow {
 /** Transition glyph per direction (mirrors perm-gate's glyph table pattern). */
 const GLYPH: Record<TraceRow['dir'], string> = { up: '↑', down: '↓', flat: '=', start: '•' }
 
-/** Rail/tag color per direction: a rise is green, a drop is amber, flat is muted. */
+/**
+ * Rail/glyph color per DIRECTION — a rise is green, a drop is red, flat/start
+ * are muted/blue.
+ *
+ * These are LITERAL colors, not theme tokens, on purpose. A direction is a
+ * fixed semantic (up = more thinking, down = less), so it must read the same on
+ * every theme; the token defaults were also what made it look washed out — the
+ * active theme's `--dsw-alias-state-success-primary` / `-warn-*` resolve to
+ * muted tints meant for large surfaces, not for an 18px ring and a one-glyph
+ * rail. `down` is red rather than amber for the same reason: amber next to a
+ * green up-arrow reads as "caution", while a downgrade is simply the opposite
+ * direction and should be the opposite color.
+ */
 const TONE: Record<TraceRow['dir'], { color: string; bg: string }> = {
   up: {
-    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
-    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.08))',
+    color: '#18a058',
+    bg: 'rgba(24,160,88,0.12)',
   },
   down: {
-    color: 'var(--dsw-alias-state-warn-label, #b9770e)',
-    bg: 'var(--dsw-alias-state-warn-tertiary, rgba(185,119,14,0.08))',
+    color: '#d03050',
+    bg: 'rgba(208,48,80,0.12)',
   },
   flat: {
     color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.9))',
     bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
   },
   start: {
-    color: 'var(--dsw-alias-state-business-primary, #2b6cb0)',
-    bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
+    color: '#2b6cb0',
+    bg: 'rgba(43,108,176,0.10)',
   },
 }
 
 /**
  * Tag tone per ATTRIBUTION — deliberately separate from the direction tone.
  *
- * `unknown` is grey, never amber/green: it is not a verdict about the level,
- * it says the log does not explain the change. Colouring it like a decision
- * would be the same lie as labelling it "manual".
+ * `unknown` is amber, never grey: it is not a verdict about the level, it says
+ * the log does not explain the change, and that deserves attention. Colouring
+ * it like a decision would be the same lie as labelling it "manual".
  */
 const INTENT_TONE: Record<EffortRun['intent'], { color: string; bg: string }> = {
   auto: {
-    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
-    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.08))',
+    color: '#18a058',
+    bg: 'rgba(24,160,88,0.12)',
   },
   manual: {
-    color: 'var(--dsw-alias-state-business-primary, #2b6cb0)',
-    bg: 'var(--dsw-alias-bg-layer-2, rgba(43,108,176,0.08))',
+    color: '#2b6cb0',
+    bg: 'rgba(43,108,176,0.10)',
   },
   default: {
     color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.9))',
     bg: 'var(--dsw-alias-bg-layer-2, rgba(127,127,127,0.06))',
   },
   unknown: {
-    color: 'var(--dsw-alias-state-warn-label, #b9770e)',
-    bg: 'var(--dsw-alias-state-warn-tertiary, rgba(185,119,14,0.06))',
+    color: '#d48806',
+    bg: 'rgba(212,136,6,0.14)',
   },
   scheduler: {
-    // Proven plugin output: the same business accent as `manual` on purpose —
-    // both are "a known writer chose this". The LABEL carries the difference.
-    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
-    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.10))',
+    // Proven plugin output: the strongest, most saturated green of the set —
+    // this is the "we know exactly who wrote it" state and should look it.
+    color: '#0e9f6e',
+    bg: 'rgba(14,159,110,0.16)',
   },
 }
 
@@ -406,11 +418,15 @@ const markStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: '11px',
+  fontSize: '12px',
   lineHeight: '18px',
+  fontWeight: 700,
   borderRadius: '999px',
   borderStyle: 'solid',
-  borderWidth: '1px',
+  // 1.5px + a 700-weight glyph: at 1px the ring and the arrow both washed out
+  // against the translucent row background, which is what made "which way did
+  // it move" hard to read at a glance.
+  borderWidth: '1.5px',
   fontFamily: 'var(--ds-font-family-code, monospace)',
 }
 
@@ -499,7 +515,7 @@ function SummaryBar(props: { t: (key: string) => string; summary: TraceSummary }
         : (
             <>
               <span aria-hidden style={barSepStyle} />
-              <span style={{ ...barStatStyle, color: 'var(--dsw-alias-state-warn-label, #b9770e)' }}>
+              <span style={{ ...barStatStyle, color: '#d48806' }}>
                 <span style={barValueStyle}>{summary.unknownRuns}</span>
                 <span>{t('trace.intent.unknown')}</span>
               </span>
