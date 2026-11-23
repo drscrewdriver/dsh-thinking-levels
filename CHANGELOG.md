@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **修复：投影缺少 `wire`，浏览器侧永远读不到（Effort 轨迹恒为空态）。** 宿主只在 unit 声明了 `wire` 时才把投影送到客户端——`snapshot()` / `cachedSnapshot()` 均 `continue` 于 `def.wire === undefined`（`packages/session/session-projection/src/index.ts`，「Omit for host-only units」）。`tlAutoSchedule` 自 4.5.0 起一直没有 `wire`，于是它是 host-only：`traceOf`（轨迹页签）和 `lastEffectiveOf`（chip 的 issue #11 修复）在真实宿主上全是死读——投影里明明有数据，界面恒渲染空态。`tlCacheBilling` 从一开始就有 `wire`，所以计费卡看得见。
+  - 新增 `wire: { viewSchema, view }`：视图只带客户端要渲染的三项（`userEffort` / `lastEffective` / `trace`），`samples` 留在宿主侧（只供调度器读）。
+  - 视图带单槽内容 memo：`tool/call` 只增长 `samples`，客户端相关字段没变时复用同一对象身份，`Object.is` 闸门保持关闭——否则每个工具调用都会唤醒每个订阅端（长会话上千次）。
+  - `stateVersion` 保持 3：持久化的 **state** 形状没动，加 `wire` 属视图层变更。
+  - 测试 +4（wire 存在性与 schema 校验、samples-only 变更不换身份、同一状态重复读复用、畸形载荷被拒），全量 320/320。
+
+- **修复：投影 face 的读取按 settings 句柄形状解包，读取恒为 `undefined`。** 宿主 `ProjectionValueStore` 的 face 是 `getSnapshot: () => rows.get(key)?.value`，返回的就是**投影状态本身**（`packages/api/session-controller/src/client/sessions/projection-store.ts` 的 `channel()`；宿主内部消费者都是直接强转，如 `faceOf('permissions').getSnapshot() as PermissionSelection`）。`effort-trace.tsx` 与 `index.ts` 却按 `{ status, value }` 的设置句柄形状取 `.value`——那套形状属于 `configForms` / `settingsScope`（`card.tsx` / `model-panel.tsx` 里的 `.value` 是对的）。两套 API 混淆，结果同样是空态。
+  - 新增 `src/client/projection-value.ts`：`projectionValueOf()` **正向识别裸状态**（`trace` / `lastEffective` / `userEffort` / `samples` 任一命中即是），包装形状永远不会被误认成状态，反之亦然；同时兼容旧的 `{ value }` 包裹（老宿主 / 测试替身）。
+  - 测试替身此前写成与错误实现**同一个**错形状，所以 316 例全绿而读取是死的——这正是本次「假全绿」的成因；替身已改为真实宿主形态，并补两条回归（裸状态必读出、旧包裹仍兼容）。
+
 ## 4.6.0
 
 - **新增 `Config.simpleToolsRegex`：简单工具 regex 名单（issue #12）。** 第三方工具家族（如 dsh-ops 的 `ops_*`）可一条 `^ops_.*` 整族进白名单，不再逐个枚举。每条按原生 JavaScript regex 编译（`i` flag、**不自动加锚点**，建议自写 `^`），与字面量名单并存、进同一 ratio 统计；编译失败的条目跳过并告警一次（配置变更粒度，非每请求）。

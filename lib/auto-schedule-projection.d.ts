@@ -115,10 +115,38 @@ export declare function foldTrace(trace: readonly EffortRun[], level: string, in
  */
 export declare function applyAutoSchedule(state: AutoScheduleState, event: unknown): AutoScheduleState;
 /**
+ * The state -> client payload. `samples` stays host-side (only the scheduler
+ * reads it), so the wire carries exactly what the browser renders.
+ */
+export interface AutoScheduleView {
+    /** The session's explicit pick, or null when it never picked. */
+    userEffort: string | null;
+    /** The level the last committed request actually carried, or null. */
+    lastEffective: string | null;
+    /** Run-length effort trace, oldest run first. */
+    trace: readonly EffortRun[];
+}
+/**
  * Build the `tlAutoSchedule` projection definition. Registered soft-coupled
  * (runtime inject), exactly like `tlCacheBilling`: hosts whose registry cannot
  * serve `stateOf` simply never register it and the scheduler falls back to the
  * legacy array read.
+ *
+ * ## Why `wire` is not optional here (the empty-tab bug)
+ *
+ * The registry ships a unit to the browser ONLY when it declares `wire` —
+ * `snapshot()` / `cachedSnapshot()` both `continue` on
+ * `def.wire === undefined` (`packages/session/session-projection/src/index.ts`,
+ * "Omit for host-only units"), and the client's `faceOf(key)` then reads
+ * `undefined` forever. Without `wire` this unit was host-only, so the effort
+ * tab's `traceOf` and the composer chip's `lastEffective` were dead reads on
+ * every real host — a filled projection behind an empty UI. `tlCacheBilling`
+ * always had `wire`; this unit did not.
+ *
+ * The `view` keeps a one-entry content memo so a `tool/call` (which only grows
+ * `samples`) republishes nothing: the drive compares raw view results with
+ * `Object.is`, so returning the SAME object for unchanged client-relevant
+ * state is what suppresses the wake.
  */
 export declare function buildAutoScheduleDefinition(): {
     key: string;
@@ -138,6 +166,18 @@ export declare function buildAutoScheduleDefinition(): {
     }, z.core.$strip>;
     init: () => AutoScheduleState;
     apply: typeof applyAutoSchedule;
+    wire: {
+        viewSchema: z.ZodObject<{
+            userEffort: z.ZodNullable<z.ZodString>;
+            lastEffective: z.ZodNullable<z.ZodString>;
+            trace: z.ZodArray<z.ZodObject<{
+                level: z.ZodString;
+                intent: z.ZodNullable<z.ZodString>;
+                count: z.ZodNumber;
+            }, z.core.$strip>>;
+        }, z.core.$strip>;
+        view: (state: AutoScheduleState) => AutoScheduleView;
+    };
 };
 /**
  * Read the folded auto-schedule state for a session.

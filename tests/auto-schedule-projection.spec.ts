@@ -220,3 +220,53 @@ describe('lastEffective — the level the last request actually carried (issue #
     expect(state.lastEffective).toBe('high')
   })
 })
+
+/**
+ * The registry ships a unit to the browser ONLY when it declares `wire`:
+ * `snapshot()`/`cachedSnapshot()` both `continue` on `def.wire === undefined`
+ * (`packages/session/session-projection/src/index.ts`). Without it this unit
+ * was host-only, so the effort tab and the chip both read a key that never
+ * crossed the wire — a filled projection behind an always-empty UI.
+ */
+describe('wire — the unit must be client-visible (empty-tab bug)', () => {
+  it('declares a wire view and validates the payload', () => {
+    const def = buildAutoScheduleDefinition()
+    expect(def.key).toBe(AUTO_SCHEDULE_KEY)
+    expect(def.wire).toBeDefined()
+    const state: AutoScheduleState = {
+      samples: [{ name: 'bash', argsSize: 3 }],
+      userEffort: 'auto',
+      lastEffective: 'low',
+      trace: [{ level: 'low', intent: 'auto', count: 2 }],
+    }
+    const view = def.wire.view(state)
+    // samples stay host-side; the browser gets exactly what it renders.
+    expect(view).toEqual({ userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 2 }] })
+    expect(def.wire.viewSchema.parse(view)).toEqual(view)
+  })
+
+  it('keeps the view identity when only host-only state (samples) changes', () => {
+    const def = buildAutoScheduleDefinition()
+    const base: AutoScheduleState = { samples: [], userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 1 }] }
+    const first = def.wire.view(base)
+    const grown: AutoScheduleState = { ...base, samples: [{ name: 'bash', argsSize: 9 }] }
+    // Same content, new state reference: the Object.is gate must stay closed,
+    // otherwise every single tool/call wakes every subscribed client.
+    expect(def.wire.view(grown)).toBe(first)
+    const advanced: AutoScheduleState = { ...grown, lastEffective: 'high', trace: [{ level: 'high', intent: 'auto', count: 1 }] }
+    expect(def.wire.view(advanced)).not.toBe(first)
+    expect(def.wire.view(advanced).lastEffective).toBe('high')
+  })
+
+  it('reuses the view for a repeated identical state read', () => {
+    const def = buildAutoScheduleDefinition()
+    const state: AutoScheduleState = { samples: [], userEffort: null, lastEffective: 'max', trace: [{ level: 'max', intent: null, count: 1 }] }
+    expect(def.wire.view(state)).toBe(def.wire.view(state))
+  })
+
+  it('rejects a malformed payload at the wire boundary', () => {
+    const def = buildAutoScheduleDefinition()
+    expect(() => def.wire.viewSchema.parse({ userEffort: 1, lastEffective: null, trace: [] })).toThrow()
+    expect(() => def.wire.viewSchema.parse({ userEffort: null, lastEffective: null, trace: [{ level: 'low', intent: null }] })).toThrow()
+  })
+})
