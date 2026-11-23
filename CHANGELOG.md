@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **插件调度现在能真正打标记了（`scheduler` 归属）。** 上一版把无法归属的档位诚实标成「未记录」，但那是「说不清」，不是「说清了」。这次用宿主正式开放的机制把它坐实：
+  - 机制：`@deepseek-ai/dsh-session` 的 `appendPluginRecord(session, type, data)` 可写入 `ignorable` 的 `plugin:` 记录——不进模型可见面、fork/resume 随日志保留、不认识的读者跳过而不是拒读。插件每次自写档位后追加一条 `plugin:dsh-thinking-levels/scheduler-write`，投影见到标记就把**下一条** `request/header` 归因为 `scheduler`。
+  - 归属优先级：`scheduler`（有标记，证据）> `manual`（记录值 == 本次档位）> `auto` > `default` > `unknown`（无标记且对不上，退路）。标记只声明「是谁写的」，档位永远取自实际发出的 header——不会伪造。
+  - 软耦合：宿主包用**变量化说明符的动态 import** 取用（字面量会让它变成硬编译依赖，而这 API 在旧线上不存在）；一切失败——包不可解析、session 不可追加、payload 被拒、logger 抛异常——都解析成 `false`，绝不 reject，因为调用点在一轮对话中间。首次写入探针打一行日志，标明通道 ready / unavailable，避免「静默没标记」和「调度器没写过」无法区分。
+  - 视图：新增 `trace.intent.scheduler`（10 语），用成功色而非警示色——它和 `manual` 都是「已知写入者」，「未记录」才是警示。
+  - `stateVersion` 5→6（state 新增 `pendingSchedulerWrite`，仅宿主侧，不进 wire）。
+  - 测试 +19（标记消费与一次性、跨档位不伪造、foreign record 忽略、wire 不外泄、软耦合四类降级、logger 抛异常不 reject、payload 严格归一化、渲染与汇总）。
+
 - **修复归属造假：档位变化不再一律标「手动」，并全程记录 provider/model。** 现场取证（会话 `7f321902`）：`model/selection` 事件只有 **1 条**（high），而 `request/header` 有 **30 条**、high/low 交替。旧规则是「会话里记录的档位不是 auto ⇒ 每次请求都算 manual」，于是 29 次插件自己的调度全被标成「手动」——那是个伪命题：0.2.2+ 严格线上本插件自己就是 `model/selection` 的写入者，而 `agent.model.select()` 的写入**不进日志**（宿主只在用户主动选择时 append）。
   - 归属改为四值、且以「相等」而非「存在」为判据（`attributionOf`）：记录值 == 本次档位 → `manual`；记录值是 `auto` → `auto`；无任何记录 → `default`；**有记录但对不上 → `unknown`（未记录）**。同一份真实数据：旧规则 30×manual，新规则 15×manual + 15×unknown。
   - 视图面：`unknown` 用中性警示色并带解释性 tooltip（说明严格线写入不进日志），绝不与 `manual` 同色——把它染成决策色就是第二次说谎。汇总条新增「N 未记录」计数。

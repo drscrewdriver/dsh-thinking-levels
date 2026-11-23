@@ -299,3 +299,28 @@ describe('EffortTrace — attribution and route rendering', () => {
     expect(texts(renderer).join('|')).not.toContain('trace.summary.switches')
   })
 })
+
+/** The `scheduler` attribution: proven plugin output, never shown as unknown. */
+describe('EffortTrace — scheduler attribution', () => {
+  it('renders a scheduler-written run with its own label', () => {
+    const renderer = create(createElement(EffortTrace, {
+      sessionId: 's1',
+      sessions: sessionsWith([{ level: 'low', intent: 'scheduler', count: 3 }]),
+      t: identity,
+    }))
+    const text = texts(renderer).join('|')
+    expect(text).toContain('trace.intent.scheduler')
+    expect(text).not.toContain('trace.intent.unknown')
+    expect(text).not.toContain('trace.intent.manual')
+  })
+
+  it('does not count scheduler runs as unrecorded', () => {
+    const summary = summarize([
+      { level: 'low', intent: 'scheduler', count: 4 },
+      { level: 'high', intent: 'unknown', count: 1 },
+    ])
+    expect(summary.unknownRuns).toBe(1)
+    expect(summary.autoRuns).toBe(0)
+    expect(summary.requests).toBe(5)
+  })
+})

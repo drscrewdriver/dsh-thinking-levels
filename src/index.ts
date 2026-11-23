@@ -45,9 +45,11 @@ import { buildAutoScheduleDefinition, readAutoSchedule, requestedEffortOf } from
 import {
   effortOfSelection,
   planStrictStep,
+  type StrictSelectionWrite,
   type StrictStepMemory,
   type StrictStepPlan,
 } from './strict-step-schedule.ts'
+import { markSchedulerWrite } from './plugin-records.ts'
 import { CONTEXT_WINDOW_MAX, CONTEXT_WINDOW_MIN } from './context-window.ts'
 import {
   PI_AI_NAMESPACE,
@@ -1070,6 +1072,35 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   }
 
   /**
+   * Record a scheduler write into the session log so the trace can attribute it.
+   *
+   * Fire-and-forget on purpose: `agent/pre-step` must not wait on a log append,
+   * and a missing channel must never fail the step. The mark is an `ignorable`
+   * `plugin:` record, so readers that do not know it skip it rather than refuse
+   * the session (see plugin-records.ts).
+   * @param agent - the agent whose session receives the mark.
+   * @param write - the level written (or the clear).
+   * @param applied - whether it landed on this step or is deferred to the next.
+   */
+  const markStrictWrite = (
+    agent: StrictAgentLike,
+    provider: string,
+    model: string,
+    write: StrictSelectionWrite,
+    applied: 'step' | 'next',
+    intent: string,
+  ): void => {
+    const session = (agent as unknown as { session?: unknown }).session
+    void markSchedulerWrite(session, {
+      ...write.clear ? { clear: true } : { level: String(write.level) },
+      provider,
+      model,
+      applied,
+      intent,
+    }, ctx.logger).catch(() => { /* best-effort by contract */ })
+  }
+
+  /**
    * Schedule the step the host just fixed.
    */
   onEvent('agent/pre-step', async (payload, next) => {
@@ -1092,6 +1123,11 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
       const plan = await strictPlanFor(agent, provider, model, selection.reasoningEffort)
       const applied = strictApplyStep(agent, provider, model, selection, plan)
       const write = plan.select
+      // Mark the write in the log: without it the trace cannot tell a scheduler
+      // choice from a user pick (the host never logs plugin-side selections).
+      if (write !== undefined && applied !== 'none') {
+        markStrictWrite(agent, provider, model, write, applied, plan.intent)
+      }
       ctx.logger?.info?.(
         '[thinking-levels] agent/pre-step: model=%s/%s fixed=%s intent=%s => %s=%s',
         provider, model, fixed ?? 'adapter default', plan.intent,

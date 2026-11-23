@@ -40,6 +40,7 @@
  */
 import { z } from 'zod'
 import { TOOL_SAMPLE_WINDOW, toolSampleOf } from './session-events.ts'
+import { schedulerWriteOf } from './plugin-records.ts'
 import { isEffortId, type EffortId, type ToolCallSample } from './thinking-level.ts'
 
 /** Projection key. `tl` matches the plugin's other unit (`tlCacheBilling`). */
@@ -58,13 +59,16 @@ export interface EffortRun {
    *   level at fold time, i.e. someone actually selected it.
    * - `'default'` — the session never picked anything; the configured default
    *   applied.
-   * - `'unknown'` — the level changed with NO recorded selection behind it.
-   *   This is the honest bucket for the 0.2.2+ strict line, where the plugin
-   *   itself writes `agent.model.select()` and — measured on a live session
-   *   (30 headers, high/low alternating, ONE `model/selection` event) — those
-   *   writes never reach the log. Calling that "manual" was a fabrication.
+   * - `'scheduler'` — THIS PLUGIN wrote it, proven by a
+   *   `plugin:dsh-thinking-levels/scheduler-write` mark committed just before
+   *   the header (see plugin-records.ts). The strongest attribution available.
+   * - `'unknown'` — the level changed with NO recorded selection behind it and
+   *   no scheduler mark. This is the honest fallback for the 0.2.2+ strict
+   *   line's unmarked writes (measured on a live session: 30 headers,
+   *   high/low alternating, ONE `model/selection` event). Calling that
+   *   "manual" was a fabrication.
    */
-  intent: 'auto' | 'manual' | 'default' | 'unknown'
+  intent: 'auto' | 'manual' | 'default' | 'unknown' | 'scheduler'
   /** How many consecutive committed requests the run covers. */
   count: number
   /**
@@ -140,6 +144,14 @@ export interface AutoScheduleState {
    * requests. `0` means one route throughout.
    */
   modelSwitches: number
+  /**
+   * One-shot flag: a scheduler-write mark was seen and the next committed
+   * `request/header` should be attributed to the scheduler. Cleared by that
+   * header (or by another `model/selection`, which supersedes the write).
+   *
+   * Host-side only — the browser never needs it, so it stays out of the wire.
+   */
+  pendingSchedulerWrite: boolean
 }
 
 const stateSchema = z.object({
@@ -161,6 +173,7 @@ const stateSchema = z.object({
   lastProvider: z.string().nullable(),
   lastModel: z.string().nullable(),
   modelSwitches: z.number(),
+  pendingSchedulerWrite: z.boolean(),
 })
 
 /** Initial folded state (also the shape every cold read starts from). */
@@ -174,6 +187,7 @@ const initAutoSchedule = (): AutoScheduleState => ({
   lastProvider: null,
   lastModel: null,
   modelSwitches: 0,
+  pendingSchedulerWrite: false,
 })
 
 /**
@@ -234,8 +248,14 @@ export function foldTrace(
 export function applyAutoSchedule(state: AutoScheduleState, event: unknown): AutoScheduleState {
   if (typeof event !== 'object' || event === null) return state
   const type = (event as { type?: unknown }).type
-  if (type === 'tool/call') {
-    const sample = toolSampleOf(event)
+  // Scheduler-write mark (`plugin:dsh-thinking-levels/scheduler-write`): this
+  // plugin wrote a `model/selection` that the host never logged. Arming a
+  // one-shot flag lets the NEXT committed header be attributed to the
+  // scheduler instead of falling into the `unknown` bucket.
+  if (schedulerWriteOf(event) !== undefined) {
+    return state.pendingSchedulerWrite ? state : { ...state, pendingSchedulerWrite: true }
+  }
+  if (type === 'tool/call') {    const sample = toolSampleOf(event)
     if (sample === undefined) return state
     const grown = [...state.samples, sample]
     const samples = grown.length > TOOL_SAMPLE_WINDOW
@@ -308,9 +328,17 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
         lastProvider: provider ?? null,
         lastModel: model ?? null,
         modelSwitches: switched ? state.modelSwitches + 1 : state.modelSwitches,
+        // The marked write never produced a level (non-reasoning model): the
+        // mark is spent, nothing to attribute.
+        pendingSchedulerWrite: false,
       }
     }
-    const intent = attributionOf(state.userEffort, raw)
+    // A pending scheduler-write mark claims THIS header: the plugin wrote the
+    // level the host then sent. That is evidence, not a guess — it beats the
+    // `unknown` fallback, which exists only for writes we cannot account for.
+    const intent: EffortRun['intent'] = state.pendingSchedulerWrite
+      ? 'scheduler'
+      : attributionOf(state.userEffort, raw)
     const time = (event as { time?: unknown }).time
     return {
       ...state,
@@ -318,6 +346,7 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
       lastProvider: provider ?? null,
       lastModel: model ?? null,
       modelSwitches: switched ? state.modelSwitches + 1 : state.modelSwitches,
+      pendingSchedulerWrite: false,
       trace: foldTrace(state.trace, raw, intent, {
         // A header that arrives before any `turn/start` (a synthetic or
         // inherited cut) carries no position rather than a bogus T0·S0.
@@ -354,7 +383,7 @@ export function applyAutoSchedule(state: AutoScheduleState, event: unknown): Aut
  * @param level - the level this header actually carried.
  * @returns the attribution.
  */
-export function attributionOf(userEffort: string | null, level: string): EffortRun['intent'] {
+export function attributionOf(userEffort: string | null, level: string): Exclude<EffortRun['intent'], 'scheduler'> {
   if (userEffort === null) return 'default'
   if (userEffort === 'auto') return 'auto'
   return userEffort === level ? 'manual' : 'unknown'
@@ -467,11 +496,12 @@ export function buildAutoScheduleDefinition() {
     // Bumped 1 → 2 when `lastEffective` joined the state (issue #11), 2 → 3
     // when the run-length `trace` joined (conversation-view tab), 3 → 4 when
     // the trace gained turn/step/time position stamps, 4 → 5 when runs gained
-    // provider/model plus the four-valued intent: the host validates against
-    // `stateSchema` per version, so a shape change must raise it. Historical
-    // sessions are not lost — the state is a fold over the log, so a cold read
-    // rebuilds everything from the events.
-    stateVersion: 5,
+    // provider/model plus the four-valued intent, 5 → 6 when the state gained
+    // the scheduler-write flag (and runs the `scheduler` attribution): the host
+    // validates against `stateSchema` per version, so a shape change must raise
+    // it. Historical sessions are not lost — the state is a fold over the log,
+    // so a cold read rebuilds everything from the events.
+    stateVersion: 6,
     stateSchema,
     init: initAutoSchedule,
     apply: applyAutoSchedule,

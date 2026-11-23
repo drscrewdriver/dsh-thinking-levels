@@ -9,8 +9,9 @@ import {
   type AutoScheduleState,
 } from '../src/auto-schedule-projection.ts'
 import { TOOL_SAMPLE_WINDOW } from '../src/session-events.ts'
+import { schedulerWriteOf } from '../src/plugin-records.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false })
 
 /** The real wire shape (`packages/core/session/src/types.ts`): name + arguments. */
 const toolCall = (name: string, args = '') => ({ type: 'tool/call', data: { turn: 1, step: 1, callId: 'c', name, arguments: args } })
@@ -94,9 +95,9 @@ describe('buildAutoScheduleDefinition', () => {
   it('declares a versioned unit with a parseable schema', () => {
     const definition = buildAutoScheduleDefinition()
     expect(definition.key).toBe(AUTO_SCHEDULE_KEY)
-    expect(definition.stateVersion).toBe(5)
+    expect(definition.stateVersion).toBe(6)
     const initial = definition.init()
-    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 })
+    expect(initial).toEqual({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false })
     expect(definition.stateSchema.parse(initial)).toEqual(initial)
   })
 
@@ -112,16 +113,17 @@ describe('buildAutoScheduleDefinition', () => {
       lastProvider: 'trae',
       lastModel: 'deepseek-v4.1-flash',
       modelSwitches: 4,
+      pendingSchedulerWrite: false,
       // a field a future version might drop — must not poison the cache row
       legacyField: true,
     })
-    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 2, step: 3, lastProvider: 'trae', lastModel: 'deepseek-v4.1-flash', modelSwitches: 4 })
+    expect(parsed).toEqual({ samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 2, step: 3, lastProvider: 'trae', lastModel: 'deepseek-v4.1-flash', modelSwitches: 4, pendingSchedulerWrite: false })
   })
 })
 
 describe('readAutoSchedule — capability gate', () => {
   it('reads the folded state when the registry serves stateOf', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }
     const service = { stateOf: (_session: unknown, key: string) => (key === AUTO_SCHEDULE_KEY ? state : undefined) }
     expect(readAutoSchedule(ctxWith(service), {})).toEqual(state)
   })
@@ -141,7 +143,7 @@ describe('readAutoSchedule — capability gate', () => {
   })
 
   it('returns undefined without a session', () => {
-    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }) }
+    const service = { stateOf: () => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }) }
     expect(readAutoSchedule(ctxWith(service), undefined)).toBeUndefined()
     expect(readAutoSchedule(ctxWith(service), null)).toBeUndefined()
   })
@@ -149,19 +151,19 @@ describe('readAutoSchedule — capability gate', () => {
 
 describe('requestedEffortOf', () => {
   it('prefers the session pick over the configured default', () => {
-    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }, 'auto')).toBe('high')
-    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }, 'low')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'high', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }, 'auto')).toBe('high')
+    expect(requestedEffortOf({ samples: [], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }, 'low')).toBe('auto')
   })
 
   it('falls back when the session never picked', () => {
     expect(requestedEffortOf(undefined, 'auto')).toBe('auto')
-    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }, 'low')).toBe('low')
+    expect(requestedEffortOf({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }, 'low')).toBe('low')
   })
 
   it('falls back for a value the plugin does not understand', () => {
     // A gateway-specific wire value is not a plugin level: it keeps the
     // pre-existing behaviour (scheduler decides) instead of being passed on.
-    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }, 'auto')).toBe('auto')
+    expect(requestedEffortOf({ samples: [], userEffort: 'ultra', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }, 'auto')).toBe('auto')
   })
 })
 
@@ -207,7 +209,7 @@ describe('lastEffective — the level the last request actually carried (issue #
   })
 
   it('leaves samples and userEffort untouched', () => {
-    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }
+    const state = { samples: [{ name: 'bash', argsSize: 3 }], userEffort: 'auto', lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }
     const next = applyAutoSchedule(state, header('low'))
     expect(next.samples).toBe(state.samples)
     expect(next.userEffort).toBe('auto')
@@ -249,6 +251,7 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
       lastProvider: 'trae',
       lastModel: 'deepseek-v4.1-flash',
       modelSwitches: 0,
+      pendingSchedulerWrite: false,
     }
     const view = def.wire.view(state)
     // samples stay host-side; the browser gets exactly what it renders — now
@@ -266,7 +269,7 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
 
   it('keeps the view identity when only host-only state (samples) changes', () => {
     const def = buildAutoScheduleDefinition()
-    const base: AutoScheduleState = { samples: [], userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 1 }], turn: 1, step: 1, lastProvider: null, lastModel: null, modelSwitches: 0 }
+    const base: AutoScheduleState = { samples: [], userEffort: 'auto', lastEffective: 'low', trace: [{ level: 'low', intent: 'auto', count: 1 }], turn: 1, step: 1, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }
     const first = def.wire.view(base)
     const grown: AutoScheduleState = { ...base, samples: [{ name: 'bash', argsSize: 9 }] }
     // Same content, new state reference: the Object.is gate must stay closed,
@@ -279,7 +282,7 @@ describe('wire — the unit must be client-visible (empty-tab bug)', () => {
 
   it('reuses the view for a repeated identical state read', () => {
     const def = buildAutoScheduleDefinition()
-    const state: AutoScheduleState = { samples: [], userEffort: null, lastEffective: 'max', trace: [{ level: 'max', intent: 'default', count: 1 }], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }
+    const state: AutoScheduleState = { samples: [], userEffort: null, lastEffective: 'max', trace: [{ level: 'max', intent: 'default', count: 1 }], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }
     expect(def.wire.view(state)).toBe(def.wire.view(state))
   })
 
@@ -448,5 +451,115 @@ describe('provider/model — recorded on every committed request', () => {
     expect(view.lastModel).toBe('deepseek-v4.1-flash')
     expect(view.modelSwitches).toBe(0)
     expect(def.wire.viewSchema.parse(view)).toEqual(view)
+  })
+})
+
+/**
+ * The scheduler-write mark (`plugin:dsh-thinking-levels/scheduler-write`).
+ *
+ * The host never logs this plugin's own `model/selection` writes, so without a
+ * mark the trace can only say `unknown`. `appendPluginRecord` gives us an
+ * `ignorable` `plugin:` record for exactly this: the plugin commits one when it
+ * writes, and the projection attributes the NEXT header to the scheduler.
+ */
+describe('scheduler-write marks — proven attribution', () => {
+  const mark = (level?: string, extra: Record<string, unknown> = {}) => ({
+    type: 'plugin:dsh-thinking-levels/scheduler-write',
+    ignorable: true,
+    data: { ...level === undefined ? {} : { level }, ...extra },
+  })
+  const routed = (level: string) => ({
+    type: 'request/header',
+    data: { header: { config: { provider: 'p', model: 'm', reasoningEffort: level } } },
+  })
+
+  it('attributes the header after a mark to the scheduler, not to unknown', () => {
+    let state = buildAutoScheduleDefinition().init()
+    // A user pick of `high` is on record, then the plugin writes `low`.
+    state = applyAutoSchedule(state, selection('high'))
+    state = applyAutoSchedule(state, mark('low'))
+    state = applyAutoSchedule(state, routed('low'))
+    // Without the mark this header is `unknown` (the record says high, the
+    // request says low). The mark proves the plugin wrote it.
+    expect(state.trace[0]).toMatchObject({ level: 'low', intent: 'scheduler' })
+  })
+
+  it('spends the mark on exactly one header', () => {
+    let state = buildAutoScheduleDefinition().init()
+    state = applyAutoSchedule(state, selection('high'))
+    state = applyAutoSchedule(state, mark('low'))
+    state = applyAutoSchedule(state, routed('low'))
+    state = applyAutoSchedule(state, routed('high'))
+    // The second header has no mark behind it: back to the log's evidence.
+    // (It opens a NEW run because the intent differs — `scheduler` vs `manual` —
+    // which is exactly why intent is part of the run identity.)
+    expect(state.trace).toHaveLength(2)
+    expect(state.trace[1]).toMatchObject({ level: 'high', intent: 'manual' })
+    expect(state.pendingSchedulerWrite).toBe(false)
+  })
+
+  it('does not let a mark claim a level the header did not carry', () => {
+    let state = buildAutoScheduleDefinition().init()
+    state = applyAutoSchedule(state, mark('max'))
+    state = applyAutoSchedule(state, routed('low'))
+    // The mark only claims AUTHORSHIP of the next header; the level shown is
+    // always the one that actually went out.
+    expect(state.trace[0]).toMatchObject({ level: 'low', intent: 'scheduler' })
+  })
+
+  it('never seeds userEffort from a mark (it is not a user selection)', () => {
+    const state = applyAutoSchedule(empty(), mark('low'))
+    expect(state.userEffort).toBeNull()
+    expect(state.pendingSchedulerWrite).toBe(true)
+  })
+
+  it('stays referentially stable for a repeated mark', () => {
+    const once = applyAutoSchedule(empty(), mark('low'))
+    expect(applyAutoSchedule(once, mark('low'))).toBe(once)
+  })
+
+  it('spends the mark on an effort-less header without inventing a run', () => {
+    let state = applyAutoSchedule(empty(), mark('low'))
+    state = applyAutoSchedule(state, { type: 'request/header', data: { header: { config: { provider: 'p', model: 'm' } } } })
+    expect(state.trace).toEqual([])
+    expect(state.pendingSchedulerWrite).toBe(false)
+  })
+
+  it('ignores a foreign plugin record', () => {
+    const foreign = { type: 'plugin:someone-else/write', ignorable: true, data: { level: 'max' } }
+    const state = applyAutoSchedule(empty(), foreign)
+    expect(state.pendingSchedulerWrite).toBe(false)
+  })
+
+  it('keeps the mark out of the wire payload (host-only bookkeeping)', () => {
+    const def = buildAutoScheduleDefinition()
+    let state = def.init()
+    state = applyAutoSchedule(state, mark('low'))
+    const view = def.wire.view(state)
+    expect('pendingSchedulerWrite' in view).toBe(false)
+  })
+})
+
+describe('schedulerWriteOf — mark reader', () => {
+  it('recognizes the mark and normalizes its payload', () => {
+    expect(schedulerWriteOf({
+      type: 'plugin:dsh-thinking-levels/scheduler-write',
+      ignorable: true,
+      data: { level: 'low', provider: 'trae', model: 'm', applied: 'step', intent: 'auto' },
+    })).toEqual({ level: 'low', provider: 'trae', model: 'm', applied: 'step', intent: 'auto' })
+  })
+
+  it('drops unknown fields and malformed values instead of trusting them', () => {
+    expect(schedulerWriteOf({
+      type: 'plugin:dsh-thinking-levels/scheduler-write',
+      data: { level: 7, clear: 'yes', applied: 'sideways', junk: true },
+    })).toEqual({})
+  })
+
+  it('returns undefined for every other event shape', () => {
+    expect(schedulerWriteOf(undefined)).toBeUndefined()
+    expect(schedulerWriteOf(null)).toBeUndefined()
+    expect(schedulerWriteOf({ type: 'request/header', data: {} })).toBeUndefined()
+    expect(schedulerWriteOf({ type: 'plugin:dsh-thinking-levels/scheduler-write' })).toBeUndefined()
   })
 })

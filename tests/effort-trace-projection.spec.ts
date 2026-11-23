@@ -16,7 +16,7 @@ import {
   type AutoScheduleState,
 } from '../src/auto-schedule-projection.ts'
 
-const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 })
+const empty = (): AutoScheduleState => ({ samples: [], userEffort: null, lastEffective: null, trace: [], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false })
 
 /** A committed `request/header` with the effective reasoningEffort in config. */
 const header = (reasoningEffort?: unknown) => ({
@@ -135,10 +135,10 @@ describe('applyAutoSchedule — trace fold over the session log', () => {
   })
 })
 
-describe('buildAutoScheduleDefinition — stateVersion 5', () => {
-  it('declares version 5 with a schema that accepts a stamped trace', () => {
+describe('buildAutoScheduleDefinition — stateVersion 6', () => {
+  it('declares version 6 with a schema that accepts a stamped trace', () => {
     const definition = buildAutoScheduleDefinition()
-    expect(definition.stateVersion).toBe(5)
+    expect(definition.stateVersion).toBe(6)
     const row = {
       samples: [],
       userEffort: 'auto',
@@ -149,13 +149,14 @@ describe('buildAutoScheduleDefinition — stateVersion 5', () => {
       lastProvider: 'trae',
       lastModel: 'deepseek-v4.1-flash',
       modelSwitches: 1,
+      pendingSchedulerWrite: false,
     }
     expect(definition.stateSchema.parse(row)).toEqual(row)
   })
 
   it('still accepts a run without position stamps (an un-stamped header)', () => {
     const definition = buildAutoScheduleDefinition()
-    const row = { samples: [], userEffort: null, lastEffective: 'low', trace: [{ level: 'low', intent: 'default', count: 1 }], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0 }
+    const row = { samples: [], userEffort: null, lastEffective: 'low', trace: [{ level: 'low', intent: 'default', count: 1 }], turn: 0, step: 0, lastProvider: null, lastModel: null, modelSwitches: 0, pendingSchedulerWrite: false }
     expect(definition.stateSchema.parse(row)).toEqual(row)
   })
 })

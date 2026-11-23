@@ -116,6 +116,12 @@ const INTENT_TONE: Record<EffortRun['intent'], { color: string; bg: string }> = 
     color: 'var(--dsw-alias-state-warn-label, #b9770e)',
     bg: 'var(--dsw-alias-state-warn-tertiary, rgba(185,119,14,0.06))',
   },
+  scheduler: {
+    // Proven plugin output: the same business accent as `manual` on purpose —
+    // both are "a known writer chose this". The LABEL carries the difference.
+    color: 'var(--dsw-alias-state-success-primary, #1e8449)',
+    bg: 'var(--dsw-alias-state-success-tertiary, rgba(30,132,73,0.10))',
+  },
 }
 
 /** Unknown ids rank after the standard table (same tail semantics as the slider). */
