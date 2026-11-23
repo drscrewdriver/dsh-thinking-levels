@@ -15,9 +15,11 @@ const identity = (key: string): string => key
 
 /** A SessionsFace stub serving one fixed trace through the projection face. */
 function sessionsWith(trace: readonly EffortRun[] | undefined, hooks?: { onSubscribe?: (listener: () => void) => void }): SessionsFace {
-  let current = trace
+  const current = trace
   const face = {
-    getSnapshot: () => ({ value: { trace: current } }),
+    // REAL host shape: the projection face's snapshot IS the state record
+    // (`projection-store.ts:236` — `rows.get(key)?.value`), never `{ value }`.
+    getSnapshot: () => ({ trace: current }),
     subscribe: (listener: () => void) => {
       hooks?.onSubscribe?.(listener)
       return () => {}
@@ -25,7 +27,7 @@ function sessionsWith(trace: readonly EffortRun[] | undefined, hooks?: { onSubsc
   }
   return {
     scope: () => undefined,
-    binding: (sessionId: string) => ({
+    binding: () => ({
       session: { projections: { faceOf: (key: string) => (key === 'tlAutoSchedule' ? face : undefined) } },
     }),
   } as unknown as SessionsFace
@@ -80,6 +82,28 @@ describe('traceOf — the projection face read path', () => {
     expect(traceOf(sessionsWith(trace), 's1')).toEqual(trace)
   })
 
+  it('regression: reads a BARE state snapshot (the real host shape, no { value } wrapper)', () => {
+    // projection-store.ts:236 returns `rows.get(key)?.value` — the state
+    // itself. Assuming a `{ value }` wrapper made the tab render its empty
+    // state over a filled trace on every real host (4.6.0, live).
+    const state = { samples: [], userEffort: 'high', lastEffective: 'low', trace: [run('low', 'manual', 1)] }
+    const face = { getSnapshot: () => state, subscribe: () => () => {} }
+    const sessions = {
+      scope: () => undefined,
+      binding: () => ({ session: { projections: { faceOf: () => face } } }),
+    } as unknown as SessionsFace
+    expect(traceOf(sessions, 's1')).toEqual([run('low', 'manual', 1)])
+  })
+
+  it('still unwraps a legacy { value } wrapper', () => {
+    const face = { getSnapshot: () => ({ value: { trace: [run('max', 'auto', 1)] } }), subscribe: () => () => {} }
+    const sessions = {
+      scope: () => undefined,
+      binding: () => ({ session: { projections: { faceOf: () => face } } }),
+    } as unknown as SessionsFace
+    expect(traceOf(sessions, 's1')).toEqual([run('max', 'auto', 1)])
+  })
+
   it('degrades to undefined on every absent piece', () => {
     expect(traceOf(undefined, 's1')).toBeUndefined()
     expect(traceOf(sessionsWith([run('high', 'auto', 1)]), undefined)).toBeUndefined()
@@ -126,10 +150,9 @@ describe('EffortTrace — the conversation-view tab body', () => {
 
   it('updates the rows when the projection face publishes', () => {
     let listeners: (() => void)[] = []
-    // The face caches its snapshot object (the registry gates republishes on
-    // Object.is, so `value.trace` is reference-stable between publishes —
-    // useSyncExternalStore requires that).
-    let snapshot: { value: { trace: readonly EffortRun[] } } = { value: { trace: [run('high', 'auto', 1)] } }
+    // The face caches its snapshot object (the store's row value is
+    // reference-stable between publishes — useSyncExternalStore requires that).
+    let snapshot: { trace: readonly EffortRun[] } = { trace: [run('high', 'auto', 1)] }
     const face = {
       getSnapshot: () => snapshot,
       subscribe: (listener: () => void) => {
@@ -150,7 +173,7 @@ describe('EffortTrace — the conversation-view tab body', () => {
     // A single run is the timeline's start: the start glyph, no count badge.
     expect(texts(renderer).join('|')).toContain('•|trace.intent.auto |high')
     act(() => {
-      snapshot = { value: { trace: [run('high', 'auto', 1), run('low', 'auto', 4)] } }
+      snapshot = { trace: [run('high', 'auto', 1), run('low', 'auto', 4)] }
       for (const listener of listeners) listener()
     })
     expect(texts(renderer).join('|')).toContain('↓|trace.intent.auto |low| ×|4')

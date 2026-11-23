@@ -32,6 +32,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NS, de, en, es, fr, it, ja, ko, pt, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { EffortTrace } from './effort-trace.tsx'
+import { projectionValueOf } from './projection-value.ts'
 import { ProjectionDataHook } from './context-ring.tsx'
 import { FamilySettingsSection, type FamilySectionInjected, type FamilyTabEntry } from './family-tab.tsx'
 // Type-only: pulls the settings shell's SlotMap merges ('settings.section').
@@ -257,12 +258,10 @@ export function apply(ctx: ClientContext): void {
     try {
       const face = sessions?.binding(sessionId)?.session?.projections?.faceOf?.('tlAutoSchedule')
       const snapshot = typeof face?.getSnapshot === 'function' ? face.getSnapshot() : undefined
-      const value = typeof snapshot === 'object' && snapshot !== null
-        ? (snapshot as { value?: unknown }).value
-        : undefined
-      const raw = typeof value === 'object' && value !== null
-        ? (value as { lastEffective?: unknown }).lastEffective
-        : undefined
+      // The projection face returns the state BARE; the `{ value }` wrapper is
+      // the settings-handle shape and read as undefined here (issue #11's
+      // symptom back on 4.6.0). See projection-value.ts.
+      const raw = projectionValueOf(snapshot)?.['lastEffective']
       return typeof raw === 'string' && raw.length > 0 ? raw : undefined
     } catch {
       // A thrown inject abdicates the seat entry and the shipped selector comes

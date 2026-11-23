@@ -30,6 +30,7 @@ import { useMemo, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { EFFORT_SLIDER_RANK } from '../thinking-level.ts'
 import type { EffortRun } from '../auto-schedule-projection.ts'
+import { projectionValueOf } from './projection-value.ts'
 
 /** Props the slot's `inject` option delivers (index.ts closes over the faces). */
 export interface EffortTraceInjected {
@@ -100,12 +101,10 @@ export function traceOf(
     if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
     const face = sessions?.binding(sessionId)?.session?.projections?.faceOf?.('tlAutoSchedule')
     const snapshot = typeof face?.getSnapshot === 'function' ? face.getSnapshot() : undefined
-    const value = typeof snapshot === 'object' && snapshot !== null
-      ? (snapshot as { value?: unknown }).value
-      : undefined
-    const raw = typeof value === 'object' && value !== null
-      ? (value as { trace?: unknown }).trace
-      : undefined
+    // The face snapshot IS the state (no `{ value }` wrapper — see
+    // projection-value.ts); reading `.value` here rendered the empty state
+    // over a filled trace on every real host.
+    const raw = projectionValueOf(snapshot)?.['trace']
     return Array.isArray(raw) ? raw as readonly EffortRun[] : undefined
   } catch {
     // A thrown cosmetic read must never escape: degrade to "no data".
