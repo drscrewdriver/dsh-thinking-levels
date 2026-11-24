@@ -1779,6 +1779,10 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
       {open
         ? (
           <div style={{ padding: '12px 16px' }}>
+            {/* 引导重启入口放在设置面上方：贴士也渲染在同一位置，跳过之后一眼就能重开。 */}
+            <p style={{ margin: '0 0 10px' }}>
+              <GuideRestartButton ns="thinking-levels" onOpen={() => { setGuideOpen(true) }} />
+            </p>
             {guideOpen
               ? (
                 <GuidePanel
@@ -1913,10 +1917,6 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
                   <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
                   <DeepSeekContextSection scope={deepseekScope} t={t} readonly={readonly} />
-                  {/* 引导重启入口：跳过之后想再看一次，不必清浏览器存储。 */}
-                  <p style={{ margin: '10px 0 0' }}>
-                    <GuideRestartButton ns="thinking-levels" onOpen={() => { setGuideOpen(true) }} />
-                  </p>
                 </>
               )}
           </div>

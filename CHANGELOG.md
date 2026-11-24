@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.7.1 (2026-11-25)
+
+- feat(guide): 「重新查看引导」入口从卡底移到卡顶（`GuidePanel` 之前），与其他八个接了统一引导的插件同形态。跳过标记与三步正文逐字未动（`dsh.guide.thinking-levels.skipped`）。
+
 ## 4.7.0 (2026-11-24)
 
 - **新增首次使用引导（3 步）**：设置卡顶部三步——按难度挑档位（简单问答降 low、复杂任务抬 high，默认自动就够用）、允许上浮（别一上来钉死 max，贵且慢）、圆环读数怎么看。底部恒定重开入口；Skip 与「开始使用」都写 `dsh.guide.thinking-levels.skipped`。
