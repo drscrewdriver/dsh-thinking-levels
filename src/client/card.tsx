@@ -31,6 +31,8 @@ import type { PricingPolicy } from '../price-catalog.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 import { contextWindowOf, deepseekSectionOf, DEEPSEEK_DEFAULT_WINDOW } from './model-panel.tsx'
 import type { ThinkingLevelsConfig } from '../index.ts'
+import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './guide.tsx'
+import { THINKING_GUIDE_STEPS } from './guide-steps.ts'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
 export interface ThinkingLevelsCardInjected {
@@ -1706,6 +1708,8 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
   // the input so typing a trailing comma does not fight the persisted array.
   const [simpleToolsText, setSimpleToolsText] = useState<string>((value.simpleTools ?? []).join(', '))
   const viewValue = { ...value, ...pendingTl }
+  // 首次使用引导：本地标记持久化；卡底「重新查看引导」清标记就地重开。
+  const [guideOpen, setGuideOpen] = useState(() => !isGuideSkipped('thinking-levels'))
   const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
   const defaultPricing = PRICING_OPTIONS.includes(viewValue.defaultPricing as PricingPolicy) ? viewValue.defaultPricing as PricingPolicy : 'estimate'
   const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'simpleTools' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
@@ -1775,6 +1779,15 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
       {open
         ? (
           <div style={{ padding: '12px 16px' }}>
+            {guideOpen
+              ? (
+                <GuidePanel
+                  ns="thinking-levels"
+                  steps={guideSteps(THINKING_GUIDE_STEPS)}
+                  onClose={() => { setGuideOpen(false) }}
+                />
+              )
+              : null}
             {unavailable
               ? (
                 <div style={{ fontSize: '13px', color: 'var(--dsw-alias-label-tertiary)' }}>
@@ -1900,6 +1913,10 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
                   <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
                   <DeepSeekContextSection scope={deepseekScope} t={t} readonly={readonly} />
+                  {/* 引导重启入口：跳过之后想再看一次，不必清浏览器存储。 */}
+                  <p style={{ margin: '10px 0 0' }}>
+                    <GuideRestartButton ns="thinking-levels" onOpen={() => { setGuideOpen(true) }} />
+                  </p>
                 </>
               )}
           </div>

@@ -23,8 +23,9 @@
  * projection pushes — no polling.
  *
  * Zero host coupling beyond react + the injected seats: plain SVG + HTML
- * with token-based inline styling; copy is inline zh/en by document language
- * (the plugin's locale dictionaries stay untouched).
+ * with token-based inline styling; copy comes from the plugin dictionary
+ * (`ring.*`), delivered as the `t` thunk from the model panel — a ru/es host
+ * then reads its own language instead of the old inline zh/en pair.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
@@ -111,112 +112,13 @@ export interface ContextRingProps {
    * request/context event), the declared window of the ACTIVE model fills in.
    */
   contextWindowFallback?: number
+  /**
+   * Dictionary thunk (`locale.bind(NS)` in the model panel, or the host's own
+   * `PropsLocale` seat). Optional: a caller without it renders keys, never
+   * Chinese — degrade to keys rather than to a language nobody asked for.
+   */
+  t?: (key: string) => string
 }
-
-/* ── inline copy: zh default, en elsewhere ──────────────────────────────── */
-
-interface CopyShape {
-  title: string
-  used: string
-  remaining: string
-  window: string
-  percent: string
-  system: string
-  tools: string
-  messages: string
-  warning: string
-  aria: (percent: string) => string
-  unset: string
-  billing: string
-  billStep: string
-  billTurn: string
-  billSession: string
-  billCacheRead: string
-  billCacheMiss: string
-  billOutput: string
-  billFullMiss: string
-  billRoundsWord: string
-  billPeak: string
-  billOffPeak: string
-  billFlat: string
-  billUnpriced: string
-  billCustom: string
-  billPricedAs: (label: string) => string
-  billPriced: string
-  billEstimate: string
-  /** 兜底典型价估算的诚实标注（未校准仅供参考）。 */
-  billUncalibratedHint: string
-}
-
-const COPY: Record<'zh' | 'en', CopyShape> = {
-  zh: {
-    title: '上下文检查',
-    used: '已用',
-    remaining: '剩余',
-    window: '窗口容量',
-    percent: '占用',
-    system: '系统提示词',
-    tools: '工具定义',
-    messages: '对话消息',
-    warning: '上下文即将用尽——建议压缩上下文或开启新会话。',
-    aria: (percent: string) => `上下文已用 ${percent}`,
-    unset: '本轮尚未产生用量',
-    billing: '缓存账单',
-    billStep: '当前步',
-    billTurn: '当前轮',
-    billSession: '会话累计',
-    billCacheRead: '缓存命中',
-    billCacheMiss: '缓存未命中',
-    billOutput: '输出',
-    billFullMiss: '完全失效',
-    billRoundsWord: '步',
-    billPeak: '峰价',
-    billOffPeak: '谷价',
-    billFlat: '平价',
-    billUnpriced: '未计价',
-    billCustom: '自填价计价',
-    billPricedAs: (label: string) => `按 ${label} 计价`,
-    billPriced: '按目录价计价',
-    billEstimate: '目录外估算价',
-    billUncalibratedHint: '未校准·仅供参考',
-  },
-  en: {
-    title: 'Context check',
-    used: 'Used',
-    remaining: 'Remaining',
-    window: 'Context window',
-    percent: 'Pressure',
-    system: 'System prompt',
-    tools: 'Tool definitions',
-    messages: 'Messages',
-    warning: 'Context is nearly full — compact the context or start a new session.',
-    aria: (percent: string) => `${percent} of context used`,
-    unset: 'No usage yet in this turn',
-    billing: 'Cache billing',
-    billStep: 'This step',
-    billTurn: 'This turn',
-    billSession: 'Session total',
-    billCacheRead: 'Cache read',
-    billCacheMiss: 'Cache miss',
-    billOutput: 'Output',
-    billFullMiss: 'Full misses',
-    billRoundsWord: 'steps',
-    billPeak: 'Peak rates',
-    billOffPeak: 'Off-peak rates',
-    billFlat: 'Flat rate',
-    billUnpriced: 'Not billed',
-    billCustom: 'priced at custom rates',
-    billPricedAs: (label: string) => `priced as ${label}`,
-    billPriced: 'priced at catalog rates',
-    billEstimate: 'estimated off-catalog',
-    billUncalibratedHint: 'uncalibrated — reference only',
-  },
-} as const
-
-const copy = (): CopyShape =>
-  typeof document !== 'undefined' && document.documentElement.lang?.toLowerCase().startsWith('zh')
-    ? COPY.zh
-    : COPY.en
 
 /* ── inline styling (no CSS modules in the client bundle) ──────────────── */
 
@@ -439,18 +341,22 @@ function BreakdownRow({ label, value, color }: { label: string; value: number; c
  * 读数、金额位换「未计价」文案；旧 view 缺 priced 字段 → 按历史行为计价。
  * 混币种会话不给跨币种合计，改按币种分行。
  */
-function BillingBlock({ billing }: { billing: CacheBillingLike }): JSX.Element {
-  const c = copy()
+function BillingBlock({ billing, t }: { billing: CacheBillingLike; t: (key: string) => string }): JSX.Element {
+  /** `ring.*` 读取（字典里只有一个 `%n` 占位符，有值就填）。 */
+  const c = (key: string, value?: string): string => {
+    const text = t(key)
+    return value === undefined ? text : text.replace('%n', value)
+  }
   const cur = billing.currency
   const priced = billing.priced !== false
   const money = (amount: number | undefined, digits: number): JSX.Element | string =>
     priced
       ? formatMoney(amount ?? 0, digits, cur)
-      : <span style={{ color: 'var(--dsw-alias-label-caption, inherit)' }}>{c.billUnpriced}</span>
+      : <span style={{ color: 'var(--dsw-alias-label-caption, inherit)' }}>{c('ring.bill.unpriced')}</span>
   const dash = priced ? undefined : '—'
   const buckets = Array.isArray(billing.sessionByCurrency) ? billing.sessionByCurrency : []
   const sessionTotal: JSX.Element | string = !priced
-    ? <span style={{ color: 'var(--dsw-alias-label-caption, inherit)' }}>{c.billUnpriced}</span>
+    ? <span style={{ color: 'var(--dsw-alias-label-caption, inherit)' }}>{c('ring.bill.unpriced')}</span>
     : billing.mixedCurrency === true && buckets.length > 1
       // 跨币种不相加：逐桶展示（主币种取 session* 字段，其余补列）
       ? buckets.map((b) => `${currencySymbol(b.currency)}${(b.hitCost + b.missCost + b.outputCost).toFixed(2)}`).join(' + ')
@@ -458,37 +364,37 @@ function BillingBlock({ billing }: { billing: CacheBillingLike }): JSX.Element {
   return (
     <dl style={{ margin: '4px 0 0', padding: '6px 0 0', borderTop: '1px solid var(--dsw-alias-border-l3, rgba(127,127,127,0.18))' }}>
       <div style={rowStyle}>
-        <dt style={{ ...rowLabelStyle, color: '#a78bfa' }}>{c.billStep}</dt>
+        <dt style={{ ...rowLabelStyle, color: '#a78bfa' }}>{c('ring.bill.step')}</dt>
         <dd style={{ ...rowValueStyle, margin: 0 }}>
           {formatTokens((billing.totalInputTokens ?? 0) + (billing.outputTokens ?? 0))} tok {money(billing.cost, 4)}
         </dd>
       </div>
-      <BillSubRow label={c.billCacheRead} tokens={billing.cacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.cost ?? 0, 4, cur)} color={BILL_COLORS.hit} />
-      <BillSubRow label={c.billCacheMiss} tokens={(billing.totalInputTokens ?? 0) - (billing.cacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.missCost ?? 0, 4, cur)} color={BILL_COLORS.miss} />
-      <BillSubRow label={c.billOutput} tokens={billing.outputTokens ?? 0} amount={dash ?? formatMoney(billing.outputCost ?? 0, 4, cur)} color={BILL_COLORS.output} />
+      <BillSubRow label={c('ring.bill.cacheRead')} tokens={billing.cacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.cost ?? 0, 4, cur)} color={BILL_COLORS.hit} />
+      <BillSubRow label={c('ring.bill.cacheMiss')} tokens={(billing.totalInputTokens ?? 0) - (billing.cacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.missCost ?? 0, 4, cur)} color={BILL_COLORS.miss} />
+      <BillSubRow label={c('ring.bill.output')} tokens={billing.outputTokens ?? 0} amount={dash ?? formatMoney(billing.outputCost ?? 0, 4, cur)} color={BILL_COLORS.output} />
       <div style={rowStyle}>
-        <dt style={{ ...rowLabelStyle, color: '#22d3ee' }}>{c.billTurn}</dt>
+        <dt style={{ ...rowLabelStyle, color: '#22d3ee' }}>{c('ring.bill.turn')}</dt>
         <dd style={{ ...rowValueStyle, margin: 0 }}>
           {formatTokens(billing.turnTokens ?? 0)} tok {money(billing.turnCost, 3)}
         </dd>
       </div>
-      <BillSubRow label={c.billCacheRead} tokens={billing.turnCacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.turnHitCost ?? 0, 3, cur)} color={BILL_COLORS.hit} />
-      <BillSubRow label={c.billCacheMiss} tokens={(billing.turnInputTokens ?? 0) - (billing.turnCacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.turnMissCost ?? 0, 3, cur)} color={BILL_COLORS.miss} />
-      <BillSubRow label={c.billOutput} tokens={billing.turnOutputTokens ?? 0} amount={dash ?? formatMoney(billing.turnOutputCost ?? 0, 3, cur)} color={BILL_COLORS.output} />
+      <BillSubRow label={c('ring.bill.cacheRead')} tokens={billing.turnCacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.turnHitCost ?? 0, 3, cur)} color={BILL_COLORS.hit} />
+      <BillSubRow label={c('ring.bill.cacheMiss')} tokens={(billing.turnInputTokens ?? 0) - (billing.turnCacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.turnMissCost ?? 0, 3, cur)} color={BILL_COLORS.miss} />
+      <BillSubRow label={c('ring.bill.output')} tokens={billing.turnOutputTokens ?? 0} amount={dash ?? formatMoney(billing.turnOutputCost ?? 0, 3, cur)} color={BILL_COLORS.output} />
       <div style={rowStyle}>
         <dt style={{ ...rowLabelStyle, color: '#f472b6' }}>
-          {c.billSession}{billing.sessionRounds ? ` · ${billing.sessionRounds} ${c.billRoundsWord}` : ''}
+          {c('ring.bill.session')}{billing.sessionRounds ? ` · ${billing.sessionRounds} ${c('ring.bill.rounds')}` : ''}
         </dt>
         <dd style={{ ...rowValueStyle, margin: 0 }}>
           {formatTokens((billing.sessionInputTokens ?? 0) + (billing.sessionOutputTokens ?? 0))} tok {sessionTotal}
         </dd>
       </div>
-      <BillSubRow label={c.billCacheRead} tokens={billing.sessionCacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.sessionCacheHitCost ?? 0, 2, cur)} color={BILL_COLORS.hit} />
-      <BillSubRow label={c.billCacheMiss} tokens={(billing.sessionInputTokens ?? 0) - (billing.sessionCacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.sessionMissCost ?? 0, 2, cur)} color={BILL_COLORS.miss} />
-      <BillSubRow label={c.billOutput} tokens={billing.sessionOutputTokens ?? 0} amount={dash ?? formatMoney(billing.sessionOutputCost ?? 0, 2, cur)} color={BILL_COLORS.output} />
+      <BillSubRow label={c('ring.bill.cacheRead')} tokens={billing.sessionCacheReadTokens ?? 0} amount={dash ?? formatMoney(billing.sessionCacheHitCost ?? 0, 2, cur)} color={BILL_COLORS.hit} />
+      <BillSubRow label={c('ring.bill.cacheMiss')} tokens={(billing.sessionInputTokens ?? 0) - (billing.sessionCacheReadTokens ?? 0)} amount={dash ?? formatMoney(billing.sessionMissCost ?? 0, 2, cur)} color={BILL_COLORS.miss} />
+      <BillSubRow label={c('ring.bill.output')} tokens={billing.sessionOutputTokens ?? 0} amount={dash ?? formatMoney(billing.sessionOutputCost ?? 0, 2, cur)} color={BILL_COLORS.output} />
       {(billing.sessionFullMissSteps ?? 0) > 0 && (
         <div style={rowStyle}>
-          <dt style={{ ...rowLabelStyle, color: '#f43f5e' }}>{c.billFullMiss}</dt>
+          <dt style={{ ...rowLabelStyle, color: '#f43f5e' }}>{c('ring.bill.fullMiss')}</dt>
           <dd style={{ ...rowValueStyle, margin: 0 }}>{billing.sessionFullMissSteps}</dd>
         </div>
       )}
@@ -527,7 +433,13 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
       : undefined
   const hasReading = used !== undefined && window_ !== undefined && window_ > 0
 
-  const c = copy()
+  /** Dictionary thunk: the model panel passes `locale.bind(NS)`; without it keys render. */
+  const t = props.t ?? ((key: string) => key)
+  /** `ring.*` 读取（字典里只有一个 `%n` 占位符，有值就填）。 */
+  const c = (key: string, value?: string): string => {
+    const text = t(key)
+    return value === undefined ? text : text.replace('%n', value)
+  }
   const percent = hasReading
     ? Math.min(100, Math.round(((used as number) / (window_ as number)) * 100))
     : 0
@@ -536,9 +448,9 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
   const rows: Array<{ label: string; value: number | undefined; color: string }> = !hasReading || breakdown === undefined
     ? []
     : [
-      { label: c.system, value: breakdown.systemTokens, color: BREAKDOWN_COLORS.system },
-      { label: c.tools, value: breakdown.toolsTokens, color: BREAKDOWN_COLORS.tools },
-      { label: c.messages, value: breakdown.messageTokens, color: BREAKDOWN_COLORS.messages },
+      { label: c('ring.system'), value: breakdown.systemTokens, color: BREAKDOWN_COLORS.system },
+      { label: c('ring.tools'), value: breakdown.toolsTokens, color: BREAKDOWN_COLORS.tools },
+      { label: c('ring.messages'), value: breakdown.messageTokens, color: BREAKDOWN_COLORS.messages },
     ]
 
   // Hosts without the projection hook seat (≤0.1.6) can never produce a
@@ -553,7 +465,7 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
       <button
         type="button"
         style={hasReading ? triggerStyle : { ...triggerStyle, opacity: 0.55 }}
-        aria-label={hasReading ? c.aria(`${percent}%`) : c.unset}
+        aria-label={hasReading ? c('ring.aria', `${percent}%`) : c('ring.unset')}
         aria-haspopup={hasReading ? 'dialog' : undefined}
         aria-expanded={open}
         onClick={() => { if (hasReading) setOpen(state => !state) }}
@@ -564,17 +476,17 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
         </span>
       </button>
       {open && hasReading && (
-        <div style={popStyle} role="dialog" aria-label={c.title}>
+        <div style={popStyle} role="dialog" aria-label={c('ring.title')}>
           <div style={headStyle}>
-            {c.title}
+            {c('ring.title')}
             <span style={{ ...rowValueStyle, ...figureStyle }}>~{formatTokens(used)} / {formatTokens(window_)}</span>
           </div>
           <div style={rowStyle}>
-            <dt style={rowLabelStyle}>{c.percent}</dt>
+            <dt style={rowLabelStyle}>{c('ring.percent')}</dt>
             <dd style={{ ...rowValueStyle, margin: 0, color }}>{percent}%</dd>
           </div>
           <div style={rowStyle}>
-            <dt style={rowLabelStyle}>{c.remaining}</dt>
+            <dt style={rowLabelStyle}>{c('ring.remaining')}</dt>
             <dd style={{ ...rowValueStyle, margin: 0 }}>{formatTokens(remaining)}</dd>
           </div>
           {rows.every(row => typeof row.value === 'number') && rows.length > 0 && (
@@ -582,23 +494,23 @@ export function ContextRing(props: ContextRingProps): JSX.Element | null {
               {rows.map(row => <BreakdownRow key={row.label} label={row.label} value={row.value as number} color={row.color} />)}
             </dl>
           )}
-          {billing?.available === true && <BillingBlock billing={billing} />}
-          {percent >= 85 && <div style={warnStyle}>{c.warning}</div>}
+          {billing?.available === true && <BillingBlock billing={billing} t={t} />}
+          {percent >= 85 && <div style={warnStyle}>{c('ring.warning')}</div>}
           <div style={footStyle}>
-            {c.window}: {hasReading ? (window_ as number).toLocaleString() : c.unset}
+            {c('ring.window')}: {hasReading ? (window_ as number).toLocaleString() : c('ring.unset')}
             {billing?.available === true
-              ? ` · ${billing.tier === 'peak' ? c.billPeak : billing.tier === 'offPeak' ? c.billOffPeak : billing.tier === 'flat' ? c.billFlat : c.billUnpriced} · ${
+              ? ` · ${billing.tier === 'peak' ? c('ring.bill.peak') : billing.tier === 'offPeak' ? c('ring.bill.offPeak') : billing.tier === 'flat' ? c('ring.bill.flat') : c('ring.bill.unpriced')} · ${
                   billing.priced === false
-                    ? c.billUnpriced
+                    ? c('ring.bill.unpriced')
                     : billing.estimated === true
-                      ? c.billUncalibratedHint
+                      ? c('ring.bill.uncalibrated')
                       : typeof billing.catalogLabel === 'string'
-                        ? c.billPricedAs(billing.catalogLabel)
+                        ? c('ring.bill.pricedAs', billing.catalogLabel)
                         : billing.pricingSource === 'custom'
-                          ? c.billCustom
+                          ? c('ring.bill.custom')
                           : billing.modelMatched === false
-                            ? c.billEstimate
-                            : c.billPriced
+                            ? c('ring.bill.estimate')
+                            : c('ring.bill.priced')
                 }`
               : ''}
           </div>

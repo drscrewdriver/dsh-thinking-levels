@@ -1,0 +1,127 @@
+{
+  "dsh-browser-cdp": {
+    "cUi": 148,
+    "aPair": 82,
+    "bLog": 0,
+    "keys": {},
+    "whitelist": []
+  },
+  "dsh-prime-memory": {
+    "cUi": 0,
+    "aPair": 0,
+    "bLog": 14,
+    "keys": {
+      "zh": 1425,
+      "en": 1425,
+      "ru": 1425
+    },
+    "whitelist": [
+      {
+        "file": "client/src/sidebar-icon.ts",
+        "text": "=== '记忆'",
+        "reason": "DOM 文案匹配钩子，非展示文案"
+      }
+    ],
+    "keysFrom": "client/src/locales/keys.json"
+  },
+  "dsh-tidy-display": {
+    "cUi": 485,
+    "aPair": 0,
+    "bLog": 4,
+    "keys": {
+      "zh": 286,
+      "en": 286,
+      "ru": 286,
+      "es": 286
+    },
+    "whitelist": []
+  },
+  "dsh-thinking-levels": {
+    "cUi": 0,
+    "aPair": 0,
+    "bLog": 0,
+    "keys": {
+      "zh": 153,
+      "en": 153,
+      "ru": 153,
+      "es": 153
+    },
+    "whitelist": [
+      {
+        "file": "src/client/guide.tsx",
+        "reason": "引导词表刻意独立于插件字典"
+      },
+      {
+        "file": "src/client/guide-steps.ts",
+        "reason": "引导词表刻意独立于插件字典"
+      }
+    ]
+  },
+  "dsh-search-index": {
+    "cUi": 0,
+    "aPair": 14,
+    "bLog": 1,
+    "keys": {
+      "zh": 195,
+      "en": 195,
+      "ru": 195,
+      "es": 195
+    },
+    "whitelist": [
+      {
+        "file": "src/client/panel.tsx",
+        "text": "/* 侧栏 footer",
+        "reason": "CSS 注释被当文本"
+      }
+    ]
+  },
+  "dsh-session-guard": {
+    "cUi": 58,
+    "aPair": 6,
+    "bLog": 0,
+    "keys": {
+      "zh": 35,
+      "en": 35,
+      "ru": 35,
+      "es": 35
+    },
+    "whitelist": [
+      {
+        "file": "src/client/guide.tsx",
+        "reason": "引导词表刻意独立于插件字典"
+      },
+      {
+        "file": "src/client/guide-steps.ts",
+        "reason": "引导词表刻意独立于插件字典"
+      }
+    ]
+  },
+  "dsh-perm-gate": {
+    "cUi": 0,
+    "aPair": 14,
+    "bLog": 0,
+    "keys": {
+      "zh": 247,
+      "en": 247,
+      "ru": 247,
+      "es": 247
+    },
+    "whitelist": []
+  },
+  "dsh-spirit": {
+    "cUi": 2,
+    "aPair": 0,
+    "bLog": 18,
+    "keys": {
+      "zh": 405,
+      "en": 405
+    },
+    "whitelist": [
+      {
+        "file": "client/src/sea/sea-render-webgl.ts",
+        "text": "// 光晕通道",
+        "reason": "代码注释被当文本"
+      }
+    ]
+  }
+}

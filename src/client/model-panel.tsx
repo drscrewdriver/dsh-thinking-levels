@@ -756,7 +756,7 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessi
           model selector. Lives inside the seat this panel owns, so the
           position is exact. Capacity falls back to the ACTIVE model's
           declared window when the pressure projection carries none. */}
-      <ContextRing contextWindowFallback={activeWindow} />
+      <ContextRing contextWindowFallback={activeWindow} t={t} />
       {open
         ? (
           <>
