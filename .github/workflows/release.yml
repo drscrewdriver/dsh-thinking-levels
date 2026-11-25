@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write            # ★ Provenance 绿标必需：打开 OIDC，否则 --provenance 静默降级
 
 concurrency:
   group: release-${{ github.repository }}
@@ -94,7 +95,7 @@ jobs:
       # ⑥ 发布
       - name: npm publish
         if: steps.guard.outputs.exists == 'false' && (github.event_name == 'push' || inputs.dry_run == false)
-        run: npm publish --registry https://registry.npmjs.org
+        run: npm publish --provenance --access public --registry https://registry.npmjs.org
 
       # ⑦ dist-tag 同步：三档判定（查询失败→重试；无线标签→收工；有标签→逐个 add）
       - name: 同步 dsh-* 线标签
