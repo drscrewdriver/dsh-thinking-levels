@@ -238,7 +238,8 @@ const GUIDE_CSS = `
 .sgGuideBtn{appearance:none;font:inherit;font-size:12px;padding:5px 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.3));background:transparent;color:var(--dsw-alias-label-primary, currentColor);cursor:pointer}
 .sgGuideBtn-primary{background:var(--dsw-alias-button-primary-fill, #4d6bfe);border-color:transparent;color:#fff}
 .sgGuideBtn-skip{margin-right:auto;color:var(--dsw-alias-label-tertiary, rgba(127,127,127,.9));border-color:transparent;text-decoration:underline}
-.sgGuideRestart{appearance:none;font:inherit;font-size:12px;padding:0;border:0;background:transparent;color:var(--dsw-alias-link-primary, #4d6bfe);cursor:pointer;text-decoration:underline}
+.sgGuideRestart{appearance:none;font:inherit;font-size:12px;line-height:1.4;padding:4px 12px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.35));background:var(--dsw-alias-bg-layer-2, rgba(127,127,127,.06));color:var(--dsw-alias-label-primary, currentColor);cursor:pointer;text-decoration:none}
+.sgGuideRestart:hover{border-color:var(--dsw-alias-button-primary-fill, #4d6bfe);color:var(--dsw-alias-button-primary-fill, #4d6bfe)}
 `
 
 function injectGuideCss(): void {
