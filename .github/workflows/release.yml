@@ -85,9 +85,9 @@ jobs:
       - name: 幂等检查
         id: guard
         run: |
-          if npm view "$PKG_NAME$VERSION" version --registry https://registry.npmjs.org 2>/dev/null | grep -q .; then
+          if npm view "$PKG_NAME@$VERSION" version --registry https://registry.npmjs.org 2>/dev/null | grep -q .; then
             echo "exists=true"  >> "$GITHUB_OUTPUT"
-            echo "::warning::$PKG_NAME@@$VERSION 已存在于 registry，跳过 publish/dist-tag/Release"
+            echo "::warning::$PKG_NAME@$VERSION 已存在于 registry，跳过 publish/dist-tag/Release"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -116,7 +116,7 @@ jobs:
               fi
               ok=1
               for t in $TAGS; do
-                npm dist-tag add "$PKG_NAME@@$VERSION" "$t" --registry "$REG" || ok=0
+                npm dist-tag add "$PKG_NAME@$VERSION" "$t" --registry "$REG" || ok=0
               done
               [ "$ok" = 1 ] && { echo "synced=$TAGS" >> "$GITHUB_OUTPUT"; exit 0; }
             fi
