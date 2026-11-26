@@ -2,7 +2,7 @@
 
 **为 [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness) 提供按轮次的思考档位（`reasoning_effort`）控制：在会话模型选择器中可选 `Auto`（mask）——由插件按工具调用历史自动在 `low` / `high` / `max` 间调度后提交 API；也可手动固定 `off` / `on` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`，让廉价工具轮次保持廉价，同时绝不让重任务缺少推理。**
 
-> **v0.7.0-beta.1（2026-09-06）：短路路线退役。** 本版本不再依赖 `dsh-llm-openai-completions`——自定义网关修复全部改走 dsh 官方 `llm-pi-ai` compat 面（要求 **dsh ≥ v0.1.0-rc.8**），短路插件应保持卸载。详见 [CHANGELOG](./CHANGELOG.md)。
+> **可选传输依赖。** 自 4.4.x 起，可选的「第三方接管」开关驱动 `dsh-llm-openai-completions` 传输（三种线协议：openai-completions / openai-responses / anthropic），并声明为**可选 peer**——与其他插件依赖的 LLM 传输同层级。不装它时，自定义网关的兼容修复仍走官方 `llm-pi-ai` compat 面。详见 [CHANGELOG](./CHANGELOG.md)。
 
 - [English README](./README.md)
 - [中文 README](./README.zh.md)

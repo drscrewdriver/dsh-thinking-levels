@@ -3,7 +3,7 @@
 **[DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness) 向けのラウンド単位思考レベル（`reasoning_effort`）制御：セッションのモデルセレクターで `Auto`（マスク）を選ぶと、プラグインが直近のツール呼び出し履歴から `low` / `high` / `max` をスケジュールして API に提出します。あるいは `off` / `on` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` を手動で固定。軽いツールラウンドは軽いまま、重い作業も推論不足になりません。**
 
 - [English README](./README.md)
-> **v0.7.0-beta.1（2026-09-06）：ショートサーキット経路の廃止。** 本リリースは `dsh-llm-openai-completions` に依存しません——ゲートウェイ修正は公式 `llm-pi-ai` compat 面（dsh ≥ v0.1.0-rc.8）に乗ります。詳しくは [CHANGELOG](./CHANGELOG.md)。
+> **任意のトランスポート依存（オプション）。** 4.4.x 以降の任意の「サードパーティ引き継ぎ」は `dsh-llm-openai-completions` トランスポート（openai-completions / openai-responses / anthropic の3つのワイヤプロトコル）を駆動し、**オプションの peer** として宣言されています——他のプラグインが依存する LLM トランスポートと同じ層です。未インストールでも、カスタムゲートウェイの互換修正は公式 `llm-pi-ai` compat 面で処理されます。詳しくは [CHANGELOG](./CHANGELOG.md).
 
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)

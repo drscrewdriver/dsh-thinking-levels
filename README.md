@@ -3,7 +3,7 @@
 **Per-round thinking-level (`reasoning_effort`) control for [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness): pick `Auto` (a mask) in the session model selector and the plugin schedules `low` / `high` / `max` from the recent tool-call history before submitting the API effort — or fix a wire level (`off` / `on` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`) manually. Cheap tool rounds stay cheap; heavy work never starves.**
 
 - [English README](./README.md)
-> **v0.7.0-beta.1 (2026-09-06): the short-circuit route is retired.** This release no longer depends on `dsh-llm-openai-completions` — custom-gateway fixes ride the official `llm-pi-ai` compat surface (requires **dsh ≥ v0.1.2-alpha.1**); keep the adapter plugin uninstalled. See the [CHANGELOG](./CHANGELOG.md).
+> **Optional transport dependency.** The opt-in *Third-party takeover* (since 4.4.x) drives the `dsh-llm-openai-completions` transport across three wire protocols (openai-completions / openai-responses / anthropic) and is declared as an **optional peer** — the same LLM-transport tier other plugins depend on. Without it installed, custom-gateway compat fixes still ride the official `llm-pi-ai` compat surface. See the [CHANGELOG](./CHANGELOG.md).
 
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)

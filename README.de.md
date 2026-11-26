@@ -20,7 +20,7 @@
 - [한국어 changelog](./CHANGELOG.ko.md)
 - [Changelog em português](./CHANGELOG.pt.md)
 
-> **v0.7.0-beta.1 (2026-09-06): die Short-Circuit-Route wird eingestellt.** Diese Version hängt nicht mehr von `dsh-llm-openai-completions` ab — Gateway-Fixes für eigene Gateways fahren über die offizielle `llm-pi-ai`-Compat-Oberfläche (erfordert **dsh ≥ v0.1.2-alpha.1**); das Adapter-Plugin sollte deinstalliert bleiben. Siehe [CHANGELOG](./CHANGELOG.md).
+> **Optionale Transport-Abhängigkeit.** Seit der 4.4.x-Linie treibt der optionale *Third-party-Takeover* den `dsh-llm-openai-completions`-Transport über drei Wire-Protokolle (openai-completions / openai-responses / anthropic) und ist als **optionaler Peer** deklariert — dieselbe LLM-Transport-Ebene, auf die sich andere Plugins stützen. Ohne ihn laufen die Kompatibilitätskorrekturen für eigene Gateways weiterhin über die offizielle `llm-pi-ai`-Compat-Oberfläche. Siehe [CHANGELOG](./CHANGELOG.md).
 
 > **▼ Unterstützte DSH-Versionen**
 >

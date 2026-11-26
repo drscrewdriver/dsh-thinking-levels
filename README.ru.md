@@ -20,7 +20,7 @@
 - [한국어 changelog](./CHANGELOG.ko.md)
 - [Changelog em português](./CHANGELOG.pt.md)
 
-> **v0.7.0-beta.1 (2026-09-06): short-circuit-маршрут выведен из эксплуатации.** Эта версия больше не зависит от `dsh-llm-openai-completions` — исправления для пользовательских шлюзов едут через официальную compat-поверхность `llm-pi-ai` (требуется **dsh ≥ v0.1.2-alpha.1**); плагин-адаптер держите неустановленным. См. [CHANGELOG](./CHANGELOG.md).
+> **Опциональная транспортная зависимость.** Начиная с линии 4.4.x опциональный *Third-party takeover* управляет транспортом `dsh-llm-openai-completions` по трём wire-протоколам (openai-completions / openai-responses / anthropic) и объявлен как **опциональный peer** — тот же уровень LLM-транспорта, от которого зависят другие плагины. Без него исправления совместимости для собственных шлюзов по-прежнему идут через официальную compat-поверхность `llm-pi-ai`. См. [CHANGELOG](./CHANGELOG.md).
 
 > **▼ Поддерживаемые версии DSH**
 >

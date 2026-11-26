@@ -3,7 +3,7 @@
 **[DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness)용 라운드별 사고 수준(`reasoning_effort`) 제어: 세션 모델 선택기에서 `Auto`(마스크)를 고르면 플러그인이 최근 도구 호출 기록에서 `low` / `high` / `max`를 스케줄링하여 API에 제출합니다. 또는 `off` / `on` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`를 수동으로 고정. 가벼운 도구 라운드는 가볍게, 무거운 작업도 추론 부족 없이.**
 
 - [English README](./README.md)
-> **v0.7.0-beta.1(2026-09-06): 단락 경로 폐지.** 이 릴리스는 `dsh-llm-openai-completions`에 의존하지 않습니다——게이트웨이 수정은 공식 `llm-pi-ai` compat 면(dsh ≥ v0.1.0-rc.8)으로 처리됩니다. 자세한 내용은 [CHANGELOG](./CHANGELOG.md).
+> **선택적 전송 의존성.** 4.4.x부터 선택적 「서드파티 인수」는 `dsh-llm-openai-completions` 전송(openai-completions / openai-responses / anthropic 세 가지 와이어 프로토콜)을 구동하며 **선택적 peer**로 선언됩니다——다른 플러그인이 의존하는 LLM 전송과 같은 계층입니다. 설치하지 않아도 사용자 지정 게이트웨이 호환 수정은 공식 `llm-pi-ai` compat 면에서 처리됩니다. 자세한 내용은 [CHANGELOG](./CHANGELOG.md).
 
 - [中文 README](./README.zh.md)
 - [日本語 README](./README.ja.md)

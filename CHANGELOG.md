@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.7.5 (2026-11-26)
+
+**显式声明对 `dsh-llm-openai-completions` 的可选 peer 依赖，并把关系写进描述最前。**
+
+- `package.json` 新增可选 peer `dsh-llm-openai-completions`（宽松区间 `>=0.4.4`，**不钉死具体版本**，`peerDependenciesMeta.optional: true`）——与 `dsh-prime-memory` 对 `@deepseek-ai/dsh-llm` 的可选 peer 同一层级：这是「第三方接管」真正落地的 LLM 传输层，未安装时该开关无传输可驱动、能力自动降级而不报错。
+- 描述（`package.json` / `dsh.plugin.json`）在最前讲清三层关系：本插件的「第三方接管」开关驱动 `dsh-llm-openai-completions` 传输（三种线协议 openai-completions / openai-responses / anthropic）；不装该传输时自定义网关的兼容修复仍走官方 `llm-pi-ai` compat 面。
+- 十个语言的 README 顶部旧横幅（v0.7.0-beta.1「短路退役 · 不再依赖 · 保持卸载」）与新事实冲突，统一改为「可选传输依赖」口径：短路退役仅指兼容修复路径，“第三方接管”仍需该传输（可选 peer）。
+
 ## 4.7.4 (2026-11-26)
 
 **修 4.7.3 的清单版本号漏改（`dsh.plugin.json` 仍写 4.7.2）。**

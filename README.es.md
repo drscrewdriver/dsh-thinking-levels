@@ -20,7 +20,7 @@
 - [한국어 changelog](./CHANGELOG.ko.md)
 - [Changelog em português](./CHANGELOG.pt.md)
 
-> **v0.7.0-beta.1 (2026-09-06): la vía de cortocircuito se retira.** Esta versión ya no depende de `dsh-llm-openai-completions` — las correcciones para pasarelas personalizadas viajan por la superficie compat oficial `llm-pi-ai` (requiere **dsh ≥ v0.1.2-alpha.1**); el plugin adaptador debe permanecer desinstalado. Consulta el [CHANGELOG](./CHANGELOG.md).
+> **Dependencia de transporte opcional.** Desde la línea 4.4.x, el *Third-party takeover* (opt-in) impulsa el transporte `dsh-llm-openai-completions` en tres protocolos wire (openai-completions / openai-responses / anthropic) y se declara como **peer opcional** — el mismo nivel de transporte LLM del que dependen otros plugins. Sin él, las correcciones de compatibilidad para pasarelas personalizadas siguen usando la superficie compat oficial `llm-pi-ai`. Consulta el [CHANGELOG](./CHANGELOG.md).
 
 > **▼ Versiones de DSH admitidas**
 >
