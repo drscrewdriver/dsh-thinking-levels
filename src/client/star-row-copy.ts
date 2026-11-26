@@ -70,10 +70,12 @@ function pickLang(): { ask: string } {
   return STAR_COPY.en!;
 }
 
-// STAR:EXTENDED:BEGIN — S 档专用段（话术 + ★ CTA + dismissed）。sync 对 A/L 副本整段剥除，
+// STAR:EXTENDED:BEGIN — S 档专用段（话术 + ★ CTA + 隐藏钮）。sync 对 A/L 副本整段剥除，
 // 所以本段怎么改都不会波及已发布的 A/L 副本。S 档渲染：GitHub SVG + owner/repo 链接 ｜
-// star.ask ｜ ★ star.cta 钮。点钮写 localStorage `dsh.star.<ns>.dismissed=1`，只收话术与钮，
-// 链接段永留（关闭语义＝别打扰我，不是撤掉入口）。文案 10 语随 documentElement.lang。
+// star.ask ｜ ★ star.cta（打开仓库页）｜ × star.hide（收话术与两钮）。★ 是「去点星」的
+// 动作，隐藏才是「别打扰我」；两者绝不合流——旧版把点星写成隐藏，用户点 ★ 只落个静默收起，
+// 仓库页一次都没打开过（2.0.25 实测缺陷）。隐藏写 localStorage `dsh.star.<ns>.dismissed=1`，
+// 链接段永留。文案 10 语随 documentElement.lang。
 const STAR_CTA: Record<string, string> = {
   zh: "留颗 Star",
   en: "Star",
@@ -87,6 +89,20 @@ const STAR_CTA: Record<string, string> = {
   pt: "Estrela",
 };
 
+/** 隐藏钮的可读名（★ 之外的独立动作，10 语同集）。 */
+const STAR_HIDE: Record<string, string> = {
+  zh: "不再提示",
+  en: "Dismiss",
+  ja: "今後表示しない",
+  ko: "다시 보지 않기",
+  fr: "Masquer",
+  de: "Ausblenden",
+  it: "Nascondi",
+  ru: "Скрыть",
+  es: "Ocultar",
+  pt: "Ocultar",
+};
+
 const STAR_S_STYLE_ID = "dsh-star-row-s-style";
 const STAR_S_STYLE = [
   ".dsh-star-row-s{display:flex;align-items:center;gap:8px;flex-wrap:wrap;",
@@ -98,10 +114,11 @@ const STAR_S_STYLE = [
   ".dsh-star-link:hover{text-decoration:underline}",
   ".dsh-star-link svg{width:14px;height:14px;flex:none;display:block}",
   ".dsh-star-row-s .dsh-star-ask{opacity:.85;font-weight:400}",
-  ".dsh-star-cta{font:inherit;font-size:11px;line-height:1;padding:4px 9px;",
-  "border-radius:999px;border:1px solid currentColor;background:transparent;",
-  "color:inherit;cursor:pointer;flex:none;opacity:.7}",
-  ".dsh-star-cta:hover{opacity:1}",
+  ".dsh-star-cta,.dsh-star-hide{font:inherit;font-size:11px;line-height:1;",
+  "padding:4px 9px;border-radius:999px;border:1px solid currentColor;",
+  "background:transparent;color:inherit;cursor:pointer;flex:none;opacity:.7}",
+  ".dsh-star-hide{padding:4px 7px}",
+  ".dsh-star-cta:hover,.dsh-star-hide:hover{opacity:1}",
 ].join("");
 
 /** 宿主语言标签归一：取 `documentElement.lang` 的前缀，命中 STAR_LANGS 即用。 */
@@ -139,7 +156,16 @@ function injectStarSStyle(d: Document): void {
   d.head.appendChild(style);
 }
 
-/** S 档扩充：把裸链接行升级成「链接 ｜ 话术 ｜ ★ CTA」，非 S 档返回 null 走原路径。 */
+/** 打开仓库页：桌面壳里 window.open 可能被拦，锚点 click 才是两条路径都通的写法。 */
+function openRepo(d: Document): void {
+  const a = d.createElement("a");
+  a.href = REPO_URL;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.click();
+}
+
+/** S 档扩充：把裸链接行升级成「链接 ｜ 话术 ｜ ★ CTA ｜ × 隐藏」，非 S 档返回 null 走原路径。 */
 function extendedStarRow(link: HTMLElement, d: Document): HTMLElement | null {
   if (STAR_VARIANT !== "S") return null;
   if (starDismissed()) return link;
@@ -157,14 +183,30 @@ function extendedStarRow(link: HTMLElement, d: Document): HTMLElement | null {
   cta.type = "button";
   cta.className = "dsh-star-cta";
   cta.textContent = "★ " + STAR_CTA[lang];
-  cta.addEventListener("click", () => {
+  cta.addEventListener("click", (event: Event) => {
+    // 行内的 ★ 是「去点星」：打开仓库页，不隐藏。
+    event.preventDefault();
+    event.stopPropagation();
+    openRepo(d);
+  });
+  row.appendChild(cta);
+  const hide = d.createElement("button");
+  hide.type = "button";
+  hide.className = "dsh-star-hide";
+  hide.textContent = "×";
+  hide.title = STAR_HIDE[lang]!;
+  hide.setAttribute("aria-label", STAR_HIDE[lang]!);
+  hide.addEventListener("click", (event: Event) => {
+    // 隐藏才是「别打扰我」：收话术与两钮，链接段永留。
+    event.preventDefault();
+    event.stopPropagation();
     starDismiss();
     if (row.parentNode) {
       row.parentNode.replaceChild(link, row);
       link.className = "dsh-star-row";
     }
   });
-  row.appendChild(cta);
+  row.appendChild(hide);
   return row;
 }
 // STAR:EXTENDED:END
