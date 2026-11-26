@@ -1,13 +1,17 @@
 /**
- * star-row 副本行为契约（S 档）：渲染 / 链接属性 / 语言切换 / 关闭态只剩链接。
+ * star-row 副本行为契约（S 档，v2 页脚版式）。
  *
  * 副本本身由 `_tools/star-row/sync.mjs` 生成（漂移由 `sync.mjs --check` 把门），
- * 这里锁的是**行为**：★ 打开仓库页、隐藏才收话术、链接永留、语言按 documentElement.lang 前缀切换。
+ * 这里锁的是**行为**：一行页脚 = 版本 · 短问句 · ⭐ star · 💬 issue；
+ * 点过任一链接即收敛为中性一行；链接永留；语言随 documentElement.lang 前缀切换。
+ *
+ * v2 与旧版的区别（2026-11-26 kit 真源改版）：不再有 ★ 胶囊按钮与 × 关闭钮，
+ * 两个动作都是纯文字链接；点链接**不** preventDefault（照常跳转）后才收敛。
  */
 import { describe, expect, it, beforeEach } from 'vitest'
 import { mountStarRow } from '../src/client/star-row-copy.ts'
 
-/** 事件桩：副本在按钮上会 preventDefault/stopPropagation，真 DOM 恒有，桩也要给。 */
+/** 事件桩：副本在链接上挂 click，真 DOM 恒有 addEventListener，桩也要给。 */
 interface StubEvent { prevented: boolean; stopped: boolean; preventDefault(): void; stopPropagation(): void }
 
 /** 极简 DOM 桩：只实现副本用到的那几个接口，避免引 jsdom 依赖。 */
@@ -45,7 +49,7 @@ class StubEl {
 }
 
 const store = new Map<string, string>()
-/** ★ 钮打开过的 URL（桌面壳里由锚点 click 触发，测试只验"去哪了"）。 */
+/** 链接被打开过的 URL（桌面壳里由锚点 click 触发，测试只验"去哪了"）。 */
 const opened: Array<{ href: string; target: string }> = []
 const head = new StubEl('head')
 
@@ -71,6 +75,27 @@ function flatten(node: StubEl, out: (string | Record<string, string>)[] = []) {
 }
 
 const REPO = 'https://github.com/drscrewdriver/dsh-thinking-levels'
+const ISSUES = REPO + '/issues/new'
+
+/** 按类名在子树里找一个元素（v2 的动作是链接，不是按钮）。 */
+function byClass(row: StubEl, cls: string): StubEl | undefined {
+  if (row.className === cls) return row
+  for (const child of row.children) {
+    const hit = byClass(child, cls)
+    if (hit !== undefined) return hit
+  }
+  return undefined
+}
+
+/** 按文本找元素（⭐ / 💬 两个动作链接靠文案区分）。 */
+function byText(row: StubEl, needle: string): StubEl | undefined {
+  if (row.textContent.includes(needle)) return row
+  for (const child of row.children) {
+    const hit = byText(child, needle)
+    if (hit !== undefined) return hit
+  }
+  return undefined
+}
 
 beforeEach(() => {
   store.clear()
@@ -79,81 +104,93 @@ beforeEach(() => {
   ;(globalThis as { localStorage?: unknown }).localStorage = {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => { store.set(key, String(value)) },
+    removeItem: (key: string) => { store.delete(key) },
   }
 })
 
-/** 按类名在子树里找一个按钮（★ 与隐藏钮同类名规则，靠 class 区分）。 */
-function buttonByClass(row: StubEl, cls: string): StubEl | undefined {
-  return row.children.find((child) => child.tagName === 'button' && child.className === cls)
-}
-
-/** 触发一次点击（带最小事件对象），返回该事件以备断言。 */
-function fire(button: StubEl): StubEvent {
-  const event: StubEvent = {
-    prevented: false,
-    stopped: false,
-    preventDefault() { this.prevented = true },
-    stopPropagation() { this.stopped = true },
-  }
-  button.onclick!(event)
-  return event
-}
-
-describe('star-row 副本（S 档）', () => {
-  it('渲染链接 + 话术 + ★ 钮 + 隐藏钮，链接新标签页打开且 rel=noreferrer', () => {
+describe('star-row 副本（S 档 v2 页脚）', () => {
+  it('渲染一行页脚：版本 · 问句 · ⭐star · 💬issue，两个动作都是新标签页链接', () => {
     fakeDocument('zh-CN')
     const row = mountStarRow() as unknown as StubEl
+    expect(row.className).toBe('dsh-star-foot')
     const flat = flatten(row)
-    expect(flat).toContainEqual({ href: REPO, target: '_blank', rel: 'noreferrer' })
-    expect(JSON.stringify(flat)).toContain('一颗 Star 让工具被更多人看见')
-    expect(JSON.stringify(flat)).toContain('★ 留颗 Star')
-    expect(buttonByClass(row, 'dsh-star-cta')).toBeDefined()
-    expect(buttonByClass(row, 'dsh-star-hide')).toBeDefined()
+    const text = JSON.stringify(flat)
+    expect(text).toContain('觉得好用？')
+    expect(text).toContain('去 GitHub 点个 Star')
+    expect(text).toContain('反馈建议 / 提 issue')
+    // 版本徽章由 sync 从 package.json 烘入，是版本哨兵
+    expect(text).toMatch(/v\d+\.\d+\.\d+/)
+    // 两个动作链接都指向正确地址且新标签页打开
+    expect(flat).toContainEqual({ href: REPO, target: '_blank', rel: 'noopener noreferrer' })
+    expect(flat).toContainEqual({ href: ISSUES, target: '_blank', rel: 'noopener noreferrer' })
+    // v2 不再有按钮式的 ★ / ×
+    expect(byClass(row, 'dsh-star-cta')).toBeUndefined()
+    expect(byClass(row, 'dsh-star-hide')).toBeUndefined()
   })
 
-  it('话术随 documentElement.lang 切换，未知语言回落英文', () => {
-    for (const [lang, probe] of [['ja', '便利でしたら'], ['ko', '유용했다면'], ['de', 'Nützlich'], ['pt', 'Achou útil']] as const) {
+  it('文案随 documentElement.lang 切换，未知语言回落英文', () => {
+    const cases: Array<[string, string]> = [
+      ['ja', 'お役に立っていますか'],
+      ['ko', '유용한가요'],
+      ['de', 'Hilfreich'],
+      ['pt', 'Achou útil'],
+    ]
+    for (const [lang, probe] of cases) {
       fakeDocument(lang)
       expect(JSON.stringify(flatten(mountStarRow() as unknown as StubEl))).toContain(probe)
     }
     fakeDocument('xx-YY')
-    expect(JSON.stringify(flatten(mountStarRow() as unknown as StubEl))).toContain('A star helps more people')
+    expect(JSON.stringify(flatten(mountStarRow() as unknown as StubEl))).toContain('Finding it useful')
   })
 
-  it('点 ★ 打开仓库页，不改隐藏态、不收话术', () => {
+  it('点 ⭐ 照常跳转，随后收敛为中性一行并记住关闭态', () => {
     fakeDocument('zh-CN')
     const host = new StubEl('div')
     const row = mountStarRow() as unknown as StubEl
     host.appendChild(row)
-    fire(buttonByClass(row, 'dsh-star-cta')!)
+    const star = byText(row, '去 GitHub 点个 Star')!
+    star.click()                       // 真 DOM 里锚点 click 即打开新标签页
+    star.onclick!({ prevented: false, stopped: false, preventDefault() {}, stopPropagation() {} })
     expect(opened).toContainEqual({ href: REPO, target: '_blank' })
-    // 点星是「去点星」，不是「别打扰我」：话术仍在，dismissed 未写。
-    expect(JSON.stringify(flatten(host))).toContain('一颗 Star 让工具被更多人看见')
-    expect(store.get('dsh.star.thinking-levels.dismissed')).toBeUndefined()
+    // 收敛：页脚换成中性链接行，话术不再出现
+    expect(JSON.stringify(flatten(host))).not.toContain('觉得好用')
+    expect(host.children[0]!.className).toBe('dsh-star-row')
+    expect(store.get('dsh.star.thinking-levels.v2.dismissed')).toBe('1')
   })
 
-  it('点隐藏只收话术与钮，链接当场仍在、仓库页没被打开', () => {
+  it('点 💬 issue 同样是「走过即收敛」，落地到 issues/new', () => {
     fakeDocument('zh-CN')
     const host = new StubEl('div')
     const row = mountStarRow() as unknown as StubEl
     host.appendChild(row)
-    fire(buttonByClass(row, 'dsh-star-hide')!)
-    const flat = flatten(host)
-    expect(JSON.stringify(flat)).not.toContain('一颗 Star')
-    expect(JSON.stringify(flat)).not.toContain('留颗 Star')
-    expect(flat).toContainEqual({ href: REPO, target: '_blank', rel: 'noreferrer' })
-    expect(opened).toHaveLength(0)
-    expect(store.get('dsh.star.thinking-levels.dismissed')).toBe('1')
+    const issue = byText(row, '反馈建议')!
+    issue.click()
+    issue.onclick!({ prevented: false, stopped: false, preventDefault() {}, stopPropagation() {} })
+    expect(opened).toContainEqual({ href: ISSUES, target: '_blank' })
+    expect(host.children[0]!.className).toBe('dsh-star-row')
+    expect(store.get('dsh.star.thinking-levels.v2.dismissed')).toBe('1')
   })
 
-  it('隐藏后重新渲染只剩裸链接（无话术无钮），且不再注入 S 容器', () => {
+  it('已关闭态：直接给中性一行（无话术、无页脚容器）', () => {
+    store.set('dsh.star.thinking-levels.v2.dismissed', '1')
+    fakeDocument('zh-CN')
+    const row = mountStarRow() as unknown as StubEl
+    expect(row.tagName).toBe('a')
+    expect(row.className).toBe('dsh-star-row')
+    expect(row.dataset.starNs).toBe('thinking-levels')
+    const flat = flatten(row)
+    expect(flat).toContainEqual({ href: REPO, target: '_blank', rel: 'noreferrer' })
+    expect(JSON.stringify(flat)).not.toContain('觉得好用')
+    expect(JSON.stringify(flat)).not.toContain('点个 Star')
+  })
+
+  it('旧键（≤2.0.25 误写）不生效：视为未关闭并就地清除，不当成用户意图', () => {
+    // 旧版把「点 ★」写成 dismissed=1，这一键是 bug 产物；读到即清、不迁值。
     store.set('dsh.star.thinking-levels.dismissed', '1')
     fakeDocument('zh-CN')
     const row = mountStarRow() as unknown as StubEl
-    const flat = flatten(row)
-    expect(row.tagName).toBe('a')
-    expect(flat).toContainEqual({ href: REPO, target: '_blank', rel: 'noreferrer' })
-    expect(JSON.stringify(flat)).not.toContain('一颗 Star')
-    expect(JSON.stringify(flat)).not.toContain('留颗 Star')
+    expect(row.className).toBe('dsh-star-foot')
+    expect(store.get('dsh.star.thinking-levels.dismissed')).toBeUndefined()
+    expect(store.get('dsh.star.thinking-levels.v2.dismissed')).toBeUndefined()
   })
 })
