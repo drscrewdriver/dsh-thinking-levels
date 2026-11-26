@@ -116,7 +116,7 @@ function makeReadOnly(): { served: Adapter; owned: Adapter } {
  */
 function makeClass(): { served: Adapter; owned: Adapter } {
   class BaseAdapter {
-    resolveModel(provider: string, model: string, signal?: unknown): Promise<Info> {
+    resolveModel(provider: string, model: string, _signal?: unknown): Promise<Info> {
       return Promise.resolve({
         provider,
         id: model,

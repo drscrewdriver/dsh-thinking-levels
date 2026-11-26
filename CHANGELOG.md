@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.7.3 (2026-11-26)
+
+**设置卡底栏新增常驻 Star 快车道（panel-star-row S 档）。**
+
+- `src/client/card.tsx` 的 `ThinkingLevelsCard` 卡根容器末尾（`ModelCapabilities` / `DeepSeekContextSection` 之后、卡片闭合前）挂一行常驻条：GitHub 单色 SVG + `drscrewdriver/dsh-thinking-levels` 链接（新标签页、`rel=noreferrer`）+ 一句工程化求星话术 + `★ 留颗 Star` 钮。
+- 行本体是生成副本 `src/client/star-row-copy.ts`（真源 `mine-dsh-plugins/_tools/star-row/starRow.ts`，`sync.mjs --check` 把漂移）；副本内嵌 10 语按 `<html lang>` 前缀自选，认不出回落 en。
+- 关闭语义：点钮只收起话术与钮（`localStorage` 键 `dsh.star.thinking-levels.dismissed`），**仓库链接永留**；不弹窗、不打断表单。
+- `star-row-copy.ts` 登记进本仓 locale 守卫白名单（`tests/_locale-baseline.json`）——C-ui 0 / A-pair 0 棘轮原地不动。
+- 行为契约 `tests/star-row.test.ts`（4 例：渲染/链接属性/十语切换/关闭后只剩链接）；全量 369 passed。
+
+## 4.7.2 (2026-11-26)
+
+- style(guide)：「重新查看引导」按钮化为描边胶囊（`guide-kit` sync 产物对齐），跳过标记与三步正文未动。
+
 ## 4.7.1 (2026-11-25)
 
 - feat(guide): 「重新查看引导」入口从卡底移到卡顶（`GuidePanel` 之前），与其他八个接了统一引导的插件同形态。跳过标记与三步正文逐字未动（`dsh.guide.thinking-levels.skipped`）。

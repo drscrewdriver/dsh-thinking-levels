@@ -33,6 +33,7 @@ import { contextWindowOf, deepseekSectionOf, DEEPSEEK_DEFAULT_WINDOW } from './m
 import type { ThinkingLevelsConfig } from '../index.ts'
 import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './guide.tsx'
 import { THINKING_GUIDE_STEPS } from './guide-steps.ts'
+import { mountStarRow } from './star-row-copy.ts'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
 export interface ThinkingLevelsCardInjected {
@@ -1922,6 +1923,12 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
           </div>
         )
         : null}
+      {/* 面板常驻 star 快车道：仓库链接永留，求星话术可一键收起（dismissed 键 dsh.star.thinking-levels） */}
+      <span
+        ref={(node) => {
+          if (node && !node.firstChild) node.appendChild(mountStarRow())
+        }}
+      />
     </div>
   )
 }

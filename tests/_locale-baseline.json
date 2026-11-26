@@ -54,6 +54,10 @@
       {
         "file": "src/client/guide-steps.ts",
         "reason": "引导词表刻意独立于插件字典"
+      },
+      {
+        "file": "src/client/star-row-copy.ts",
+        "reason": "star-row 生成副本（10 语内嵌、面板常驻行），由 _tools/star-row/sync.mjs 生成，改真源后重跑，禁手改"
       }
     ]
   },
