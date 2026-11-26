@@ -1,6 +1,15 @@
 # Changelog
 
+## 4.7.4 (2026-11-26)
+
+**修 4.7.3 的清单版本号漏改（`dsh.plugin.json` 仍写 4.7.2）。**
+
+- 4.7.3 发布时只把 `package.json` 改到 4.7.3，`dsh.plugin.json` 的 `version` 留在 4.7.2，两处不一致——`release` workflow 的「版本对齐」门禁当场打红（`dsh.plugin.json 的 4.7.2 与 4.7.3 不一致`）。功能无影响（star 快车道代码与 4.7.3 逐字相同），但清单是宿主的读入口，必须三方一致。
+- 本版两处同为 4.7.4；`npm deprecate dsh-thinking-levels@4.7.3` 指向本版。发版前先把版本号在本仓三处（`package.json` / `dsh.plugin.json` / tag）对齐再 publish，这条已写回下方 4.7.3 条目顶部作警示。
+
 ## 4.7.3 (2026-11-26)
+
+> ⚠️ 本版 `dsh.plugin.json` 的 `version` 漏改为 4.7.2，请用 4.7.4。
 
 **设置卡底栏新增常驻 Star 快车道（panel-star-row S 档）。**
 
