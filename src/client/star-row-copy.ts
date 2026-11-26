@@ -107,7 +107,7 @@ const STAR_S_STYLE_ID = "dsh-star-row-s-style";
 const STAR_S_STYLE = [
   ".dsh-star-row-s{display:flex;align-items:center;gap:8px;flex-wrap:wrap;",
   "font-size:12px;line-height:1.5;color:inherit;opacity:.75;margin-top:10px;",
-  "padding-top:8px;border-top:1px solid rgba(127,127,127,.25)}",
+  "padding-top:8px;border-top:1px solid var(--dsw-alias-border-l2,currentColor)}",
   ".dsh-star-row-s:hover{opacity:1}",
   ".dsh-star-link{display:inline-flex;align-items:center;gap:6px;",
   "color:inherit;text-decoration:none}",
