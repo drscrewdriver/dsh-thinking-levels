@@ -202,10 +202,18 @@ function matchesAll(matchers: readonly RegExp[], value: string): boolean {
   return matchers.length === 0 || matchers.some(pattern => pattern.test(value))
 }
 
-/** The first family whose provider AND model patterns match, or undefined (never guess). */
+/**
+ * The family for a model line. Model ids embed the vendor (grok-4.6, claude-*,
+ * deepseek-* …), so `modelMatch` is the primary key — a gateway that serves the
+ * model under a different provider name (openrouter/deepseek-v4-pro) still
+ * resolves. `providerMatch` only disambiguates when several families hit the
+ * same model id; the first array-order match wins otherwise.
+ */
 export function matchEffortFamily(provider: string, model: string): EffortTierFamily | undefined {
-  return EFFORT_TIER_FAMILIES.find(family =>
-    matchesAll(family.providerMatch, provider) && matchesAll(family.modelMatch, model))
+  const byModel = EFFORT_TIER_FAMILIES.filter(family => matchesAll(family.modelMatch, model))
+  if (byModel.length === 0) return undefined
+  const narrowed = byModel.find(family => family.providerMatch.length > 0 && matchesAll(family.providerMatch, provider))
+  return narrowed ?? byModel[0]
 }
 
 /** Family data with the first matching variant merged over it. */

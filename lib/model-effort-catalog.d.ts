@@ -57,7 +57,13 @@ export interface ResolvedTier {
     confidence: 'high' | 'low';
 }
 export declare const EFFORT_TIER_FAMILIES: readonly EffortTierFamily[];
-/** The first family whose provider AND model patterns match, or undefined (never guess). */
+/**
+ * The family for a model line. Model ids embed the vendor (grok-4.6, claude-*,
+ * deepseek-* …), so `modelMatch` is the primary key — a gateway that serves the
+ * model under a different provider name (openrouter/deepseek-v4-pro) still
+ * resolves. `providerMatch` only disambiguates when several families hit the
+ * same model id; the first array-order match wins otherwise.
+ */
 export declare function matchEffortFamily(provider: string, model: string): EffortTierFamily | undefined;
 /** Family data with the first matching variant merged over it. */
 export declare function resolveTier(provider: string, model: string): ResolvedTier | undefined;

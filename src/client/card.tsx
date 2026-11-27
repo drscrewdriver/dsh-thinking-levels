@@ -34,6 +34,7 @@ import type { ThinkingLevelsConfig } from '../index.ts'
 import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './guide.tsx'
 import { THINKING_GUIDE_STEPS } from './guide-steps.ts'
 import { mountStarRow } from './star-row-copy.ts'
+import { EffortSyncSection } from './effort-sync-ui.tsx'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
 export interface ThinkingLevelsCardInjected {
@@ -1916,6 +1917,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                   )}
                   {!snapshot.writable
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
+                  <EffortSyncSection scope={piAiScope} t={t} readonly={readonly} />
                   <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
                   <DeepSeekContextSection scope={deepseekScope} t={t} readonly={readonly} />
                 </>
