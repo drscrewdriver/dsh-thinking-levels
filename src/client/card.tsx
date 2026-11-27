@@ -35,6 +35,7 @@ import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './gu
 import { THINKING_GUIDE_STEPS } from './guide-steps.ts'
 import { mountStarRow } from './star-row-copy.ts'
 import { EffortSyncSection } from './effort-sync-ui.tsx'
+import { CompactionPolicySection } from './compaction-policy-ui.tsx'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
 export interface ThinkingLevelsCardInjected {
@@ -54,6 +55,12 @@ export interface ThinkingLevelsCardInjected {
    * ModelPanel lines. Absent on hosts without the namespace.
    */
   deepseekScope?: SettingsScope<unknown>
+  /**
+   * The `dsh-compaction-basic` section (N6): read for the `modelPolicies`
+   * surface, written for per-model compaction thresholds. Absent (or no
+   * `modelPolicies` key) → the compaction section renders nothing.
+   */
+  compactionScope?: SettingsScope<unknown>
 }
 
 /** Full props: locale seat + the injected scopes. */
@@ -1680,7 +1687,7 @@ function DeepSeekContextSection(props: {
  * default so the family section reads as an open page of drawers.
  * @param props - locale copy and the injected scopes.
  */
-export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope }: ThinkingLevelsCardProps): JSX.Element {
+export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope, compactionScope }: ThinkingLevelsCardProps): JSX.Element {
   const [open, setOpen] = useState(true)
   // Stable subscription identities (see ModelCapabilities): the host controller
   // folds a fresh snapshot on every subscribe, so per-render inline lambdas
@@ -1937,6 +1944,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                   {!snapshot.writable
                     && <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' }}>{t('card.readonly')}</p>}
                   <EffortSyncSection scope={piAiScope} t={t} readonly={readonly} />
+                  <CompactionPolicySection compactionScope={compactionScope} piAiScope={piAiScope} t={t} readonly={readonly} />
                   <ModelCapabilities scope={piAiScope} ocScope={ocScope} tlScope={scope} t={t} readonly={readonly} />
                   <DeepSeekContextSection scope={deepseekScope} t={t} readonly={readonly} />
                 </>

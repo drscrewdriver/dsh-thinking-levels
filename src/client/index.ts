@@ -459,6 +459,9 @@ const resolveLabel = (label: unknown, fallback = ''): string => {
     // The official DeepSeek section: the card's context editor when the seat
     // takeover is off (4.4.0).
     deepseekScope: scopeOf!('llm-deepseek') as never,
+    // The compaction-basic section (N6): the per-model threshold editor. Absent
+    // namespace / no `modelPolicies` key → the section renders nothing.
+    compactionScope: scopeOf!('dsh-compaction-basic') as never,
     // The transport's entry id changed shape across its packaging history
     // (`dsh-llm-openai-completions` in the 0.4.0 fragment; earlier manual
     // installs used the short form): settle on whichever namespace the host's
