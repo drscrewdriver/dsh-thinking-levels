@@ -1575,3 +1575,20 @@ export const pt: Record<keyof typeof zh, string> = {
 
 /** Combined dictionary map — all 10 languages, single-call registration. */
 export const dictionaries: Record<string, Record<string, string>> = { zh, en, ja, ko, fr, de, it, ru, es, pt }
+
+/**
+ * The selectable-language catalog this plugin contributes. `label` is written in
+ * the represented language (the host's `LanguageRegistration` contract: "Display
+ * name written in the represented language"). Order is the display order.
+ */
+export const LOCALE_PACKS = [
+  { id: 'zh', label: '简体中文', fallback: 'en' },
+  { id: 'ja', label: '日本語', fallback: 'en' },
+  { id: 'ko', label: '한국어', fallback: 'en' },
+  { id: 'fr', label: 'Français', fallback: 'en' },
+  { id: 'de', label: 'Deutsch', fallback: 'en' },
+  { id: 'it', label: 'Italiano', fallback: 'en' },
+  { id: 'ru', label: 'Русский', fallback: 'en' },
+  { id: 'es', label: 'Español', fallback: 'en' },
+  { id: 'pt', label: 'Português', fallback: 'en' },
+] as const

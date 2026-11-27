@@ -29,7 +29,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // the retired `dsh-client-runtime` package): importing the client types restores
 // the typed `ctx.slots` member on the cordis Context surface.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { NS, de, en, es, fr, it, ja, ko, pt, ru, zh } from './locales.ts'
+import { LOCALE_PACKS, NS, de, en, es, fr, it, ja, ko, pt, ru, zh } from './locales.ts'
 import { ModelPanel, type ModelPanelInjected } from './model-panel.tsx'
 import { EffortTrace } from './effort-trace.tsx'
 import { projectionValueOf } from './projection-value.ts'
@@ -163,22 +163,33 @@ export function apply(ctx: ClientContext): void {
     inject: (deps: string[], cb: (scope: Record<string, unknown>) => void) => void
   }).inject
 
-  // `register(ns, dicts)` is typed to the built-in locale ids (`zh` / `en`
-  // only); the shipped `ja` / `ko` / `fr` / `de` / `it` / `ru` / `es` / `pt`
-  // dictionaries go through the single-locale overload, so they are installed
-  // and ready once DSH publishes those ids.
+  // The host's LocaleRuntime can accept additional selectable languages
+  // (`addLanguage`); the built-in list is only zh/en. Probe, never assume — a host
+  // without the API keeps zh/en and still gets every dictionary (harmless extra).
+  // `register(ns, dicts)` is typed to the built-in locale ids, so the nine packed
+  // dictionaries go through the single-locale overload on the widened face below.
+  const runtime = ctx.locale as {
+    register: (ns: string, locale: string | Record<string, Record<string, string>>, dict?: Record<string, string>) => () => void
+    addLanguage?: (input: { id: string; label: string; fallback: string }) => () => void
+  }
   ctx.effect(() => {
-    const disposers = [
-      ctx.locale.register(NS, { zh, en }),
-      ctx.locale.register(NS, 'ja', ja),
-      ctx.locale.register(NS, 'ko', ko),
-      ctx.locale.register(NS, 'fr', fr),
-      ctx.locale.register(NS, 'de', de),
-      ctx.locale.register(NS, 'it', it),
-      ctx.locale.register(NS, 'ru', ru),
-      ctx.locale.register(NS, 'es', es),
-      ctx.locale.register(NS, 'pt', pt),
-    ]
+    const disposers: Array<() => void> = []
+    if (typeof runtime.addLanguage === 'function') {
+      for (const pack of LOCALE_PACKS) {
+        // One bad entry must never take the other languages down with it: the host
+        // rejects a duplicate id or an unknown fallback target, and that is a
+        // configuration fact, not a reason to lose the other dictionaries.
+        try {
+          disposers.push(runtime.addLanguage({ id: pack.id, label: pack.label, fallback: pack.fallback }))
+        } catch (error) {
+          console.warn(`[dsh-thinking-levels] addLanguage(${pack.id}) refused by the host:`, error)
+        }
+      }
+    }
+    disposers.push(runtime.register(NS, { zh, en }))
+    for (const [id, dict] of [['ja', ja], ['ko', ko], ['fr', fr], ['de', de], ['it', it], ['ru', ru], ['es', es], ['pt', pt]] as const) {
+      disposers.push(runtime.register(NS, id, dict))
+    }
     return () => { for (const dispose of disposers) dispose() }
   }, 'dsh-thinking-levels: dictionaries')
 
