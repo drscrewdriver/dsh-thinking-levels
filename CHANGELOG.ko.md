@@ -2,6 +2,19 @@
 
 `dsh-thinking-levels`의 주요 변경 사항을 기록합니다.
 
+## 4.13.0 (2026-11-27)
+- 모델별 압축 임계값을 dsh-compaction-basic의 modelPolicies에 기록(auto·전역 비율 불변, modelPolicies 있을 때만 렌더).
+## 4.12.0 (2026-11-27)
+- 하위 에이전트 독립 티어(A분기): agent.options.subagentDepth 능력 탐지. Config.subagentLevel(inherit 기본, volatile). 미지원 호스트는 4.11.0과 동일 동작.
+## 4.11.0 (2026-11-27)
+- Auto에 결정적 실패 신호, clamp를 하향(목표 이하 최고 지원 티어). 실패 시 high 이상.
+## 4.10.0 (2026-11-27)
+- 원클릭 동기화: 미리보기→확인→reasoningEfforts 쓰기. 기본은 미선언만 채움, 공식 llm-deepseek는 쓰지 않음.
+## 4.9.0 (2026-11-27)
+- 내장 주요 모델 티어 카탈로그(9개 제품군). 모델 행에 읽기 전용 제품군 배지. 쓰기 없음.
+## 4.8.0 (2026-11-27)
+- LocaleRuntime.addLanguage로 8개 언어 실제 선택 가능. 능력 탐지, 미지원 시 zh/en로 후퇴. README의 "fork 필요" 오류 삭제.
+
 ## [4.4.8] — 2026-10-27 (이중 매니페스트 버전 일치)
 
 - 4.4.7에서는 `package.json`만 갱신되어 `dsh.plugin.json`의 `version`이 4.4.6에 머물렀습니다. 4.4.8에서 둘 다 `4.4.8`로 맞췄으며 런타임 동작은 4.4.7과 같습니다.

@@ -12,6 +12,19 @@
 - [Список изменений на русском](./CHANGELOG.ru.md)
 - [Changelog en español](./CHANGELOG.es.md)
 
+## 4.13.0 (2026-11-27)
+- モデル別の圧縮しきい値を dsh-compaction-basic の modelPolicies に書込む（auto と全体比は触らない、能力探測で modelPolicies がある時だけ描画）。
+## 4.12.0 (2026-11-27)
+- サブエージェント独立ティア（A分岐）：agent.options.subagentDepth を能力探測。Config.subagentLevel（inherit 既定、volatile）。非対応ホストでは 4.11.0 と同一動作。
+## 4.11.0 (2026-11-27)
+- Auto に決定論的な失敗シグナル、clamp を下方へ（目標以下で最上位のサポートティアへ）。失敗時は high 以上。
+## 4.10.0 (2026-11-27)
+- ワンクリック同期：プレビュー→確認→reasoningEfforts 書戻し。既定は未宣言のみ補完、公式 llm-deepseek は書かない。
+## 4.9.0 (2026-11-27)
+- 内蔵の主流モデルティアカタログ（9 族）。モデル行に読み取り専用ファミリバッジ。書込みなし。
+## 4.8.0 (2026-11-27)
+- LocaleRuntime.addLanguage で 8 言語を実際に選択可能に。能力探測、非対応時は zh/en に退避。README の「fork 必須」誤記を削除。
+
 ## [4.4.8] — 2026-10-27（二重マニフェストの同串修正）
 
 - 4.4.7 では `package.json` だけを更新し、`dsh.plugin.json` の `version` は 4.4.6 のままだったため、4.4.8 で両方を `4.4.8` に揃えました。ランタイムの挙動は 4.4.7 と同一です。

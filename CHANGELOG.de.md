@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen an `dsh-thinking-levels` werden hier dokumentiert.
 
+## 4.13.0 (2026-11-27)
+- Kompaktionsschwellen pro Modell in modelPolicies von dsh-compaction-basic geschrieben (auto und globale Ratios bleiben; nur bei vorhandenem modelPolicies gerendert).
+## 4.12.0 (2026-11-27)
+- Eigene Subagent-Stufe (Zweig A): Erkennung über agent.options.subagentDepth. Config.subagentLevel (inherit Standard, volatile). Ohne Feld identisch zu 4.11.0.
+## 4.11.0 (2026-11-27)
+- Auto erhält deterministisches Fehlersignal; clamp jetzt ABWÄRTS (höchste unterstützte Stufe ≤ Ziel); bei Fehler ≥ high.
+## 4.10.0 (2026-11-27)
+- Ein-Klick-Sync: Vorschau → Bestätigung → Rückschreiben von reasoningEfforts. Standardmäßig nur undekarierte Modelle; offizielle llm-deepseek-Route bleibt unberührt.
+## 4.9.0 (2026-11-27)
+- Eingebautes Modell-Stufenkatalog (9 Familien). Nur-Lese-Familienabzeichen pro Modellzeile. Keine Schreibvorgänge.
+## 4.8.0 (2026-11-27)
+- Acht Sprachen wirklich wählbar über LocaleRuntime.addLanguage (Fähigkeitserkennung, sonst Rückfall auf zh/en). Falsche „fork nötig"-Aussage im README entfernt.
+
 ## [4.4.8] — 2026-10-27 (Manifest-Versionen wieder synchron)
 
 - 4.4.7 aktualisierte nur `package.json`; `dsh.plugin.json` blieb bei `4.4.6`. 4.4.8 setzt beide auf `4.4.8`. Laufzeitverhalten identisch zu 4.4.7.

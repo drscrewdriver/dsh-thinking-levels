@@ -2,6 +2,19 @@
 
 Tutte le modifiche notevoli a `dsh-thinking-levels` sono documentate qui.
 
+## 4.13.0 (2026-11-27)
+- Soglie di compressione per modello scritte in modelPolicies di dsh-compaction-basic (mai auto o rapporti globali; resa solo se modelPolicies esiste).
+## 4.12.0 (2026-11-27)
+- Livello subagent separato (ramo A): rilevamento di agent.options.subagentDepth. Config.subagentLevel (inherit predefinito, volatile). Host senza campo = comportamento 4.11.0.
+## 4.11.0 (2026-11-27)
+- Auto aggiunge un segnale di errore deterministico; clamp verso il BASSO (livello supportato più alto ≤ obiettivo); ≥ high in caso di errore.
+## 4.10.0 (2026-11-27)
+- Sincronizzazione con un clic: anteprima → conferma → scrittura di reasoningEfforts. Solo i non dichiarati per impostazione predefinita; la rotta ufficiale llm-deepseek non viene toccata.
+## 4.9.0 (2026-11-27)
+- Cataloglo integrato dei livelli modello (9 famiglie). Badge famiglia di sola lettura su ogni riga. Nessuna scrittura.
+## 4.8.0 (2026-11-27)
+- Otto lingue davvero selezionabili tramite LocaleRuntime.addLanguage (rilevamento capacità, altrimenti ripiega su zh/en). Rimosso l'affermazione errata "serve un fork" dal README.
+
 ## [4.4.8] — 2026-10-27 (versioni dei manifest riallineate)
 
 - La 4.4.7 aggiornava solo `package.json`; `dsh.plugin.json` restava a `4.4.6`. La 4.4.8 allinea entrambi a `4.4.8`. Comportamento a runtime identico alla 4.4.7.

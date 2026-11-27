@@ -34,7 +34,7 @@
 - [Changelog en español](./CHANGELOG.es.md)
 - [Changelog em português](./CHANGELOG.pt.md)
 
-> **兼容性说明：** `0.6.0` 已包含日本語（`ja`）和한국어（`ko`）字典及选择项，但当前官方 DSH 只通过 `LocaleRuntime` 提供 `zh` 和 `en`。在原版 DSH 中选择 `ja` 或 `ko` 会失败，并提示 `locale "<id>" is not registered`。需要等待官方 DSH 增加对应 locale ID 后才能正常使用。高级用户可以维护 DSH fork，在 `packages/client/locale/src/locale-settings.ts` 更新 `LOCALE_IDS`，在 `packages/client/locale/src/client/index.ts` 更新 `LOCALES` 标签，并补齐核心字典和测试，然后重新构建并运行 fork 版本。仅修改本插件无法扩展 DSH 的全局 locale 列表。
+> **语言支持：** 本插件通过 `LocaleRuntime.addLanguage` 在运行时把 `ja`/`ko`/`fr`/`de`/`it`/`ru`/`es`/`pt` 注册为可选语言（能力探测；宿主不支持该 API 时退回 `zh`/`en`，但字典仍全部安装）。无需 fork DSH。
 
 > **版本兼容：** 本版本把 DSH 宿主声明为**一条有界区间** —— `>=0.1.0-rc.8 <0.3.0-0`，并在每处写点写同一个串（`package.json` 的 `engines.dsh`、`dsh.plugin.json`、以及每个 `@deepseek-ai/dsh-*` peer）。上限带 `-0` 是有意为之：在 `includePrerelease` 下裸 `<0.3.0` 仍会放进 `0.3.0-rc.*`，等于悄悄声明支持下一条未验证宿主线。区间内的 0.2.x 任意 rc 无需重发插件即可安装。自 0.1.7-rc.1 边界起，DSH 移除了命令式设置注册（`settings.register` / `installSettingsSection`）与客户端 `settingsScope` 服务及每插件卡片槽位，运行时调整的配置字段在 schemastery schema 中标 `.volatile()`，设置表单由宿主按 schema 自动生成（无注册调用、无客户端设置卡片），插件按请求读取实时值（由 `loader/volatile-update` 驱动）——4.0.x 面向 0.2.0-rc 区段的同一声明式表面；0.1.7-rc.1 至 <0.2.0 的宿主请使用 3.x 线（3.4.3，npm dist-tag `dsh-0.1.7`），0.1.2–0.1.6 宿主请继续使用插件 3.0.2。
 
@@ -247,3 +247,12 @@ MIT
 目录外模型走 defaultPricing 设置（cn / global / custom / off，缺省 off）：「off」时账单弹层显示"未计价"，token 计数照常——不再拿单一型号价静默估算。
 
 语义说明：改价/改策略只影响其后新记的账；升级后首次打开旧会话时，其累计账目会按当前目录一次性重折。
+
+## 档位库 / 一键同步 / 按模型压缩（4.8.0–4.13.0）
+
+- **可选语言（4.8.0）**：经 `LocaleRuntime.addLanguage` 让八种界面语言真正可选，能力探测 + 单条降级。
+- **主流模型档位库（4.9.0）**：内置 9 族（OpenAI / Claude / Gemini 4 / Gemini 3 / DeepSeek / Grok / Qwen / GLM-Kimi-MiniMax），记录每族可用档位、线网拼写、厂商默认档、能否关闭思考；模型行显示只读族徽标。每条带来源 URL + 取数日期，未核实族只显族名不给建议。
+- **一键同步（4.10.0）**：设置卡「模型档位」分区逐模型预览（族/现状/将写入/跳过原因），经既有 `llm-pi-ai` 面写回 `reasoningEfforts`。默认只填未声明者，覆盖需显式勾选，官方 `llm-deepseek` 路由不写。
+- **Auto 失败信号 + 向下夹（4.11.0）**：同参工具连续失败或本轮 error 时 auto 不低于 `high`（可升 `max`）；不支持的调度档位向下夹到不高于目标的最高支持档。
+- **子 agent 档位（4.12.0）**：委派子 agent 可持独立档位，按 `agent.options.subagentDepth` 能力探测；`inherit`（默认）在无该字段的宿主上保持 4.12 前行为。
+- **按模型压缩阈值（4.13.0）**：宿主 `dsh-compaction-basic` 暴露 `modelPolicies` 时，设置卡提供逐模型触发/保留比例。只写被编辑的模型，不动 `auto` 总开关与全局比值，绝不调 `compactRegion()`。

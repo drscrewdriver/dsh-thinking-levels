@@ -12,6 +12,19 @@ Todas as mudanças notáveis de `dsh-thinking-levels` estão documentadas aqui.
 - [Changelog in italiano](./CHANGELOG.it.md)
 - [Список изменений на русском](./CHANGELOG.ru.md)
 
+## 4.13.0 (2026-11-27)
+- Limiares de compactação por modelo gravados em modelPolicies do dsh-compaction-basic (nunca auto nem razões globais; renderiza só se modelPolicies existir).
+## 4.12.0 (2026-11-27)
+- Nível de subagente separado (ramo A): detecção de agent.options.subagentDepth. Config.subagentLevel (inherit padrão, volatile). Sem o campo = comportamento 4.11.0.
+## 4.11.0 (2026-11-27)
+- Auto ganha um sinal de falha determinístico; clamp PARA BAIXO (nível suportado mais alto ≤ alvo); ≥ high diante de falha.
+## 4.10.0 (2026-11-27)
+- Sincronização em um clique: prévia → confirmação → gravação de reasoningEfforts. Por padrão só os não declarados; a rota oficial llm-deepseek não é tocada.
+## 4.9.0 (2026-11-27)
+- Catálogo integrado de níveis de modelo (9 famílias). Selo de família somente leitura em cada linha. Nenhuma gravação.
+## 4.8.0 (2026-11-27)
+- Oito idiomas de fato selecionáveis via LocaleRuntime.addLanguage (sonda de capacidade, senão recua para zh/en). Removida do README a afirmação errônea de que é preciso fork.
+
 ## 4.4.16
 
 - i18n: adiciona o locale português (pt-BR) — dicionário de tempo de execução, metadados do pacote e espelhos README/INSTALL/CHANGELOG.

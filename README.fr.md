@@ -36,7 +36,7 @@
 
 > **Politique de plages de versions :** chaque ligne de compatibilité cale étroitement son hôte sur son propre segment. Les lignes ciblant des hôtes 0.1.x suivent `>=0.1.x-rc.1 <0.1.(x+1)-0` (3.1.x : `>=0.1.7-rc.1 <0.1.8-0` ; 3.0.x : `>=0.1.5-alpha.1 <0.1.6-0` ; 2.0.x : `>=0.1.2-alpha.1 <0.1.3-0` ; 1.0.0-beta : `>=0.1.0-rc.8 <0.1.2-alpha.1`) ; les lignes ciblant le segment 0.2.x suivent `>=0.2.0-rc.1 <0.2.1-0` (4.0.x : `>=0.2.0-rc.1 <0.2.1-0`). Aucune ligne ne déclare jamais de borne haute ouverte : un résolveur de compatibilité ne peut donc jamais apparier une ligne de plugin à un segment d'hôte plus récent pour lequel elle n'a pas été conçue. Les versions 0.4.0–0.6.0 ne portaient aucune déclaration peer dsh et sont de fait sans typage de compatibilité — ne les installez pas.
 
-> **Note de compatibilité :** la version `0.6.0` inclut les dictionnaires et entrées de sélecteur japonais (`ja`) et coréen (`ko`), mais les versions officielles actuelles de DSH n'exposent que `zh` et `en` via `LocaleRuntime`. Sur un DSH d'origine, sélectionner `ja` ou `ko` échoue avec `locale "<id>" is not registered`. Ces langues fonctionneront une fois que le DSH officiel aura ajouté les identifiants de locale correspondants. Les utilisateurs avancés peuvent utiliser un fork de DSH qui met à jour `packages/client/locale/src/locale-settings.ts` (`LOCALE_IDS`) et `packages/client/locale/src/client/index.ts` (libellés `LOCALES`), ainsi que les dictionnaires et tests de base correspondants, puis recompiler et exécuter le DSH forké. Modifier ce plugin seul ne peut pas étendre la liste globale des locales de DSH.
+> **Prise en charge des langues :** ce plugin enregistre `ja`/`ko`/`fr`/`de`/`it`/`ru`/`es`/`pt` comme sélectionnables à l'exécution via `LocaleRuntime.addLanguage` (détection de l'API ; sur un hôte sans cette API, repli sur `zh`/`en`, les dictionnaires restant installés). Aucun fork de DSH n'est requis.
 
 Dans une chaîne d'outils multi-étapes, le modèle re-réfléchit avant **chaque** appel d'outil — et cette réflexion domine le temps réel (une tâche d'agent de 50 étapes peut passer des minutes à raisonner entre les outils). `dsh-thinking-levels` se branche sur la cascade `agent/request` que dsh réévalue à chaque étape (enregistrée avec `prepend` pour que l'assemblage de sélection de modèle de session ne puisse pas écraser sa décision) et injecte un niveau de réflexion dans la prochaine requête de modèle.
 
@@ -230,3 +230,12 @@ Couverture des tests : politique de niveaux (transmission manuelle y compris les
 ## Licence
 
 MIT
+
+## Effort-tier catalog, one-click sync, per-model compaction (4.8.0–4.13.0)
+
+- **Selectable languages (4.8.0):** eight more UI languages become selectable via `LocaleRuntime.addLanguage`, capability-probed with a per-entry fallback.
+- **Mainstream-model tier catalog (4.9.0):** a built-in 9-family catalog (OpenAI / Claude / Gemini 4 / Gemini 3 / DeepSeek / Grok / Qwen / GLM-Kimi-MiniMax) records each family's supported levels, wire spellings, vendor default and whether thinking can be disabled; each model line shows a read-only family badge. Every entry carries a source URL + retrieval date; unverified families show the name but no suggested ladder.
+- **One-click sync (4.10.0):** the settings card's "Model tier" section previews every model (family / current / to-write / skip reason), then writes `reasoningEfforts` through the existing `llm-pi-ai` scope. By default it only fills undeclared models; overwriting an existing declaration needs the explicit checkbox, and the official `llm-deepseek` route is never written.
+- **Auto failure signal + downward clamp (4.11.0):** repeated same-argument tool failures or an errored turn hold the auto tier at `high` (or lift to `max`); an unsupported scheduled level now clamps DOWN to the highest supported level ≤ the target.
+- **Subagent tier (4.12.0):** delegated subagents can carry their own level, detected capability-style from `agent.options.subagentDepth`; `inherit` (default) keeps pre-4.12 behavior on hosts without the field.
+- **Per-model compaction threshold (4.13.0):** when the host's `dsh-compaction-basic` config exposes `modelPolicies`, the settings card offers per-model trigger/retain ratios. It only writes edited models, never touches the `auto` switch or global ratios, and never calls the private `compactRegion()`.

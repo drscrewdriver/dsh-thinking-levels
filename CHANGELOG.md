@@ -1,5 +1,49 @@
 # Changelog
 
+## 4.13.0 (2026-11-27)
+
+**按模型配置上下文压缩阈值（写 `dsh-compaction-basic` 官方 `modelPolicies` 面）。**
+
+- 新增 `src/client/compaction-policy.ts`（纯逻辑，可单测）：`planCompactionPolicies` 读当前 `modelPolicies` + 用户草稿 → mutate ops；校验 `0<ratio<1` 且 `retainRatio<thresholdRatio`，违反即返回可读错误、不静默裁剪。
+- UI「压缩阈值」分区逐模型两列（触发/保留），**只在宿主配置含 `modelPolicies` 键时渲染**（能力探测）。只写被编辑的模型，**不动 `auto` 总开关与全局比值**，绝不调 `compactRegion()` 私有方法。
+- 写回经既有 configForms 句柄，按 mutate/set 双路径 + 写后读回自检。
+
+## 4.12.0 (2026-11-27)
+
+**子 agent 档位可单独设定（A 分支：能力探测 `agent.options.subagentDepth`）。**
+
+- Spike 代码级确证：宿主 `AgentOptions.subagentDepth`（`const runtime = agent.options.subagentDepth`）为运行时判别位，>0 即委派子 agent；故 `agent/pre-step`/`agent/request` 覆盖子 agent。`agent/created` 仍不存在。
+- 新增 `Config.subagentLevel`（含 `inherit` 默认，`.volatile()` 热生效）；strict 与 legacy 两条档位消费点经 `pickAgentLevel` 选择父/子档。宿主未暴露 `subagentDepth` 时 `agentIsSubagent` 恒 false，行为与 4.11.0 逐字一致（降级安全）。
+
+## 4.11.0 (2026-11-27)
+
+**Auto 引入确定性失败信号，并把 clamp 方向改为向下。**
+
+- `session-events.ts` 新增 `failureSignalOf`（与 `toolSampleOf` 同一 `tool/call` 线形状）：同参工具连续失败 ≥2 次计一组，`turn/end` 的 `reason.kind==='error'` 置 `turnErrored`；只看最近 `FAILURE_LOOKBACK` 条。
+- `scheduleEffort` 有失败证据时**不低于 `high`**，`repeatFailures>=2 && allowUpgrade` 升 `max`；无失败证据行为不变。
+- `clampToEfforts` 的 auto 分支从「向上夹到最高思考档」改为「夹到不高于目标的最高支持档」（与厂商回退语义一致）；手动选档仍是不支持即剥离。**注：这是刻意的行为变更，旧「向上夹」断言已随之更新。**
+
+## 4.10.0 (2026-11-27)
+
+**一键同步档位：预览 → 确认 → 写回 `reasoningEfforts`。**
+
+- 新增 `src/client/effort-sync.ts`（纯逻辑）：`planSync` 逐模型给出族/现状/将写入/跳过原因（`declared`/`host-managed`/`unrecognized`/`low-confidence`/`no-wire`）；`opsOf` 按 provider 分批。
+- 设置卡「模型档位」分区（`effort-sync-ui.tsx`）：族分组表 + 逐模型预览 + 全部同步 / □覆盖已存在 + 写后自检。**默认只填未声明者**，官方 `llm-deepseek` 路由不写；每批独立成败。
+
+## 4.9.0 (2026-11-27)
+
+**内置主流模型档位库（9 族），模型行加只读族徽标。**
+
+- 新增 `src/model-effort-catalog.ts`（纯函数、零依赖、可单测）：`matchEffortFamily`/`resolveTier`/`reasoningEffortsOf`，覆盖 OpenAI/Claude/Gemini4/Gemini3/DeepSeek/Grok/Qwen-effort/Qwen-toggle/GLM-Kimi-MiniMax，每条带 `source.url`+`retrievedAt`，未核实标 `confidence:'low'` 且不出建议值。
+- 模型行只读族徽标 + 建议档位（`model-panel.tsx` 的 `familyBadgeText`）；未识别显「未识别」灰字，`confidence:'low'` 只显族名。此节点**不写任何配置**。
+
+## 4.8.0 (2026-11-27)
+
+**八种语言真正可选：经 `LocaleRuntime.addLanguage` 动态注册。**
+
+- 新增 `LOCALE_PACKS` 常量（9 项，各语自称 label，`fallback:'en'`）；`ctx.effect` 里**先** `addLanguage` **再** `register`，全部能力探测 + 单条 `try/catch` 隔离。宿主无 `addLanguage` 时退回 zh/en 且不发错。
+- 删除 README 里「插件自己无法扩展语言列表 / 需 fork」的错误说法（宿主早已支持外部 locale 注册）。
+
 ## 4.7.6 (2026-11-26)
 
 **设置卡底栏 Star 快车道：★ 直接打开仓库页（不再只静默收起），隐藏独立成 ×。**

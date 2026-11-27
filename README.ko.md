@@ -34,7 +34,7 @@
 - [Changelog en español](./CHANGELOG.es.md)
 - [Changelog em português](./CHANGELOG.pt.md)
 
-> **호환성 참고:** `0.6.0`에는 일본어(`ja`)와 한국어(`ko`) 사전 및 선택 항목이 포함되어 있지만, 현재 공식 DSH는 `LocaleRuntime`을 통해 `zh`와 `en`만 제공합니다. 순정 DSH에서 `ja` 또는 `ko`를 선택하면 `locale "<id>" is not registered` 오류가 발생합니다. 공식 DSH가 해당 locale ID를 추가할 때까지 사용할 수 없습니다. 고급 사용자는 DSH 포크를 유지하면서 `packages/client/locale/src/locale-settings.ts`의 `LOCALE_IDS`와 `packages/client/locale/src/client/index.ts`의 `LOCALES` 라벨을 업데이트하고 핵심 사전과 테스트를 추가한 뒤 다시 빌드하여 실행할 수 있습니다. 이 플러그인만으로는 DSH의 전역 locale 목록을 확장할 수 없습니다.
+> **언어 지원:** 이 플러그인은 `LocaleRuntime.addLanguage`를 통해 런타임에 `ja`/`ko`/`fr`/`de`/`it`/`ru`/`es`/`pt`를 선택 가능한 언어로 등록합니다(API 탐지, 미지원 호스트는 `zh`/`en`으로 후퇴하지만 사전은 모두 설치). DSH 포크가 필요 없습니다.
 
 > **버전 호환:** 본 릴리스는 **DSH 호스트를 단일 유계 범위**로 선언: `>=0.1.0-rc.8 <0.3.0-0` — rc별 단독 열거, 구간/caret 미사용. 0.1.7-rc.1 경계 이후 DSH는 명령형 설정 등록(`settings.register` / `installSettingsSection`)과 클라이언트 `settingsScope` 서비스 및 플러그인별 카드 슬롯을 제거했고, 런타임 조정 가능한 설정 필드는 schemastery 스키마에 `.volatile()`로 표시되며, 설정 폼은 호스트가 스키마에서 자동 생성(등록 호출도 클라이언트 설정 카드도 없음)하고, 플러그인은 `loader/volatile-update`에 따라 요청마다 최신 값을 읽습니다——4.0.x은 0.2.0-rc 세그먼트의 동일한 선언적 표면을 대상으로 합니다. 0.1.7-rc.1~<0.2.0 호스트에서는 3.x 라인(3.4.3, npm dist-tag `dsh-0.1.7`)을, 0.1.2–0.1.6 호스트에서는 플러그인 3.0.2을 사용하세요.
 
@@ -193,3 +193,12 @@ npm test            # vitest — 46개 테스트
 ## 라이선스
 
 MIT
+
+## Effort-tier catalog, one-click sync, per-model compaction (4.8.0–4.13.0)
+
+- **Selectable languages (4.8.0):** eight more UI languages become selectable via `LocaleRuntime.addLanguage`, capability-probed with a per-entry fallback.
+- **Mainstream-model tier catalog (4.9.0):** a built-in 9-family catalog (OpenAI / Claude / Gemini 4 / Gemini 3 / DeepSeek / Grok / Qwen / GLM-Kimi-MiniMax) records each family's supported levels, wire spellings, vendor default and whether thinking can be disabled; each model line shows a read-only family badge. Every entry carries a source URL + retrieval date; unverified families show the name but no suggested ladder.
+- **One-click sync (4.10.0):** the settings card's "Model tier" section previews every model (family / current / to-write / skip reason), then writes `reasoningEfforts` through the existing `llm-pi-ai` scope. By default it only fills undeclared models; overwriting an existing declaration needs the explicit checkbox, and the official `llm-deepseek` route is never written.
+- **Auto failure signal + downward clamp (4.11.0):** repeated same-argument tool failures or an errored turn hold the auto tier at `high` (or lift to `max`); an unsupported scheduled level now clamps DOWN to the highest supported level ≤ the target.
+- **Subagent tier (4.12.0):** delegated subagents can carry their own level, detected capability-style from `agent.options.subagentDepth`; `inherit` (default) keeps pre-4.12 behavior on hosts without the field.
+- **Per-model compaction threshold (4.13.0):** when the host's `dsh-compaction-basic` config exposes `modelPolicies`, the settings card offers per-model trigger/retain ratios. It only writes edited models, never touches the `auto` switch or global ratios, and never calls the private `compactRegion()`.

@@ -36,7 +36,7 @@
 
 > **Политика диапазонов версий:** каждая линия совместимости жёстко привязывает свой хост к собственному сегменту. Линии для хостов 0.1.x следуют `>=0.1.x-rc.1 <0.1.(x+1)-0` (3.1.x: `>=0.1.7-rc.1 <0.1.8-0`; 3.0.x: `>=0.1.5-alpha.1 <0.1.6-0`; 2.0.x: `>=0.1.2-alpha.1 <0.1.3-0`; 1.0.0-beta: `>=0.1.0-rc.8 <0.1.2-alpha.1`); линии для сегмента 0.2.x следуют `>=0.2.0-rc.1 <0.2.1-0` (4.0.x: `>=0.2.0-rc.1 <0.2.1-0`). Ни одна линия никогда не объявляет открытой верхней границы, поэтому резолвер совместимости никогда не сопоставит линию плагина с более новым сегментом хоста, под который она не разрабатывалась. Версии 0.4.0–0.6.0 вообще не несли peer-деклараций dsh и фактически не типизированы по совместимости — не устанавливайте их.
 
-> **Примечание о совместимости:** версия `0.6.0` включает японские (`ja`) и корейские (`ko`) словари и пункты селектора, но текущие официальные релизы DSH через `LocaleRuntime` предоставляют только `zh` и `en`. На стоковом DSH выбор `ja` или `ko` падает с `locale "<id>" is not registered`. Эти языки заработают, когда официальный DSH добавит соответствующие ID локалей. Опытные пользователи могут поддерживать форк DSH, обновляющий `packages/client/locale/src/locale-settings.ts` (`LOCALE_IDS`) и `packages/client/locale/src/client/index.ts` (метки `LOCALES`) вместе с соответствующими базовыми словарями и тестами, а затем пересобрать и запустить форк. Изменение одного лишь плагина не может расширить глобальный список локалей DSH.
+> **Поддержка языков:** плагин регистрирует `ja`/`ko`/`fr`/`de`/`it`/`ru`/`es`/`pt` как выбираемые во время выполнения через `LocaleRuntime.addLanguage` (проверка API; на хосте без него — откат на `zh`/`en`, все словари всё равно устанавливаются). Форк DSH не требуется.
 
 В многошаговой цепочке инструментов модель думает заново перед **каждым** вызовом инструмента — и это обдумывание доминирует в астрономическом времени (50-шаговая агентная задача может тратить минуты на рассуждения между инструментами). `dsh-thinking-levels` встраивается в waterfall `agent/request`, который dsh заново резолвит на каждом шаге (регистрируется с `prepend`, чтобы сборка выбора модели сессии не могла перезаписать его решение), и вводит thinking-уровень в следующий запрос к модели.
 
@@ -230,3 +230,12 @@ npm test            # vitest — 46 tests
 ## Лицензия
 
 MIT
+
+## Effort-tier catalog, one-click sync, per-model compaction (4.8.0–4.13.0)
+
+- **Selectable languages (4.8.0):** eight more UI languages become selectable via `LocaleRuntime.addLanguage`, capability-probed with a per-entry fallback.
+- **Mainstream-model tier catalog (4.9.0):** a built-in 9-family catalog (OpenAI / Claude / Gemini 4 / Gemini 3 / DeepSeek / Grok / Qwen / GLM-Kimi-MiniMax) records each family's supported levels, wire spellings, vendor default and whether thinking can be disabled; each model line shows a read-only family badge. Every entry carries a source URL + retrieval date; unverified families show the name but no suggested ladder.
+- **One-click sync (4.10.0):** the settings card's "Model tier" section previews every model (family / current / to-write / skip reason), then writes `reasoningEfforts` through the existing `llm-pi-ai` scope. By default it only fills undeclared models; overwriting an existing declaration needs the explicit checkbox, and the official `llm-deepseek` route is never written.
+- **Auto failure signal + downward clamp (4.11.0):** repeated same-argument tool failures or an errored turn hold the auto tier at `high` (or lift to `max`); an unsupported scheduled level now clamps DOWN to the highest supported level ≤ the target.
+- **Subagent tier (4.12.0):** delegated subagents can carry their own level, detected capability-style from `agent.options.subagentDepth`; `inherit` (default) keeps pre-4.12 behavior on hosts without the field.
+- **Per-model compaction threshold (4.13.0):** when the host's `dsh-compaction-basic` config exposes `modelPolicies`, the settings card offers per-model trigger/retain ratios. It only writes edited models, never touches the `auto` switch or global ratios, and never calls the private `compactRegion()`.

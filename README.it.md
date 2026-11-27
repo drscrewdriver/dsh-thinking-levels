@@ -36,7 +36,7 @@
 
 > **Politica degli intervalli di versione:** ogni linea di compatibilità aggancia il proprio host al proprio segmento in modo stretto. Le linee per host 0.1.x seguono `>=0.1.x-rc.1 <0.1.(x+1)-0` (3.1.x: `>=0.1.7-rc.1 <0.1.8-0`; 3.0.x: `>=0.1.5-alpha.1 <0.1.6-0`; 2.0.x: `>=0.1.2-alpha.1 <0.1.3-0`; 1.0.0-beta: `>=0.1.0-rc.8 <0.1.2-alpha.1`); le linee per il segmento 0.2.x seguono `>=0.2.0-rc.1 <0.2.1-0` (4.0.x: `>=0.2.0-rc.1 <0.2.1-0`). Nessuna linea dichiara mai un limite superiore aperto, così un resolver di compatibilità non può mai abbinare una linea di plugin a un segmento host più recente per cui non è stata costruita. Le versioni 0.4.0–0.6.0 non portavano alcuna dichiarazione peer dsh e sono di fatto senza tipizzazione di compatibilità — non installarle.
 
-> **Nota di compatibilità:** la versione `0.6.0` include dizionari e voci del selettore in giapponese (`ja`) e coreano (`ko`), ma le release ufficiali attuali di DSH espongono solo `zh` e `en` tramite `LocaleRuntime`. Su un DSH originale, selezionare `ja` o `ko` fallisce con `locale "<id>" is not registered`. Queste lingue funzioneranno quando il DSH ufficiale aggiungerà gli ID locale corrispondenti. Gli utenti avanzati possono usare un fork di DSH che aggiorna `packages/client/locale/src/locale-settings.ts` (`LOCALE_IDS`) e `packages/client/locale/src/client/index.ts` (etichette `LOCALES`), insieme ai dizionari e ai test di base corrispondenti, per poi ricompilare ed eseguire il DSH forkato. Modificare solo questo plugin non può estendere l'elenco globale delle locale di DSH.
+> **Supporto lingue:** questo plugin registra `ja`/`ko`/`fr`/`de`/`it`/`ru`/`es`/`pt` come selezionabili a runtime tramite `LocaleRuntime.addLanguage` (rilevamento API; su host senza questa API ripiega su `zh`/`en`, installando comunque tutti i dizionari). Nessun fork di DSH richiesto.
 
 In una catena di strumenti a più passi, il modello ripensa prima di **ogni** chiamata a uno strumento — e quel pensiero domina il tempo di muro (un compito agent di 50 passi può spendere minuti a ragionare tra gli strumenti). `dsh-thinking-levels` si innesta nel waterfall `agent/request` che dsh risolve di nuovo a ogni passo (registrato con `prepend` così l'assemblaggio della selezione modello di sessione non può sovrascrivere la sua decisione) e inietta un livello di pensiero nella prossima richiesta al modello.
 
@@ -229,3 +229,12 @@ Copertura dei test: politica dei livelli (pass-through manuale inclusi i livelli
 ## Licenza
 
 MIT
+
+## Effort-tier catalog, one-click sync, per-model compaction (4.8.0–4.13.0)
+
+- **Selectable languages (4.8.0):** eight more UI languages become selectable via `LocaleRuntime.addLanguage`, capability-probed with a per-entry fallback.
+- **Mainstream-model tier catalog (4.9.0):** a built-in 9-family catalog (OpenAI / Claude / Gemini 4 / Gemini 3 / DeepSeek / Grok / Qwen / GLM-Kimi-MiniMax) records each family's supported levels, wire spellings, vendor default and whether thinking can be disabled; each model line shows a read-only family badge. Every entry carries a source URL + retrieval date; unverified families show the name but no suggested ladder.
+- **One-click sync (4.10.0):** the settings card's "Model tier" section previews every model (family / current / to-write / skip reason), then writes `reasoningEfforts` through the existing `llm-pi-ai` scope. By default it only fills undeclared models; overwriting an existing declaration needs the explicit checkbox, and the official `llm-deepseek` route is never written.
+- **Auto failure signal + downward clamp (4.11.0):** repeated same-argument tool failures or an errored turn hold the auto tier at `high` (or lift to `max`); an unsupported scheduled level now clamps DOWN to the highest supported level ≤ the target.
+- **Subagent tier (4.12.0):** delegated subagents can carry their own level, detected capability-style from `agent.options.subagentDepth`; `inherit` (default) keeps pre-4.12 behavior on hosts without the field.
+- **Per-model compaction threshold (4.13.0):** when the host's `dsh-compaction-basic` config exposes `modelPolicies`, the settings card offers per-model trigger/retain ratios. It only writes edited models, never touches the `auto` switch or global ratios, and never calls the private `compactRegion()`.
