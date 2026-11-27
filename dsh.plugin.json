@@ -1,6 +1,6 @@
 {
   "id": "dsh-external/dsh-thinking-levels",
-  "version": "4.11.0-rc.1",
+  "version": "4.12.0-rc.1",
   "main": "./lib/index.js",
   "description": "thinking-level (reasoning_effort) control — auto-adjust per tool round, with optional manual lock and per-tool timing telemetry. Its opt-in Third-party takeover drives the dsh-llm-openai-completions transport (optional peer, same LLM-transport tier other plugins depend on); without it, custom-gateway fixes still ride the official llm-pi-ai compat surface.",
   "engines": {

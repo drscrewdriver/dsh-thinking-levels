@@ -38,7 +38,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Volatile } from '@deepseek-ai/cosmokit'
 import z from '@deepseek-ai/schemastery'
-import { assertEffortId, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
+import { assertEffortId, pickAgentLevel, reasoningEffortSupported, resolveEffortInjection, type EffortId } from './thinking-level.ts'
 import { buildBillingDefinition, type PricingPolicy } from './billing-projection.ts'
 import { recentToolCalls } from './session-events.ts'
 import { buildAutoScheduleDefinition, readAutoSchedule, requestedEffortOf } from './auto-schedule-projection.ts'
@@ -89,6 +89,8 @@ export interface ThinkingLevelsConfig {
   enabled: boolean | Volatile<boolean>
   /** User-selected level: off / on / minimal / low / medium / high / xhigh / max fix the wire level; `auto` schedules per step. */
   level: EffortId | Volatile<EffortId>
+  /** Subagent-only tier override (N5); `inherit` keeps the parent `level` for delegated agents. */
+  subagentLevel: EffortId | 'inherit' | Volatile<EffortId | 'inherit'>
   /** Scheduler preference: allow dropping below the `high` hub. */
   allowDowngrade: boolean | Volatile<boolean>
   /** Scheduler preference: allow lifting above the `high` hub to `max`. */
@@ -157,6 +159,7 @@ const defaultPricingSchema = z.union(['estimate', 'cn', 'global', 'custom', 'off
 export const Config = z.object({
   enabled: z.boolean().default(true).volatile(),
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto').volatile(),
+  subagentLevel: z.union(['inherit', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('inherit').volatile(),
   allowDowngrade: z.boolean().default(true).volatile(),
   allowUpgrade: z.boolean().default(false).volatile(),
   simpleTools: z.array(z.string()).default([]).volatile(),
@@ -177,6 +180,7 @@ export const Config = z.object({
 export const LegacyConfig = z.object({
   enabled: z.boolean().default(true),
   level: z.union(['off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('auto'),
+  subagentLevel: z.union(['inherit', 'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto']).default('inherit'),
   allowDowngrade: z.boolean().default(true),
   allowUpgrade: z.boolean().default(false),
   simpleTools: z.array(z.string()).default([]),
@@ -191,6 +195,7 @@ export const LegacyConfig = z.object({
 export const DEFAULT_CONFIG: ThinkingLevelsConfig = {
   enabled: true,
   level: 'auto',
+  subagentLevel: 'inherit',
   allowDowngrade: true,
   allowUpgrade: false,
   simpleTools: [],
@@ -233,6 +238,7 @@ export function readVolatile<T>(value: T | Volatile<T> | undefined, fallback: T)
 interface LiveConfig {
   enabled: boolean
   level: EffortId
+  subagentLevel: EffortId | 'inherit'
   allowDowngrade: boolean
   allowUpgrade: boolean
   simpleTools: string[]
@@ -253,6 +259,7 @@ function resolveLiveConfig(config: ThinkingLevelsConfig): LiveConfig {
   return {
     enabled: readVolatile(config.enabled, true),
     level: readVolatile(config.level, 'auto'),
+    subagentLevel: readVolatile(config.subagentLevel, 'inherit'),
     allowDowngrade: readVolatile(config.allowDowngrade, true),
     allowUpgrade: readVolatile(config.allowUpgrade, false),
     simpleTools: readVolatile(config.simpleTools, []),
@@ -718,6 +725,7 @@ export function installLegacySection(
       const plainBase = {
         enabled: readVolatile(config.enabled, true),
         level: readVolatile(config.level, 'auto'),
+        subagentLevel: readVolatile(config.subagentLevel, 'inherit'),
         allowDowngrade: readVolatile(config.allowDowngrade, true),
         allowUpgrade: readVolatile(config.allowUpgrade, false),
         simpleTools: readVolatile(config.simpleTools, []),
@@ -984,6 +992,14 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
   type StrictAgentLike = {
     session?: unknown
     model?: { select?: (selection: unknown) => void; current?: () => unknown }
+    options?: { subagentDepth?: unknown }
+  }
+  // Capability-detected (never a version string): the host exposes
+  // `agent.options.subagentDepth` (>0 for a delegated subagent). Absent on a host
+  // without it, every agent reads as the root and subagentLevel is inert.
+  const agentIsSubagent = (agent: unknown): boolean => {
+    const depth = (agent as { options?: { subagentDepth?: unknown } } | undefined)?.options?.subagentDepth
+    return typeof depth === 'number' && depth > 0
   }
   const strictAgents = new WeakSet<object>()
   const strictMemory = new WeakMap<object, StrictStepMemory>()
@@ -1005,7 +1021,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     return planStrictStep({
       selectionEffort,
       memory: strictMemory.get(agent as object),
-      cfgLevel: cfg.level,
+      cfgLevel: pickAgentLevel(cfg.level, cfg.subagentLevel, agentIsSubagent(agent)),
       samples: state?.samples ?? [],
       allowDowngrade: cfg.allowDowngrade,
       allowUpgrade: cfg.allowUpgrade,
@@ -1202,7 +1218,7 @@ export function apply(ctx: Context, config: ThinkingLevelsConfig = DEFAULT_CONFI
     const calls = autoSchedule?.samples ?? recentToolCalls(payload.agent)
     // Intent comes from the session/config, never from the seed: the host
     // echoes this plugin's own last injection back through the header.
-    const requested = requestedEffortOf(autoSchedule, cfg.level)
+    const requested = requestedEffortOf(autoSchedule, pickAgentLevel(cfg.level, cfg.subagentLevel, agentIsSubagent(payload.agent)))
     const decision = resolveEffortInjection({
       supportsReasoning: capabilityFor.supportsReasoning,
       requested,

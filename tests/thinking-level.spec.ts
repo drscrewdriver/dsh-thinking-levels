@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  assertEffortId, clampToEfforts, compileSimpleToolsMatcher, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
+  assertEffortId, clampToEfforts, compileSimpleToolsMatcher, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider, pickAgentLevel,
   reasoningEffortSupported, resolveEffortInjection, toolDurationMs,
   type EffortDecisionInput, type EffortInjectionInput,
 } from '../src/thinking-level.ts'
@@ -473,5 +473,19 @@ describe('N4 clampToEfforts falls downward', () => {
   })
   it('an exactly-advertised level passes through untouched', () => {
     expect(clampToEfforts('high', ['off', 'low', 'high', 'max'])).toBe('high')
+  })
+})
+
+describe('N5 subagent tier selection (pickAgentLevel)', () => {
+  it('a subagent with an explicit override uses the subagent level', () => {
+    expect(pickAgentLevel('high', 'low', true)).toBe('low')
+    expect(pickAgentLevel('auto', 'max', true)).toBe('max')
+  })
+  it('the parent session keeps its own level', () => {
+    expect(pickAgentLevel('high', 'low', false)).toBe('high')
+  })
+  it('inherit leaves the parent level in force for subagents too (== pre-4.12)', () => {
+    expect(pickAgentLevel('high', 'inherit', true)).toBe('high')
+    expect(pickAgentLevel('auto', 'inherit', false)).toBe('auto')
   })
 })

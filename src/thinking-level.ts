@@ -49,6 +49,24 @@ export interface FailureSignal {
 /** Wire levels the auto scheduler may pick (never `off`, never `auto`). */
 export type AutoEffort = 'low' | 'high' | 'max'
 
+/**
+ * Pick the level one agent should use given a separate subagent setting (N5 /
+ * 4.12.0). The host exposes `agent.options.subagentDepth` (>0 for a delegated
+ * subagent), so a subagent can hold its own tier while the parent keeps `level`.
+ * `subagentLevel:'inherit'` (default) leaves the parent's level in force for
+ * every agent — byte-for-byte the pre-4.12 behavior.
+ * @param level - the configured parent / default level.
+ * @param subagentLevel - the subagent override, or `inherit`.
+ * @param isSubagent - whether this agent runs as a delegated subagent.
+ */
+export function pickAgentLevel(
+  level: EffortId,
+  subagentLevel: EffortId | 'inherit',
+  isSubagent: boolean,
+): EffortId {
+  return isSubagent && subagentLevel !== 'inherit' ? subagentLevel : level
+}
+
 /** The eight standard levels (excluding the `auto` scheduler sentinel). */
 export const STANDARD_LEVELS: readonly EffortId[] = [
   'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max',

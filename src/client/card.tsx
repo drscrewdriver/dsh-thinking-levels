@@ -64,6 +64,9 @@ const EFFORT_OPTIONS: readonly EffortId[] = [
   'off', 'on', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'auto',
 ]
 
+/** Subagent tier choices: the effort levels plus the `inherit` default (N5). */
+const SUBAGENT_OPTIONS: readonly (EffortId | 'inherit')[] = ['inherit', ...EFFORT_OPTIONS]
+
 /** 计价兜底档，in picker order：缺省 estimate（典型价估算，未校准仅供参考）。 */
 const PRICING_OPTIONS: readonly PricingPolicy[] = [
   'estimate', 'cn', 'global', 'custom', 'off',
@@ -1703,7 +1706,7 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
   // Optimistic overlay for this card's own writes (plan §E): same contract as
   // the capability card's overlay — clear on resolve(true), roll back + banner
   // on resolve(false).
-  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; takeoverUi: boolean; defaultPricing: PricingPolicy; simpleTools: string[] }>>({})
+  const [pendingTl, setPendingTl] = useState<Partial<{ enabled: boolean; level: EffortId; subagentLevel: EffortId | 'inherit'; allowDowngrade: boolean; allowUpgrade: boolean; takeover: boolean; takeoverUi: boolean; defaultPricing: PricingPolicy; simpleTools: string[] }>>({})
   const [writeErrorTl, setWriteErrorTl] = useState<string | null>(null)
   // The simple-tool allowlist is edited as free text (comma/space separated) and
   // written back as a deduped string[]; the local text is the source of truth for
@@ -1713,8 +1716,10 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
   // 首次使用引导：本地标记持久化；卡底「重新查看引导」清标记就地重开。
   const [guideOpen, setGuideOpen] = useState(() => !isGuideSkipped('thinking-levels'))
   const level = EFFORT_OPTIONS.includes(viewValue.level as EffortId) ? viewValue.level as EffortId : 'auto'
+  const rawSub = (viewValue as { subagentLevel?: unknown }).subagentLevel
+  const subagentLevel = SUBAGENT_OPTIONS.includes(rawSub as EffortId | 'inherit') ? rawSub as EffortId | 'inherit' : 'inherit'
   const defaultPricing = PRICING_OPTIONS.includes(viewValue.defaultPricing as PricingPolicy) ? viewValue.defaultPricing as PricingPolicy : 'estimate'
-  const writeTl = (field: 'enabled' | 'level' | 'allowDowngrade' | 'allowUpgrade' | 'simpleTools' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
+  const writeTl = (field: 'enabled' | 'level' | 'subagentLevel' | 'allowDowngrade' | 'allowUpgrade' | 'simpleTools' | 'takeover' | 'takeoverUi' | 'defaultPricing', v: unknown): void => {
     setPendingTl((cur) => ({ ...cur, [field]: v as never }))
     void setWithRetry(scope, field, v).then(({ ok }) => {
       setPendingTl((cur) => {
@@ -1813,6 +1818,20 @@ export function ThinkingLevelsCard({ t, scope, piAiScope, ocScope, deepseekScope
                     >
                       {EFFORT_OPTIONS.map((option) => (
                         <option key={option} value={option}>{t(`card.level.${option}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={rowStyle}>
+                    <label htmlFor="plugin-config-thinking-levels-subagent" style={labelStyle} title={t('card.subagentLevelHint')}>{t('card.subagentLevel')}</label>
+                    <select
+                      id="plugin-config-thinking-levels-subagent"
+                      value={subagentLevel}
+                      disabled={readonly}
+                      style={controlStyle}
+                      onChange={(event) => { writeTl('subagentLevel', event.currentTarget.value as EffortId | 'inherit') }}
+                    >
+                      {SUBAGENT_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option === 'inherit' ? t('card.subagentLevel.inherit') : t(`card.level.${option}`)}</option>
                       ))}
                     </select>
                   </div>

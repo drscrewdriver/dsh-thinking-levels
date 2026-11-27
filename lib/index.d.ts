@@ -67,6 +67,8 @@ export interface ThinkingLevelsConfig {
     enabled: boolean | Volatile<boolean>;
     /** User-selected level: off / on / minimal / low / medium / high / xhigh / max fix the wire level; `auto` schedules per step. */
     level: EffortId | Volatile<EffortId>;
+    /** Subagent-only tier override (N5); `inherit` keeps the parent `level` for delegated agents. */
+    subagentLevel: EffortId | 'inherit' | Volatile<EffortId | 'inherit'>;
     /** Scheduler preference: allow dropping below the `high` hub. */
     allowDowngrade: boolean | Volatile<boolean>;
     /** Scheduler preference: allow lifting above the `high` hub to `max`. */
@@ -119,6 +121,7 @@ export interface ThinkingLevelsConfig {
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     enabled: z<boolean, boolean, "volatile-defined">;
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
+    subagentLevel: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -140,6 +143,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
 }>>, Schemastery.ObjectT<NoInfer<{
     enabled: z<boolean, boolean, "volatile-defined">;
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "volatile-defined">;
+    subagentLevel: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "volatile-defined">;
     allowDowngrade: z<boolean, boolean, "volatile-defined">;
     allowUpgrade: z<boolean, boolean, "volatile-defined">;
     simpleTools: z<NoInfer<string[]>, NoInfer<string[]>, "volatile-defined">;
@@ -169,6 +173,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
 export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
     enabled: z<boolean, boolean, "defined">;
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
+    subagentLevel: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "defined">;
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     simpleTools: z<string[], string[], "defined">;
@@ -190,6 +195,7 @@ export declare const LegacyConfig: z<Schemastery.ObjectS<NoInfer<{
 }>>, Schemastery.ObjectT<NoInfer<{
     enabled: z<boolean, boolean, "defined">;
     level: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto", "defined">;
+    subagentLevel: z<"off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "auto" | "inherit", "defined">;
     allowDowngrade: z<boolean, boolean, "defined">;
     allowUpgrade: z<boolean, boolean, "defined">;
     simpleTools: z<string[], string[], "defined">;
