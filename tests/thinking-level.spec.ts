@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  assertEffortId, compileSimpleToolsMatcher, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
+  assertEffortId, clampToEfforts, compileSimpleToolsMatcher, decideEffort, isEffortId, nearestEffortStopIndex, orderEffortsForSlider,
   reasoningEffortSupported, resolveEffortInjection, toolDurationMs,
   type EffortDecisionInput, type EffortInjectionInput,
 } from '../src/thinking-level.ts'
@@ -333,11 +333,12 @@ describe('resolveEffortInjection — model capability guard', () => {
     expect(resolveEffortInjection(base({ requested: 'high' }))).toEqual({ inject: true, level: 'high' })
   })
 
-  it('clamps a scheduled low to the model\u2019s highest thinking level', () => {
-    // A model advertising no low (e.g. off/minimal/max) lifts a scheduled low
-    // to its highest thinking level instead of erroring.
+  it('clamps a scheduled level DOWN to the highest advertised level not above it', () => {
+    // A model advertising off/minimal/max, with the scheduler landing on the hub
+    // `high`, falls to `minimal` (the highest supported <= high) rather than up
+    // to `max` — vendor fallback semantics (N4, was upward pre-4.11).
     const narrow = { efforts: ['off', 'minimal', 'max'], toggleOnly: false }
-    expect(resolveEffortInjection(base({ ...narrow, requested: 'auto' }))).toEqual({ inject: true, level: 'max' })
+    expect(resolveEffortInjection(base({ ...narrow, requested: 'auto' }))).toEqual({ inject: true, level: 'minimal' })
   })
 
   it('strips an unsupported manual pick instead of clamping it', () => {
@@ -432,5 +433,45 @@ describe('nearestEffortStopIndex', () => {
   it('degenerate tracks always yield 0', () => {
     expect(nearestEffortStopIndex([], 'high')).toBe(0)
     expect(nearestEffortStopIndex([], undefined)).toBe(0)
+  })
+})
+
+describe('N4 failure signal floors the auto tier', () => {
+  // `bash` with a small payload is a simple tool: the plain scheduler drops to
+  // `low`. Failure evidence must override that downgrade.
+  const simpleAuto = (failure?: { repeatFailures: number; turnErrored: boolean }) =>
+    decideEffort(base({ selected: 'auto', allowDowngrade: true, allowUpgrade: true, recentCalls: [{ name: 'bash', argsSize: 12 }], failure }))
+
+  it('no failure evidence keeps the old downgrade to low', () => {
+    expect(simpleAuto(undefined)).toBe('low')
+    expect(simpleAuto({ repeatFailures: 0, turnErrored: false })).toBe('low')
+  })
+
+  it('one repeated-argument failure group holds at high (not low)', () => {
+    expect(simpleAuto({ repeatFailures: 1, turnErrored: false })).toBe('high')
+  })
+
+  it('a turn error holds at high even when all tools are simple', () => {
+    expect(simpleAuto({ repeatFailures: 0, turnErrored: true })).toBe('high')
+  })
+
+  it('two failure groups lift to max when upgrades are allowed', () => {
+    expect(simpleAuto({ repeatFailures: 2, turnErrored: false })).toBe('max')
+    expect(decideEffort(base({ selected: 'auto', allowUpgrade: false, recentCalls: [{ name: 'bash', argsSize: 12 }], failure: { repeatFailures: 2, turnErrored: false } }))).toBe('high')
+  })
+})
+
+describe('N4 clampToEfforts falls downward', () => {
+  it('off/low/max + target high -> low (was max under the old upward clamp)', () => {
+    expect(clampToEfforts('high', ['off', 'low', 'max'])).toBe('low')
+  })
+  it('off/high + target low -> undefined (nothing at or below low)', () => {
+    expect(clampToEfforts('low', ['off', 'high'])).toBeUndefined()
+  })
+  it('off/low/medium/high + target max -> high (highest advertised <= max)', () => {
+    expect(clampToEfforts('max', ['off', 'low', 'medium', 'high'])).toBe('high')
+  })
+  it('an exactly-advertised level passes through untouched', () => {
+    expect(clampToEfforts('high', ['off', 'low', 'high', 'max'])).toBe('high')
   })
 })

@@ -34,6 +34,18 @@
 /** The user-facing thinking levels: the eight standard levels plus the scheduler sentinel. */
 export type EffortId = 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto'
 
+/**
+ * Deterministic failure evidence the auto scheduler reads (N4 / 4.11.0). Defined
+ * here so `thinking-level` stays the dependency-free leaf; the folder lives in
+ * `session-events` and re-exports this type.
+ */
+export interface FailureSignal {
+  /** Distinct (name+args) groups that failed ≥2 times within the lookback. */
+  repeatFailures: number
+  /** The most recent turn ended with `reason.kind === 'error'`. */
+  turnErrored: boolean
+}
+
 /** Wire levels the auto scheduler may pick (never `off`, never `auto`). */
 export type AutoEffort = 'low' | 'high' | 'max'
 
@@ -81,6 +93,12 @@ export interface EffortDecisionInput {
   allowDowngrade: boolean
   /** User preference: allow the scheduler to lift above the hub to `max`. */
   allowUpgrade: boolean
+  /**
+   * Deterministic failure evidence for the step (N4). When present and non-empty
+   * the auto tier never falls below `high`; two or more repeated-argument
+   * failures can lift it to `max` (subject to `allowUpgrade`).
+   */
+  failure?: FailureSignal
   /**
    * Extra tool names treated as cheap-and-deterministic, merged with the
    * built-in set (each matched after the `ops_` namespace strip). Empty/omitted
@@ -252,6 +270,7 @@ function scheduleEffort(
   allowDowngrade: boolean,
   allowUpgrade: boolean,
   extra?: SimpleToolMatcher | null,
+  failure?: FailureSignal,
 ): AutoEffort {
   // The no-sample branch is the first request of the session: start at the hub
   // regardless of `allowDowngrade` (see the rationale above).
@@ -259,6 +278,15 @@ function scheduleEffort(
 
   const ratio = simpleRatio(calls, extra)
   const heaviest = calls.reduce((max, call) => Math.max(max, call.argsSize), 0)
+
+  // N4 failure evidence floors the tier at `high` (checked before the downgrade
+  // branch so a failing step made only of simple tools still stays at `high`),
+  // and lifts to `max` once two distinct same-argument failures prove the cheap
+  // plan is stuck (upgrade still gated on the user's allow-upgrade preference).
+  if (failure !== undefined && (failure.repeatFailures > 0 || failure.turnErrored)) {
+    if (failure.repeatFailures >= 2 && allowUpgrade) return 'max'
+    return 'high'
+  }
 
   if (ratio >= 0.75 && allowDowngrade) return 'low'
   if (heaviest >= HEAVY_ARGS * 4 && allowUpgrade) return 'max'
@@ -275,9 +303,9 @@ function scheduleEffort(
  * @returns The level to inject; `auto` is resolved before returning.
  */
 export function decideEffort(input: EffortDecisionInput): EffortId {
-  const { recentCalls, selected, allowDowngrade, allowUpgrade, extraSimpleTools, extraSimpleRegex } = input
+  const { recentCalls, selected, allowDowngrade, allowUpgrade, extraSimpleTools, extraSimpleRegex, failure } = input
   if (selected !== 'auto') return selected
-  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade, compileSimpleToolsMatcher(extraSimpleTools, extraSimpleRegex))
+  return scheduleEffort(recentCalls, allowDowngrade, allowUpgrade, compileSimpleToolsMatcher(extraSimpleTools, extraSimpleRegex), failure)
 }
 
 /**
@@ -323,6 +351,8 @@ export interface EffortInjectionInput {
   allowDowngrade: boolean
   /** Scheduler preference: allow lifting above `high` to `max`. */
   allowUpgrade: boolean
+  /** Deterministic failure evidence for the auto scheduler (N4). */
+  failure?: FailureSignal
   /**
    * Extra tool names merged into the built-in cheap-and-deterministic set for
    * the `auto` scheduler (issue #8 `Config.simpleTools`).
@@ -353,23 +383,32 @@ export interface EffortInjectionDecision {
 }
 
 /**
- * Clamp a level to the ones the model actually advertises. The adapter rejects
- * any other value per request (UNSUPPORTED_REASONING_EFFORT), so an unsupported
- * scheduled level is lifted to the model's highest advertised thinking level
- * (a toggle-only model advertises off/high → a scheduled low becomes `high`,
- * which enables thinking without sending a think effort), and a model
- * advertising no thinking level at all yields nothing (strip).
- * @param level - the scheduled or manually selected level.
- * @param efforts - the model's advertised effort ids (escalation-ordered).
+ * Clamp a scheduled (auto) level to the ones the model actually advertises, and
+ * when the exact level is missing fall DOWNWARD to the highest advertised level
+ * that is not above the target — matching the vendor fallback semantics (an
+ * unsupported `xhigh` runs as the highest supported level ≤ xhigh, never up to
+ * a more expensive one). A model advertising no usable thinking level yields
+ * `undefined` (strip).
+ * @param level - the scheduled level (the auto path only; manual picks strip).
+ * @param efforts - the model's advertised effort ids.
  * @returns the level to inject, or `undefined` when the model cannot take it.
  */
 export function clampToEfforts(level: EffortId, efforts: readonly string[]): EffortId | undefined {
   if (efforts.includes(level)) return level
-  // off and auto are not thinking levels; the advertised list is
-  // escalation-ordered.
-  const thinking = efforts.filter(id => id !== 'off' && id !== 'auto')
-  if (thinking.length === 0) return undefined
-  return thinking[thinking.length - 1] as EffortId
+  // off and auto are not thinking levels; rank drives "not above the target".
+  const rank = EFFORT_SLIDER_RANK as Record<string, number | undefined>
+  const target = rank[level] ?? 0
+  let best: EffortId | undefined
+  let bestRank = -1
+  for (const id of efforts) {
+    if (id === 'off' || id === 'auto') continue
+    const r = rank[id] ?? 0
+    if (r <= target && r > bestRank) {
+      bestRank = r
+      best = id as EffortId
+    }
+  }
+  return best
 }
 
 /**
@@ -428,6 +467,7 @@ export function resolveEffortInjection(input: EffortInjectionInput): EffortInjec
     allowUpgrade: input.allowUpgrade,
     extraSimpleTools: input.extraSimpleTools,
     extraSimpleRegex: input.extraSimpleRegex,
+    failure: input.failure,
   })
   const clamped = clampToEfforts(level, efforts)
   return clamped === undefined ? { inject: false } : { inject: true, level: clamped }

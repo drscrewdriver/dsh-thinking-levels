@@ -12,9 +12,19 @@
  *   only as the 0.1.0-rc.8 fallback for hosts whose projection registry
  *   predates `stateOf`.
  */
-import type { ToolCallSample } from './thinking-level.ts';
+import type { FailureSignal, ToolCallSample } from './thinking-level.ts';
+export type { FailureSignal };
 /** How many recent tool calls to sample for one decision. */
 export declare const TOOL_SAMPLE_WINDOW = 8;
+/**
+ * Deterministic failure evidence folded from raw session events (N4 / 4.11.0).
+ * A tool that fails repeatedly on the same arguments, or a turn that ended in
+ * error, is the scheduler's signal that the cheap plan is not working — the
+ * auto tier must not fall below `high` on such evidence. The shape lives in
+ * {@link FailureSignal} (re-exported above from the dependency-free leaf).
+ */
+/** Tool calls / turns considered when folding the failure signal. */
+export declare const FAILURE_LOOKBACK = 8;
 /** Approximate argument size in characters (payload heft); unknown shapes read as 0. */
 export declare function argsSizeOf(argumentsValue: unknown): number;
 /**
@@ -36,3 +46,9 @@ export declare function toolSampleOf(event: unknown): ToolCallSample | undefined
  * @returns the sampled tool calls, or `[]` for a fresh prompt / unknown shape.
  */
 export declare function recentToolCalls(agent: unknown): ToolCallSample[];
+/**
+ * Fold the failure signal from raw session events (newest `FAILURE_LOOKBACK`
+ * tool calls, plus any error turn in that tail). Shares the `tool/call` guard
+ * with {@link toolSampleOf} so there is exactly one wire shape for tool events.
+ */
+export declare function failureSignalOf(events: readonly unknown[]): FailureSignal;
