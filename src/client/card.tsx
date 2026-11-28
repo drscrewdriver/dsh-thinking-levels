@@ -36,6 +36,7 @@ import { THINKING_GUIDE_STEPS } from './guide-steps.ts'
 import { mountStarRow } from './star-row-copy.ts'
 import { EffortSyncSection } from './effort-sync-ui.tsx'
 import { CompactionPolicySection } from './compaction-policy-ui.tsx'
+import { suggestedEffortsFor, type SuggestionMiss, type TierSuggestion } from '../model-effort-catalog.ts'
 
 /** One injected face: the plugin's own scope plus the llm-pi-ai namespace scope. */
 export interface ThinkingLevelsCardInjected {
@@ -289,8 +290,21 @@ function effortTableOf(draft: Record<string, string | null>): Record<string, unk
   return table
 }
 
-/** Whether a row declares `compat.supportsReasoningEffort` (the wire sends reasoning_effort). */
-function supportsEffortOf(model: Record<string, unknown>): boolean {
+/**
+ * Locale key for a suggestion refusal: why the auto-apply button is disabled.
+ * Each reason gets its own sentence — "no effort support" and "unrecognized"
+ * are different answers and must not collapse into one vague label.
+ */
+function suggestedMissKey(reason: SuggestionMiss): string {
+  switch (reason) {
+    case 'unrecognized': return 'card.capabilities.suggestedUnrecognized'
+    case 'low-confidence': return 'card.capabilities.suggestedLowConfidence'
+    case 'toggle-only': return 'card.capabilities.suggestedToggle'
+    case 'no-effort': return 'card.capabilities.suggestedNoEffort'
+  }
+}
+
+/** Whether a row declares `compat.supportsReasoningEffort` (the wire sends reasoning_effort). */function supportsEffortOf(model: Record<string, unknown>): boolean {
   const compat = model['compat']
   if (typeof compat !== 'object' || compat === null || Array.isArray(compat)) return false
   return (compat as Record<string, unknown>)['supportsReasoningEffort'] === true
@@ -941,6 +955,44 @@ function ModelCapabilities(props: {
     })
   }
 
+  /** A table → the checkbox/wire draft this editor renders (null = unticked). */
+  const draftFromTable = (table: Record<string, unknown>): Record<string, string | null> =>
+    Object.fromEntries(CAPABILITY_LEVELS.map(level => [
+      level,
+      table[level] === undefined ? null : (table[level] === null ? '' : String(table[level])),
+    ]))
+
+  /**
+   * Write the catalog's suggestion for one model in a single click — the work
+   * a user would otherwise do by hand from the vendor's docs (tick this level,
+   * type that wire value). The suggestion is computed per MODEL (family data
+   * plus variant), never from the family table alone, and the refusal path
+   * leaves the config untouched so a model the catalog cannot vouch for
+   * (unrecognized / low-confidence / on-off only / MiMo-style no-effort) is
+   * never given a ladder it would reject.
+   */
+  const applySuggested = (entry: CapabilityEntry, suggestion: TierSuggestion): void => {
+    if (!suggestion.ok) return
+    const key = entryKey(entry)
+    const table = suggestion.table as Record<string, unknown>
+    patchModel(entry.providerId, entry.index, (row) => {
+      row['reasoningEfforts'] = table
+      // Same completions-only rule as applyDraft: the flag tells pi-ai's
+      // completions wire to send reasoning_effort, and the host refuses it on
+      // other protocols (writing it would reject the whole providers payload).
+      if (!completionsCompatConfigurable(entry)) return
+      const extended = Object.keys(table).some(level => level !== 'off' && level !== 'on' && level !== 'high')
+      if (supportsEffortOf(row) || extended) {
+        patchCompat(row, (compat) => {
+          compat['supportsReasoningEffort'] = true
+        })
+      }
+    })
+    // Mirror what was written into the visible draft so the checkboxes and
+    // wire fields show the applied levels instead of a stale hand draft.
+    setDrafts(current => ({ ...current, [key]: draftFromTable(table) }))
+  }
+
   /** Reset a model's draft to its persisted table (or the default high set). */
   const resetDraft = (entry: CapabilityEntry): void => {
     const key = entryKey(entry)
@@ -1213,6 +1265,9 @@ function ModelCapabilities(props: {
                   // hand-edited cordis.yml left behind): a hard write blocker
                   // for the whole route, so it is surfaced with one-click cleanup.
                   const stale = staleThinkingCompatFields(entry)
+                  // The catalog's verdict for THIS model: written by the
+                  // 「按建议自动设置」 button, or the reason it is unavailable.
+                  const suggestion = suggestedEffortsFor(entry.providerId, entry.modelId)
                   const meta = summaryOf(entry)
                   const format = typeof compat['thinkingFormat'] === 'string'
                     ? compat['thinkingFormat']
@@ -1414,7 +1469,31 @@ function ModelCapabilities(props: {
                                     >
                                       {t('card.capabilities.restoreDefault')}
                                     </button>
+                                    {/* One click from "recognized family" to the
+                                        vendor's own level table. Disabled (with
+                                        the reason spelled out beside it) when
+                                        the catalog cannot vouch for a ladder. */}
+                                    <button
+                                      type="button"
+                                      disabled={readonly || busy || !suggestion.ok}
+                                      title={suggestion.ok
+                                        ? `${t('card.capabilities.suggestedLevels').replace('%s', suggestion.levels.join('/'))}${suggestion.tier.notes ? `\n${suggestion.tier.notes}` : ''}`
+                                        : t(suggestedMissKey(suggestion.reason))}
+                                      onClick={() => applySuggested(entry, suggestion)}
+                                      style={{
+                                        ...controlStyle,
+                                        cursor: readonly || busy || !suggestion.ok ? 'default' : 'pointer',
+                                        opacity: readonly || busy || !suggestion.ok ? 0.5 : 1,
+                                      }}
+                                    >
+                                      {t('card.capabilities.applySuggested')}
+                                    </button>
                                   </div>
+                                  <p style={hintStyle}>
+                                    {suggestion.ok
+                                      ? t('card.capabilities.suggestedLevels').replace('%s', suggestion.levels.join('/'))
+                                      : t(suggestedMissKey(suggestion.reason))}
+                                  </p>
                                 </>
                               )
                               : null}

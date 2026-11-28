@@ -75,7 +75,7 @@ interface RowSpec {
   compat?: Record<string, unknown>
 }
 
-function piAiSnapshot(api: string, row: RowSpec): unknown {
+function piAiSnapshot(api: string, row: RowSpec, modelId = 'claude-x'): unknown {
   return {
     status: 'ready',
     value: {},
@@ -87,7 +87,7 @@ function piAiSnapshot(api: string, row: RowSpec): unknown {
         route: {
           api,
           models: [{
-            id: 'claude-x',
+            id: modelId,
             ...(row.reasoningEfforts === undefined ? {} : { reasoningEfforts: row.reasoningEfforts }),
             ...(row.compat === undefined ? {} : { compat: row.compat }),
           }],
@@ -114,11 +114,11 @@ interface RendererFace {
 
 const THINKING_MODEL: RowSpec = { reasoningEfforts: { off: null, high: 'high' } }
 
-function renderCard(api: string, row: RowSpec = THINKING_MODEL): RendererFace {
+function renderCard(api: string, row: RowSpec = THINKING_MODEL, modelId = 'claude-x'): RendererFace {
   const element = createElement(ThinkingLevelsCard as never, {
     t: identity,
     scope: inertScope(tlSnapshot),
-    piAiScope: inertScope(piAiSnapshot(api, row)),
+    piAiScope: inertScope(piAiSnapshot(api, row, modelId)),
   } as never)
   let renderer: RendererFace | undefined
   act(() => { renderer = create(element) as unknown as RendererFace })
@@ -127,12 +127,12 @@ function renderCard(api: string, row: RowSpec = THINKING_MODEL): RendererFace {
 }
 
 /** Render with a WRITE-RECORDING llm-pi-ai scope (the issue-#8 bomb regression). */
-function renderCardRecording(api: string, row: RowSpec = THINKING_MODEL): RendererFace & { writes: Write[] } {
+function renderCardRecording(api: string, row: RowSpec = THINKING_MODEL, modelId = 'claude-x'): RendererFace & { writes: Write[] } {
   const writes: Write[] = []
   const element = createElement(ThinkingLevelsCard as never, {
     t: identity,
     scope: inertScope(tlSnapshot),
-    piAiScope: recordingScope(piAiSnapshot(api, row), writes),
+    piAiScope: recordingScope(piAiSnapshot(api, row, modelId), writes),
   } as never)
   let renderer: RendererFace | undefined
   act(() => { renderer = create(element) as unknown as RendererFace })
@@ -344,5 +344,56 @@ describe('level editor apply (issue #8)', () => {
     const row = lastProvidersWrite(renderer.writes)
     expect(row['reasoningEfforts']).toMatchObject({ medium: 'medium' })
     expect((row['compat'] as Record<string, unknown>)['supportsReasoningEffort']).toBe(true)
+  })
+})
+
+/**
+ * 4.13.3: the per-model 「按建议自动设置」 button. It writes the catalog's ladder
+ * for the model in ONE click, and it refuses (button disabled + a reason) for
+ * models the catalog cannot vouch for — a dead grey button would be a lie about
+ * what the plugin knows.
+ */
+describe('per-model auto-apply from the catalog (4.13.3)', () => {
+  /** The providers payload of the last recorded write. */
+  function lastRow(writes: Write[]): Record<string, unknown> {
+    const write = [...writes].reverse().find(candidate => candidate.field === 'providers')
+    expect(write, 'a providers write').toBeDefined()
+    return (write!.value as { route: { models: Record<string, unknown>[] } }).route.models[0]!
+  }
+
+  it('writes the DeepSeek three-grade ladder + off for a deepseek model', async () => {
+    const renderer = renderCardRecording('openai-responses', { reasoningEfforts: { high: 'high' } }, 'deepseek-flash')
+    openCapabilities(renderer)
+    const button = buttonWithText(renderer, 'card.capabilities.applySuggested')
+    expect(button.props['disabled']).toBeFalsy()
+    await act(async () => { (button.props['onClick'] as () => void)() })
+    expect(lastRow(renderer.writes)['reasoningEfforts']).toEqual({
+      off: 'none', low: 'low', high: 'high', max: 'max',
+    })
+  })
+
+  it('keeps the completions-only flag off a non-completions route', async () => {
+    const renderer = renderCardRecording('anthropic-messages', { reasoningEfforts: { high: 'high' } }, 'deepseek-flash')
+    openCapabilities(renderer)
+    await act(async () => {
+      ;(buttonWithText(renderer, 'card.capabilities.applySuggested').props['onClick'] as () => void)()
+    })
+    const row = lastRow(renderer.writes)
+    expect(row['reasoningEfforts']).toBeDefined()
+    expect((row['compat'] as Record<string, unknown> | undefined)?.['supportsReasoningEffort']).toBeUndefined()
+  })
+
+  it('disables the button with the on/off-only reason for MiMo', () => {
+    const renderer = openCapabilities(renderCard('anthropic-messages', { reasoningEfforts: { off: null, high: 'high' } }, 'mimo-v2.6-flash'))
+    const button = buttonWithText(renderer, 'card.capabilities.applySuggested')
+    expect(button.props['disabled']).toBe(true)
+    expect(json(renderer)).toContain('card.capabilities.suggestedToggle')
+  })
+
+  it('disables the button with the unrecognized reason for an unknown model', () => {
+    const renderer = openCapabilities(renderCard('anthropic-messages', { reasoningEfforts: { high: 'high' } }, 'mystery-9000'))
+    const button = buttonWithText(renderer, 'card.capabilities.applySuggested')
+    expect(button.props['disabled']).toBe(true)
+    expect(json(renderer)).toContain('card.capabilities.suggestedUnrecognized')
   })
 })

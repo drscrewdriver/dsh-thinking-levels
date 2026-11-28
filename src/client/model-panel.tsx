@@ -43,7 +43,6 @@ import type { SettingsScope } from './scope-face.ts'
 import { ContextRing } from './context-ring.tsx'
 import { EffortSlider } from './effort-slider.tsx'
 import { orderEffortsForSlider } from '../thinking-level.ts'
-import { resolveTier, WIRE_LEVELS } from '../model-effort-catalog.ts'
 import { CONTEXT_WINDOW_PRESETS, formatContextWindow, validateContextWindow } from '../context-window.ts'
 
 /** The official DeepSeek provider route owned by the llm-deepseek adapter. */
@@ -62,25 +61,6 @@ const UNSET_STOP_INDEX = CONTEXT_WINDOW_PRESETS.findIndex(preset => preset.value
  */
 const isDeepSeekLine = (provider: string, modelId: string, name: string | undefined): boolean =>
   provider === DEEPSEEK_PROVIDER || /deepseek/i.test(modelId) || /deepseek/i.test(name ?? '')
-
-/**
- * Read-only effort-tier badge for a model line (N2 / 4.9.0). Never writes any
- * config: it only names the recognized family and, for high-confidence effort
- * families, lists the supported host levels in slider order. Unrecognized
- * models and toggle-only / low-confidence families show the family name (or the
- * unknown label) without a suggested ladder.
- */
-export function familyBadgeText(
-  provider: string,
-  model: string,
-  t: (key: string) => string,
-): { text: string; recognized: boolean } {
-  const tier = resolveTier(provider, model)
-  if (tier === undefined) return { text: t('model.panel.familyUnknown'), recognized: false }
-  if (tier.confidence === 'low' || tier.toggleOnly) return { text: tier.family.label, recognized: true }
-  const levels = WIRE_LEVELS.filter(level => tier.wires[level] !== undefined)
-  return { text: t('model.panel.suggested').replace('%f', tier.family.label).replace('%e', levels.join('/')), recognized: true }
-}
 
 /** Snapshot shown when the session's directory face is unavailable. */
 const UNAVAILABLE_STATE: ModelDirectoryState = {
@@ -298,16 +278,6 @@ const chipStyle: CSSProperties = {
 }
 
 const chipDisabledStyle: CSSProperties = { ...chipStyle, cursor: 'default', opacity: 0.55 }
-
-/** The read-only family badge: a dimmed chip, no pointer affordance. */
-const familyBadgeStyle: CSSProperties = {
-  ...chipStyle,
-  cursor: 'default',
-  color: 'var(--dsw-alias-label-tertiary)',
-  maxWidth: '140px',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-}
 
 /** The per-line effort chip (ex-select): shows the line's effective level name. */
 const effortChipStyle: CSSProperties = {
@@ -914,18 +884,6 @@ export function ModelPanel({ directory, piAiScope, deepseekScope, tlScope, sessi
                                 )}
                               </div>
                             )}
-                            {(() => {
-                              const badge = familyBadgeText(group.id, model.id, t)
-                              return (
-                                <span
-                                  aria-label={t('model.panel.family')}
-                                  title={`${t('model.panel.family')}: ${badge.text}`}
-                                  style={familyBadgeStyle}
-                                >
-                                  {badge.text}
-                                </span>
-                              )
-                            })()}
                             <span
                               role="button"
                               tabIndex={0}

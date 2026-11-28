@@ -26,6 +26,8 @@ export interface EffortTierVariant {
   modelMatch: readonly RegExp[]
   wires?: Partial<Record<WireLevel, string>>
   vendorDefault?: EffortId
+  /** Appended to the family notes for this variant (data caveats, extra knobs). */
+  notes?: string
 }
 
 export interface EffortTierFamily {
@@ -57,9 +59,14 @@ export interface ResolvedTier {
   canDisable: boolean
   toggleOnly: boolean
   confidence: 'high' | 'low'
+  /** Family notes plus the winning variant's, when either exists. */
+  notes?: string
 }
 
-const RETRIEVED = '2026-11-27'
+const RETRIEVED = '2026-11-28'
+
+/** The retrieval date shown in the UI ("catalog data retrieved %d"). */
+export const CATALOG_RETRIEVED = RETRIEVED
 
 export const EFFORT_TIER_FAMILIES: readonly EffortTierFamily[] = [
   {
@@ -134,15 +141,36 @@ export const EFFORT_TIER_FAMILIES: readonly EffortTierFamily[] = [
     label: 'DeepSeek V4',
     providerMatch: [/deepseek/i],
     modelMatch: [/^deepseek/i],
-    // Official mapping table (findings §1.1): minimal->low, medium->high,
-    // xhigh->high; max stays max; none disables on the Responses API only.
-    wires: { off: 'none', minimal: 'low', low: 'low', medium: 'high', high: 'high', xhigh: 'high', max: 'max' },
+    // 4.13.3: three real grades + off, not the host's seven. The vendor maps
+    // low/medium -> high and xhigh -> max, so shipping minimal/medium/xhigh as
+    // separate host levels handed the auto scheduler two stops with identical
+    // effect and made a four-level model look like a seven-level one.
+    // off (`none`) exists on the Responses API only.
+    wires: { off: 'none', low: 'low', high: 'high', max: 'max' },
     vendorDefault: 'high',
     canDisable: true,
     toggleOnly: false,
     confidence: 'high',
     source: { url: 'https://api-docs.deepseek.com/guides/thinking_mode/', retrievedAt: RETRIEVED },
-    notes: 'Thinking on by default, default high. `none` exists on the Responses API only; OpenAI/Anthropic formats take low/high/max.',
+    notes: 'V4 line: high and max are the real grades; low/medium are mapped up to high and xhigh to max. V4.1 (incl. Flash) also takes a 1–100 reasoning_effort integer for fine depth control. Thinking on by default, default high; `none` exists on the Responses API only.',
+  },
+  {
+    id: 'xiaomi-mimo',
+    label: 'Xiaomi MiMo',
+    providerMatch: [/xiaomi|mimo/i],
+    modelMatch: [/mimo/i],
+    // 4.13.3: no effort gradient — MiMo 2.5/2.6 (Pro and non-Pro) take no
+    // reasoning_effort, only a thinking on/off (enable_thinking via
+    // qwen-chat-template). Recognizing the family makes the card say "on/off
+    // only" instead of "unrecognized", and keeps the sync planner from writing
+    // a ladder the gateway would ignore.
+    wires: {},
+    vendorDefault: 'on',
+    canDisable: true,
+    toggleOnly: true,
+    confidence: 'high',
+    source: { url: 'https://github.com/XiaomiMiMo/MiMo', retrievedAt: RETRIEVED },
+    notes: 'MiMo 2.5/2.6 (incl. non-Pro) do not accept reasoning_effort; thinking depth is not tunable, only on/off.',
   },
   {
     id: 'grok-4.6',
@@ -221,6 +249,7 @@ export function resolveTier(provider: string, model: string): ResolvedTier | und
   const family = matchEffortFamily(provider, model)
   if (family === undefined) return undefined
   const variant = family.variants?.find(candidate => matchesAll(candidate.modelMatch, model))
+  const notes = [family.notes, variant?.notes].filter((note): note is string => typeof note === 'string' && note !== '').join(' ')
   return {
     family,
     wires: variant?.wires === undefined ? family.wires : { ...family.wires, ...variant.wires },
@@ -228,7 +257,13 @@ export function resolveTier(provider: string, model: string): ResolvedTier | und
     canDisable: family.canDisable,
     toggleOnly: family.toggleOnly,
     confidence: family.confidence,
+    notes: notes === '' ? undefined : notes,
   }
+}
+
+/** The levels a family/variant actually offers, in slider order. */
+export function wireLevelsOf(wires: Partial<Record<WireLevel, string>>): WireLevel[] {
+  return WIRE_LEVELS.filter(level => wires[level] !== undefined)
 }
 
 /**
@@ -247,4 +282,43 @@ export function reasoningEffortsOf(tier: Pick<ResolvedTier, 'wires' | 'canDisabl
     else if (level === 'off' && tier.canDisable) out.off = null
   }
   return out
+}
+
+/** Why a model has no auto-applicable ladder. */
+export type SuggestionMiss = 'unrecognized' | 'low-confidence' | 'toggle-only' | 'no-effort'
+
+/** One model's auto-apply suggestion: a ready-to-write table, or the reason there is none. */
+export type TierSuggestion =
+  | { ok: true; tier: ResolvedTier; table: Partial<Record<WireLevel, string | null>>; levels: WireLevel[] }
+  | { ok: false; reason: SuggestionMiss; tier?: ResolvedTier }
+
+/**
+ * The ladder to write for one model line — the shared brain behind the model
+ * card's 「按建议自动设置」 button and the one-click sync.
+ *
+ * Refusals are explicit rather than silently empty: an unknown family, a
+ * low-confidence family (never auto-writes, per the data policy), a toggle-only
+ * family (nothing but on/off exists) and an effort-less family (MiMo) each get
+ * their own reason so the UI can say WHY instead of showing a dead button.
+ */
+export function suggestedEffortsFor(provider: string, model: string): TierSuggestion {
+  const tier = resolveTier(provider, model)
+  if (tier === undefined) return { ok: false, reason: 'unrecognized' }
+  // Confidence first: "we never confirmed this family" is the stronger reason
+  // to stay silent than "this family only has an on/off switch", and a
+  // low-confidence toggle family (GLM) carries both truths.
+  if (tier.confidence === 'low') return { ok: false, reason: 'low-confidence', tier }
+  if (tier.toggleOnly) return { ok: false, reason: 'toggle-only', tier }
+  const table = reasoningEffortsOf(tier)
+  const levels = wireLevelsOf(tier.wires)
+  if (levels.length === 0) return { ok: false, reason: 'no-effort', tier }
+  return { ok: true, tier, table, levels }
+}
+
+/** The display list for a family row (catalog coverage panel, sync header). */
+export function familyLevelList(family: EffortTierFamily): { kind: 'levels' | 'toggle' | 'none'; levels: WireLevel[] } {
+  const levels = wireLevelsOf(family.wires)
+  if (family.toggleOnly) return { kind: 'toggle', levels }
+  if (levels.length === 0) return { kind: 'none', levels }
+  return { kind: 'levels', levels }
 }

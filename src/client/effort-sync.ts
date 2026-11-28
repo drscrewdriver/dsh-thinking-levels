@@ -9,10 +9,15 @@
  * Safety rules baked into the plan (checklist N3):
  * - never overwrite a model that already declares `reasoningEfforts` unless the
  *   caller passes `overwrite:true`;
+ * - an overwrite never WIDENS a model's level set: a declared table is the only
+ *   per-model statement of which host levels that model accepts, so the family
+ *   ladder is narrowed to the declared keys (4.13.2 — a family ladder says what
+ *   the vendor family supports, not what one model accepts; DeepSeek-V4.1-Flash
+ *   takes off/low/high/xhigh while the V4 family table carries all seven);
  * - never touch the official DeepSeek route (host-managed);
  * - skip unrecognized / low-confidence / wire-less families.
  */
-import { reasoningEffortsOf, resolveTier, type WireLevel } from '../model-effort-catalog.ts'
+import { suggestedEffortsFor, type WireLevel } from '../model-effort-catalog.ts'
 
 /** A single settings mutate operation, mirroring `SettingsScope.mutate`. */
 export interface SettingsPathOp {
@@ -56,6 +61,32 @@ function modelsArray(providers: Record<string, unknown>, provider: string): Reco
     : []
 }
 
+/** Whether a value looks like a declared `reasoningEfforts` table. */
+function isDeclaredTable(value: unknown): value is Partial<Record<WireLevel, string | null>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * The family ladder narrowed to the levels the model already declares.
+ *
+ * A declared table carries the level KEYS the user's route accepts; the family
+ * ladder only knows the vendor family's full set. Writing the family set over a
+ * narrower declaration would put levels the model cannot take into the very
+ * config that defines its available tiers — the reported 4.1-Flash symptom
+ * (declared off/low/high/xhigh, family table lists all seven). Wire spellings
+ * still come from the catalog, so a misspelled declared level is corrected.
+ */
+function narrowToDeclared(
+  ladder: Partial<Record<WireLevel, string | null>>,
+  declared: Partial<Record<WireLevel, string | null>>,
+): Partial<Record<WireLevel, string | null>> {
+  const out: Partial<Record<WireLevel, string | null>> = {}
+  for (const level of Object.keys(ladder) as WireLevel[]) {
+    if (Object.hasOwn(declared, level)) out[level] = ladder[level]
+  }
+  return out
+}
+
 /** Build the per-model sync preview. */
 export function planSync(input: {
   models: readonly KnownModel[]
@@ -69,21 +100,25 @@ export function planSync(input: {
     const models = modelsArray(input.providers, provider)
     const modelIndex = models.findIndex(entry => entry['id'] === model)
     const declared = modelIndex >= 0 ? models[modelIndex]?.['reasoningEfforts'] : undefined
-    const current = typeof declared === 'object' && declared !== null && !Array.isArray(declared)
-      ? declared as Partial<Record<WireLevel, string | null>>
-      : undefined
-    const tier = resolveTier(provider, model)
-    if (tier === undefined) {
-      return { provider, model, modelIndex, family: undefined, current, next: undefined, skip: 'unrecognized' as const }
+    const current = isDeclaredTable(declared) ? declared : undefined
+    // One brain for both surfaces: the card's per-model 「按建议自动设置」 button
+    // and this planner resolve through `suggestedEffortsFor`, so they can never
+    // disagree about which model gets which ladder.
+    const suggestion = suggestedEffortsFor(provider, model)
+    if (!suggestion.ok) {
+      const family = suggestion.tier?.family.label
+      const skip: SyncSkipReason = suggestion.reason === 'unrecognized'
+        ? 'unrecognized'
+        : suggestion.reason === 'low-confidence'
+          ? 'low-confidence'
+          : 'no-wire'
+      return { provider, model, modelIndex, family, current, next: undefined, skip }
     }
-    const base = { provider, model, modelIndex, family: tier.family.label, current }
+    const base = { provider, model, modelIndex, family: suggestion.tier.family.label, current }
     if (current !== undefined && !input.overwrite) {
       return { ...base, next: undefined, skip: 'declared' as const }
     }
-    if (tier.confidence === 'low') {
-      return { ...base, next: undefined, skip: 'low-confidence' as const }
-    }
-    const next = reasoningEffortsOf(tier)
+    const next = current === undefined ? suggestion.table : narrowToDeclared(suggestion.table, current)
     if (Object.keys(next).length === 0) {
       return { ...base, next: undefined, skip: 'no-wire' as const }
     }

@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.13.3 (2026-11-28)
+
+**档位库对齐厂商真实档位：DeepSeek 只留三档+off，新增小米 MiMo（仅开关），并给逐模型加「按建议自动设置」。**
+
+- `deepseek-v4` 族档位表由七档收为 `off/low/high/max`。依据：V4 系列只把 high、max 当真实档位（传入 low/medium 映射为 high，xhigh 映射为 max），V4.1 也是 low/high/max；此前的 `minimal/medium/xhigh` 让自动调度拿到两个**效果完全相同**的档位，也让四档模型看起来像七档模型。V4.1 在思考模式下额外接受 1–100 的 `reasoning_effort` 整数刻度，已写进族备注（模型 id 无法区分 V4/V4.1，故写在族级）。
+- 新增 `xiaomi-mimo` 族（`mimo`/`xiaomi` 提供方 + `mimo*` 模型）：MiMo 2.5/2.6（含非 Pro）不接受 `reasoning_effort`，只有思考开/关，按 `toggleOnly` 处理，同步与建议都不写档位。
+- 新增 `suggestedEffortsFor(provider, model)`（纯逻辑）：卡片「按建议自动设置」按钮与一键同步共用同一个大脑。拒绝原因分四种——`unrecognized` / `low-confidence` / `toggle-only` / `no-effort`，UI 各自给一句话，而不是一个模糊的灰按钮。
+- 首屏「一键同步档位」分区改为「已掌握的模型档位」网格：每族一行，显示真实档位（或无档位/仅开关），悬停给出备注与来源；日期取自 `CATALOG_RETRIEVED`（不再在两处各写一份）。
+- 10 语文案新增 11 个键（建议按钮/四种拒绝原因/档位库表头）。
+
+## 4.13.2 (2026-11-27)
+
+**模型面板去掉档位族徽标；族档位表不再把厂商族级档位套到单个模型上。**
+
+- 删除模型选择面板每一行的只读「档位族」徽标（`familyBadgeText` / `familyBadgeStyle`）。该徽标把**厂商族**的档位清单贴在**单个模型**行上，既挤占模型行（与窗口 chip 换行），又与模型实际档位不符：DeepSeek-V4.1-Flash 只声明 `off/low/high/xhigh`，徽标却按 V4 族表列全七档。族级档位表仍完整保留在「设置 → 一键同步档位」分区（那里本来就是族级语义）。
+- `src/client/effort-sync.ts`：`planSync` 的覆盖写入改为**只收窄不扩张**——模型已声明 `reasoningEfforts` 时，族档位表按声明的键集合取交集，档位名（wire 拼写）仍取目录表，因此拼错的档位会被纠正，但**模型没声明的档位不会被写进配置**（此前一键同步会把 4.1-Flash 写成七档）。
+- 新增 2 条守卫测试：族表七档 + 模型声明四档 → 只写四档；声明拼写错误 → 拼写被纠正、键集合不变。
+
 ## 4.13.0 (2026-11-27)
 
 **按模型配置上下文压缩阈值（写 `dsh-compaction-basic` 官方 `modelPolicies` 面）。**

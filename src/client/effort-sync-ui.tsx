@@ -14,9 +14,9 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import type { SettingsScope } from './scope-face.ts'
 import { opsOf, planSync, type SyncPlanRow, type SyncSkipReason } from './effort-sync.ts'
-import { EFFORT_TIER_FAMILIES } from '../model-effort-catalog.ts'
+import { CATALOG_RETRIEVED, EFFORT_TIER_FAMILIES, familyLevelList } from '../model-effort-catalog.ts'
 
-const CATALOG_DATE = '2026-11-27'
+const CATALOG_DATE = CATALOG_RETRIEVED
 
 /** The user-layer providers map from a pi-ai snapshot (mirrors the card helper). */
 function providersOf(snapshot: { user?: unknown; value?: unknown } | undefined): Record<string, unknown> {
@@ -59,6 +59,41 @@ const writeBtnStyle: CSSProperties = {
 }
 const okStyle: CSSProperties = { fontSize: '11px', color: 'var(--dsw-alias-state-success-primary, #2e9e5b)', margin: 0 }
 const errStyle: CSSProperties = { fontSize: '11px', color: 'var(--dsw-alias-state-error-primary)', margin: 0 }
+
+/** The "what the catalog knows" grid: one row per vendor family. */
+const catalogStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+  gap: '2px 12px',
+  fontSize: '11px',
+  padding: '4px 8px',
+  border: '1px solid var(--dsw-alias-border-l1)',
+  borderRadius: '6px',
+}
+const catalogRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: '6px',
+  alignItems: 'baseline',
+  minWidth: 0,
+}
+const catalogNameStyle: CSSProperties = {
+  flex: '0 0 auto',
+  color: 'var(--dsw-alias-label-secondary)',
+  maxWidth: '110px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+}
+const catalogLevelsStyle: CSSProperties = {
+  flex: '1 1 auto',
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontFamily: 'var(--ds-font-family-code, monospace)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+const catalogUnknownStyle: CSSProperties = { ...catalogLevelsStyle, fontFamily: 'inherit', color: 'var(--dsw-alias-label-tertiary)' }
 
 const SKIP_KEYS: Record<SyncSkipReason, string> = {
   declared: 'skip.declared',
@@ -149,15 +184,24 @@ export function EffortSyncSection(props: {
     <section style={sectionStyle} aria-label={t('sync.title')}>
       <h4 style={titleStyle}>{t('sync.title')}</h4>
       <p style={hintStyle}>{t('sync.note').replace('%d', CATALOG_DATE)}</p>
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-        {EFFORT_TIER_FAMILIES.map(family => (
-          <span key={family.id} style={rowStyle} title={family.source.url}>
-            <strong>{family.label}</strong>
-            <span style={{ color: 'var(--dsw-alias-label-tertiary)' }}>
-              {family.toggleOnly ? t('model.panel.familyUnknown') : Object.keys(family.wires).join('/')}
+      {/* What the catalog actually knows — one row per vendor family, with its
+          real level list (or "on/off only" / "no effort support"). This is the
+          answer to "which mainstream models do we cover", so it never hides a
+          family behind a count. */}
+      <p style={{ ...hintStyle, marginTop: '4px' }}>{t('sync.catalog').replace('%d', String(EFFORT_TIER_FAMILIES.length))}</p>
+      <div style={catalogStyle} aria-label={t('sync.catalog.levels')}>
+        {EFFORT_TIER_FAMILIES.map(family => {
+          const shape = familyLevelList(family)
+          const levels = shape.kind === 'levels'
+            ? shape.levels.join('/')
+            : t(shape.kind === 'toggle' ? 'sync.catalog.toggle' : 'sync.catalog.none')
+          return (
+            <span key={family.id} style={catalogRowStyle} title={`${family.notes ?? ''}${family.notes ? '\n' : ''}${family.source.url}`}>
+              <span style={catalogNameStyle}>{family.label}</span>
+              <span style={shape.kind === 'levels' ? catalogLevelsStyle : catalogUnknownStyle}>{levels}</span>
             </span>
-          </span>
-        ))}
+          )
+        })}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '6px', padding: '4px 8px' }}>
         {plan.map(row => (

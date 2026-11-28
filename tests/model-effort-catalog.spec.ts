@@ -11,6 +11,8 @@ import {
   matchEffortFamily,
   reasoningEffortsOf,
   resolveTier,
+  suggestedEffortsFor,
+  familyLevelList,
 } from '../src/model-effort-catalog.ts'
 
 describe('matchEffortFamily — vendor routing', () => {
@@ -57,13 +59,63 @@ describe('resolveTier — per-family level exclusions', () => {
     expect(tier?.canDisable).toBe(false)
   })
 
-  it('DeepSeek maps minimal->low, medium->high, xhigh->high, default high', () => {
+  it('DeepSeek ships three real grades + off, not the host seven (4.13.3)', () => {
     const tier = resolveTier('deepseek', 'deepseek-flash')
-    expect(tier?.wires.minimal).toBe('low')
-    expect(tier?.wires.medium).toBe('high')
-    expect(tier?.wires.xhigh).toBe('high')
+    // V4 maps low/medium up to high and xhigh to max, so only off/low/high/max
+    // are distinct grades; offering minimal/medium/xhigh gave the auto
+    // scheduler duplicate stops.
+    expect(Object.keys(tier!.wires).sort()).toEqual(['high', 'low', 'max', 'off'])
+    expect(tier?.wires.minimal).toBeUndefined()
+    expect(tier?.wires.medium).toBeUndefined()
+    expect(tier?.wires.xhigh).toBeUndefined()
     expect(tier?.wires.max).toBe('max')
     expect(tier?.vendorDefault).toBe('high')
+    expect(tier?.canDisable).toBe(true)
+  })
+
+  it('DeepSeek notes record the vendor mapping and the V4.1 integer knob', () => {
+    // The model ID cannot separate V4 from V4.1 (both ship as `deepseek-flash`
+    // / `deepseek-v4-pro`; the display name carries the version), so the family
+    // note carries both facts instead of guessing from the ID.
+    const tier = resolveTier('deepseek', 'deepseek-flash')
+    expect(tier?.notes).toContain('1–100')
+    expect(tier?.notes).toContain('mapped up to high')
+    expect(tier?.wires.xhigh).toBeUndefined()
+  })
+
+  it('Xiaomi MiMo is recognized as on/off only, with no effort wire at all', () => {
+    const tier = resolveTier('mimo', 'mimo-v2.6-flash')
+    expect(tier?.family.id).toBe('xiaomi-mimo')
+    expect(tier?.wires).toEqual({})
+    expect(tier?.toggleOnly).toBe(true)
+    expect(reasoningEffortsOf(tier!)).toEqual({})
+  })
+})
+
+describe('suggestedEffortsFor — the auto-apply button brain', () => {
+  it('returns the ladder for a recognized effort family', () => {
+    const s = suggestedEffortsFor('deepseek', 'deepseek-flash')
+    expect(s.ok).toBe(true)
+    if (!s.ok) return
+    expect(s.levels).toEqual(['off', 'low', 'high', 'max'])
+    expect(s.table).toEqual({ off: 'none', low: 'low', high: 'high', max: 'max' })
+  })
+
+  it('refuses with a distinct reason per miss kind', () => {
+    expect(suggestedEffortsFor('acme', 'mystery-9000')).toMatchObject({ ok: false, reason: 'unrecognized' })
+    expect(suggestedEffortsFor('mimo', 'mimo-v2.6-flash')).toMatchObject({ ok: false, reason: 'toggle-only' })
+    expect(suggestedEffortsFor('qwen', 'qwen3.8-max')).toMatchObject({ ok: true })
+    expect(suggestedEffortsFor('qwen', 'qwen3.6-plus')).toMatchObject({ ok: false, reason: 'toggle-only' })
+    expect(suggestedEffortsFor('zhipu', 'glm-5.3')).toMatchObject({ ok: false, reason: 'low-confidence' })
+  })
+
+  it('decodes a wire-less, non-toggle family as "no support" for display', () => {
+    const shape = familyLevelList({ wires: {}, toggleOnly: false } as never)
+    expect(shape).toEqual({ kind: 'none', levels: [] })
+    expect(familyLevelList(EFFORT_TIER_FAMILIES.find(f => f.id === 'deepseek-v4')!)).toEqual({
+      kind: 'levels',
+      levels: ['off', 'low', 'high', 'max'],
+    })
   })
 })
 
